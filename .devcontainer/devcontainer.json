@@ -1,0 +1,24 @@
+{
+  "name": "Audibook Studio Dev",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "dev",
+  "workspaceFolder": "/workspace",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers-contrib/features/pnpm:2": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "nrwl.angular-console",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  },
+  "postCreateCommand": "pnpm install",
+  "forwardPorts": [3000, 3333, 5432, 6379]
+}
