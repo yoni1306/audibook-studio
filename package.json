@@ -1,11 +1,11 @@
 {
-   "scripts": {
+  "scripts": {
     "dev:api": "nx serve api",
     "dev:web": "nx serve web",
     "dev:workers": "nx serve workers",
     "dev": "nx run-many --target=serve --all --parallel=3",
     "build:api": "nx build api",
-    "build:web": "nx build web", 
+    "build:web": "nx build web",
     "build:workers": "nx build workers",
     "build": "nx run-many --target=build --all",
     "test:api": "nx test api",
@@ -20,7 +20,10 @@
     "clean": "nx reset && rm -rf dist",
     "deps:check": "nx graph",
     "affected:test": "nx affected:test",
-    "affected:build": "nx affected:build"
+    "affected:build": "nx affected:build",
+    "prisma:generate": "prisma generate --schema=apps/api/prisma/schema.prisma",
+    "prisma:push": "prisma db push --schema=apps/api/prisma/schema.prisma",
+    "prisma:studio": "prisma studio --schema=apps/api/prisma/schema.prisma"
   },
   "devDependencies": {
     "@eslint/compat": "^1.1.1",
@@ -67,6 +70,7 @@
     "jest-environment-node": "^29.7.0",
     "nx": "^21.2.0",
     "prettier": "^2.6.2",
+    "prisma": "^6.9.0",
     "ts-jest": "^29.1.0",
     "ts-node": "10.9.1",
     "tslib": "^2.3.0",
@@ -79,6 +83,7 @@
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
+    "@prisma/client": "^6.9.0",
     "axios": "^1.6.0",
     "next": "~15.2.4",
     "react": "19.0.0",

@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Book {
+  id          String      @id @default(uuid())
+  title       String
+  author      String?
+  language    String      @default("he")
+  uploadedAt  DateTime    @default(now())
+  s3Key       String      @unique // S3 key for the original EPUB
+  status      BookStatus  @default(PROCESSING)
+  paragraphs  Paragraph[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("books")
+}
+
+model Paragraph {
+  id            String    @id @default(uuid())
+  bookId        String
+  book          Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  chapterNumber Int
+  orderIndex    Int       // Order within the book
+  content       String    @db.Text
+  audioS3Key    String?   // S3 key for generated audio
+  audioStatus   AudioStatus @default(PENDING)
+  audioDuration Float?    // Duration in seconds
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([bookId, orderIndex])
+  @@index([bookId])
+  @@map("paragraphs")
+}
+
+enum BookStatus {
+  UPLOADING
+  PROCESSING
+  READY
+  ERROR
+}
+
+enum AudioStatus {
+  PENDING
+  GENERATING
+  READY
+  ERROR
+}
