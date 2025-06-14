@@ -5,8 +5,11 @@ import { AppModule } from './app/app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   
-  // Enable built-in logger
-  app.useLogger(['error', 'warn', 'log', 'debug', 'verbose']);
+  // Enable CORS for the Next.js app
+  app.enableCors({
+    origin: 'http://localhost:3000',
+    credentials: true,
+  });
 
   const globalPrefix = 'api';
   app.setGlobalPrefix(globalPrefix);
