@@ -11,3 +11,5 @@
 .next
 out
 node_modules
+
+/generated/prisma
