@@ -7,6 +7,9 @@ export default function HomePage() {
           <li>
             <a href="/upload">Upload EPUB</a>
           </li>
+          <li>
+            <a href="/books">View Books</a>
+          </li>
         </ul>
       </nav>
     </div>

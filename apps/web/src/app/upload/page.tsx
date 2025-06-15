@@ -28,24 +28,27 @@ export default function UploadPage() {
 
     try {
       // Get presigned URL from API
-      const response = await fetch('http://localhost:3333/api/s3/presigned-upload', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          filename: file.name,
-          contentType: 'application/epub+zip',
-        }),
-      });
+      const response = await fetch(
+        'http://localhost:3333/api/s3/presigned-upload',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            filename: file.name,
+            contentType: 'application/epub+zip',
+          }),
+        }
+      );
 
       if (!response.ok) throw new Error('Failed to get upload URL');
 
-      const { uploadUrl, key } = await response.json();
+      const data = await response.json(); // This was missing!
       setMessage('Uploading file...');
 
       // Upload file directly to S3
-      const uploadResponse = await fetch(uploadUrl, {
+      const uploadResponse = await fetch(data.uploadUrl, {
         method: 'PUT',
         body: file,
         headers: {
@@ -55,10 +58,17 @@ export default function UploadPage() {
 
       if (!uploadResponse.ok) throw new Error('Failed to upload file');
 
-      setMessage(`File uploaded successfully! Key: ${key}`);
+      setMessage(`File uploaded successfully! Redirecting...`);
       setFile(null);
+
+      // Redirect to book detail page
+      setTimeout(() => {
+        window.location.href = `/books/${data.bookId}`;
+      }, 2000);
     } catch (error) {
-      setMessage(`Error: ${error.message}`);
+      setMessage(
+        `Error: ${error instanceof Error ? error.message : 'Upload failed'}`
+      );
     } finally {
       setUploading(false);
     }
@@ -67,7 +77,7 @@ export default function UploadPage() {
   return (
     <div style={{ padding: '20px', maxWidth: '500px', margin: '0 auto' }}>
       <h1>Upload EPUB File</h1>
-      
+
       <div style={{ marginBottom: '20px' }}>
         <input
           type="file"
@@ -84,13 +94,19 @@ export default function UploadPage() {
           padding: '10px 20px',
           fontSize: '16px',
           cursor: file && !uploading ? 'pointer' : 'not-allowed',
+          opacity: !file || uploading ? 0.6 : 1,
         }}
       >
         {uploading ? 'Uploading...' : 'Upload'}
       </button>
 
       {message && (
-        <p style={{ marginTop: '20px', color: message.includes('Error') ? 'red' : 'green' }}>
+        <p
+          style={{
+            marginTop: '20px',
+            color: message.includes('Error') ? 'red' : 'green',
+          }}
+        >
           {message}
         </p>
       )}
