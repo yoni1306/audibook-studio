@@ -79,6 +79,18 @@ const worker = new Worker(
           throw error;
         }
 
+      case 'generate-audio':
+        logger.log(`Generating audio for paragraph ${job.data.paragraphId}`);
+        // TODO: Implement actual TTS in Day 8-9
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        logger.log(
+          `Audio generation placeholder for: "${job.data.content.substring(
+            0,
+            50
+          )}..."`
+        );
+        return { processed: true, paragraphId: job.data.paragraphId };
+
       default:
         logger.warn(`Unknown job type: ${job.name}`);
         throw new Error(`Unknown job type: ${job.name}`);

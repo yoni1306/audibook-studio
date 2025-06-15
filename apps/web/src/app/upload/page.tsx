@@ -44,7 +44,7 @@ export default function UploadPage() {
 
       if (!response.ok) throw new Error('Failed to get upload URL');
 
-      const data = await response.json(); // This was missing!
+      const data = await response.json();
       setMessage('Uploading file...');
 
       // Upload file directly to S3
@@ -58,7 +58,7 @@ export default function UploadPage() {
 
       if (!uploadResponse.ok) throw new Error('Failed to upload file');
 
-      setMessage(`File uploaded successfully! Redirecting...`);
+      setMessage('File uploaded successfully! Redirecting...');
       setFile(null);
 
       // Redirect to book detail page
