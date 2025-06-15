@@ -368,16 +368,18 @@ exports.S3Controller = S3Controller = tslib_1.__decorate([
 
 
 var BooksService_1;
-var _a;
+var _a, _b;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.BooksService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const prisma_service_1 = __webpack_require__(10);
 const client_1 = __webpack_require__(11);
+const queue_service_1 = __webpack_require__(18);
 let BooksService = BooksService_1 = class BooksService {
-    constructor(prisma) {
+    constructor(prisma, queueService) {
         this.prisma = prisma;
+        this.queueService = queueService;
         this.logger = new common_1.Logger(BooksService_1.name);
     }
     async createBook(data) {
@@ -395,6 +397,37 @@ let BooksService = BooksService_1 = class BooksService {
             where: { id: bookId },
             data: { status },
         });
+    }
+    async updateParagraph(paragraphId, content) {
+        this.logger.log(`Attempting to update paragraph with ID: ${paragraphId}`);
+        // First, check if the paragraph exists
+        const existingParagraph = await this.prisma.paragraph.findUnique({
+            where: { id: paragraphId },
+        });
+        if (!existingParagraph) {
+            this.logger.error(`Paragraph not found with ID: ${paragraphId}`);
+            throw new Error(`Paragraph not found with ID: ${paragraphId}`);
+        }
+        // Update the paragraph
+        const paragraph = await this.prisma.paragraph.update({
+            where: { id: paragraphId },
+            data: {
+                content,
+                audioStatus: 'PENDING',
+                audioS3Key: null,
+            },
+            include: {
+                book: true,
+            },
+        });
+        // Queue audio generation
+        await this.queueService.addAudioGenerationJob({
+            paragraphId: paragraph.id,
+            bookId: paragraph.bookId,
+            content: paragraph.content,
+        });
+        this.logger.log(`Updated paragraph ${paragraphId} and queued audio generation`);
+        return paragraph;
     }
     async createParagraphs(bookId, paragraphs) {
         return this.prisma.paragraph.createMany({
@@ -428,7 +461,7 @@ let BooksService = BooksService_1 = class BooksService {
 exports.BooksService = BooksService;
 exports.BooksService = BooksService = BooksService_1 = tslib_1.__decorate([
     (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof prisma_service_1.PrismaService !== "undefined" && prisma_service_1.PrismaService) === "function" ? _a : Object])
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof prisma_service_1.PrismaService !== "undefined" && prisma_service_1.PrismaService) === "function" ? _a : Object, typeof (_b = typeof queue_service_1.QueueService !== "undefined" && queue_service_1.QueueService) === "function" ? _b : Object])
 ], BooksService);
 
 
@@ -458,6 +491,11 @@ let QueueService = QueueService_1 = class QueueService {
     async addEpubParsingJob(data) {
         const job = await this.audioQueue.add('parse-epub', data);
         this.logger.log(`Added EPUB parsing job ${job.id} for book ${data.bookId}`);
+        return { jobId: job.id };
+    }
+    async addAudioGenerationJob(data) {
+        const job = await this.audioQueue.add('generate-audio', data);
+        this.logger.log(`Added audio generation job ${job.id} for paragraph ${data.paragraphId}`);
         return { jobId: job.id };
     }
 };
@@ -492,11 +530,13 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const books_service_1 = __webpack_require__(17);
 const books_controller_1 = __webpack_require__(22);
+const queue_module_1 = __webpack_require__(23);
 let BooksModule = class BooksModule {
 };
 exports.BooksModule = BooksModule;
 exports.BooksModule = BooksModule = tslib_1.__decorate([
     (0, common_1.Module)({
+        imports: [queue_module_1.QueueModule],
         controllers: [books_controller_1.BooksController],
         providers: [books_service_1.BooksService],
         exports: [books_service_1.BooksService],
@@ -533,6 +573,17 @@ let BooksController = class BooksController {
     }
     async updateStatus(id, body) {
         return this.booksService.updateBookStatus(id, body.status);
+    }
+    async updateParagraph(paragraphId, body) {
+        try {
+            return await this.booksService.updateParagraph(paragraphId, body.content);
+        }
+        catch (error) {
+            if (error.message.includes('not found')) {
+                throw new common_1.NotFoundException(error.message);
+            }
+            throw error;
+        }
     }
 };
 exports.BooksController = BooksController;
@@ -572,6 +623,14 @@ tslib_1.__decorate([
     tslib_1.__metadata("design:paramtypes", [String, Object]),
     tslib_1.__metadata("design:returntype", Promise)
 ], BooksController.prototype, "updateStatus", null);
+tslib_1.__decorate([
+    (0, common_1.Patch)('paragraphs/:paragraphId'),
+    tslib_1.__param(0, (0, common_1.Param)('paragraphId')),
+    tslib_1.__param(1, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BooksController.prototype, "updateParagraph", null);
 exports.BooksController = BooksController = tslib_1.__decorate([
     (0, common_1.Controller)('books'),
     tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof books_service_1.BooksService !== "undefined" && books_service_1.BooksService) === "function" ? _a : Object])

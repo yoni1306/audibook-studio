@@ -1,4 +1,12 @@
-import { Controller, Post, Get, Param, Body, Patch } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Param,
+  Body,
+  Patch,
+  NotFoundException,
+} from '@nestjs/common';
 import { BooksService } from './books.service';
 
 @Controller('books')
@@ -43,5 +51,20 @@ export class BooksController {
     @Body() body: { status: string }
   ) {
     return this.booksService.updateBookStatus(id, body.status as any);
+  }
+
+  @Patch('paragraphs/:paragraphId')
+  async updateParagraph(
+    @Param('paragraphId') paragraphId: string,
+    @Body() body: { content: string }
+  ) {
+    try {
+      return await this.booksService.updateParagraph(paragraphId, body.content);
+    } catch (error) {
+      if (error.message.includes('not found')) {
+        throw new NotFoundException(error.message);
+      }
+      throw error;
+    }
   }
 }
