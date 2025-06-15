@@ -23,6 +23,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 var import_common = require("@nestjs/common");
 var import_bullmq = require("bullmq");
 var dotenv = __toESM(require("dotenv"));
+var import_epub_parser = require("./epub-parser");
 dotenv.config();
 const logger = new import_common.Logger("Worker");
 const worker = new import_bullmq.Worker(
@@ -36,9 +37,49 @@ const worker = new import_bullmq.Worker(
         await new Promise((resolve) => setTimeout(resolve, 2e3));
         return { processed: true, message: job.data.message };
       case "parse-epub":
-        logger.log(`Parsing EPUB: ${job.data.s3Key} for book ${job.data.bookId}`);
-        await new Promise((resolve) => setTimeout(resolve, 3e3));
-        return { processed: true, bookId: job.data.bookId };
+        logger.log(
+          `Parsing EPUB: ${job.data.s3Key} for book ${job.data.bookId}`
+        );
+        try {
+          const paragraphs = await (0, import_epub_parser.parseEpub)(job.data.s3Key);
+          const response = await fetch(
+            `http://localhost:3333/api/books/${job.data.bookId}/paragraphs`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ paragraphs })
+            }
+          );
+          if (!response.ok) {
+            throw new Error(
+              `Failed to save paragraphs: ${response.statusText}`
+            );
+          }
+          await fetch(
+            `http://localhost:3333/api/books/${job.data.bookId}/status`,
+            {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ status: "READY" })
+            }
+          );
+          return {
+            processed: true,
+            bookId: job.data.bookId,
+            paragraphCount: paragraphs.length
+          };
+        } catch (error) {
+          logger.error(`Failed to parse EPUB: ${error.message}`);
+          await fetch(
+            `http://localhost:3333/api/books/${job.data.bookId}/status`,
+            {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ status: "ERROR" })
+            }
+          );
+          throw error;
+        }
       default:
         logger.warn(`Unknown job type: ${job.name}`);
         throw new Error(`Unknown job type: ${job.name}`);
