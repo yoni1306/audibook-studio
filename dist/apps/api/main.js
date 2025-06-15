@@ -27,6 +27,7 @@ const app_controller_1 = __webpack_require__(6);
 const health_module_1 = __webpack_require__(7);
 const prisma_module_1 = __webpack_require__(9);
 const s3_module_1 = __webpack_require__(12);
+const queue_module_1 = __webpack_require__(17);
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -40,6 +41,7 @@ exports.AppModule = AppModule = tslib_1.__decorate([
             prisma_module_1.PrismaModule,
             health_module_1.HealthModule,
             s3_module_1.S3Module,
+            queue_module_1.QueueModule,
         ],
         controllers: [app_controller_1.AppController],
     })
@@ -338,6 +340,195 @@ exports.S3Controller = S3Controller = tslib_1.__decorate([
     (0, common_1.Controller)('s3'),
     tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof s3_service_1.S3Service !== "undefined" && s3_service_1.S3Service) === "function" ? _a : Object])
 ], S3Controller);
+
+
+/***/ }),
+/* 17 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.QueueModule = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const bullmq_1 = __webpack_require__(18);
+const queue_service_1 = __webpack_require__(19);
+const queue_controller_1 = __webpack_require__(21);
+let QueueModule = class QueueModule {
+};
+exports.QueueModule = QueueModule;
+exports.QueueModule = QueueModule = tslib_1.__decorate([
+    (0, common_1.Module)({
+        imports: [
+            bullmq_1.BullModule.forRoot({
+                connection: {
+                    host: process.env.REDIS_HOST || 'localhost',
+                    port: parseInt(process.env.REDIS_PORT, 10) || 6379,
+                },
+            }),
+            bullmq_1.BullModule.registerQueue({
+                name: 'audio-processing',
+            }),
+        ],
+        controllers: [queue_controller_1.QueueController],
+        providers: [queue_service_1.QueueService],
+        exports: [queue_service_1.QueueService],
+    })
+], QueueModule);
+
+
+/***/ }),
+/* 18 */
+/***/ ((module) => {
+
+module.exports = require("@nestjs/bullmq");
+
+/***/ }),
+/* 19 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var QueueService_1;
+var _a;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.QueueService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const bullmq_1 = __webpack_require__(18);
+const bullmq_2 = __webpack_require__(20);
+let QueueService = QueueService_1 = class QueueService {
+    constructor(audioQueue) {
+        this.audioQueue = audioQueue;
+        this.logger = new common_1.Logger(QueueService_1.name);
+    }
+    async addTestJob(data) {
+        const job = await this.audioQueue.add('test-job', data);
+        this.logger.log(`Added test job ${job.id} to queue`);
+        return { jobId: job.id };
+    }
+    async addEpubParsingJob(data) {
+        const job = await this.audioQueue.add('parse-epub', data);
+        this.logger.log(`Added EPUB parsing job ${job.id} for book ${data.bookId}`);
+        return { jobId: job.id };
+    }
+};
+exports.QueueService = QueueService;
+exports.QueueService = QueueService = QueueService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__param(0, (0, bullmq_1.InjectQueue)('audio-processing')),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof bullmq_2.Queue !== "undefined" && bullmq_2.Queue) === "function" ? _a : Object])
+], QueueService);
+
+
+/***/ }),
+/* 20 */
+/***/ ((module) => {
+
+module.exports = require("bullmq");
+
+/***/ }),
+/* 21 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var _a, _b;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.QueueController = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const queue_service_1 = __webpack_require__(19);
+const bullmq_1 = __webpack_require__(18);
+const bullmq_2 = __webpack_require__(20);
+let QueueController = class QueueController {
+    constructor(queueService, audioQueue) {
+        this.queueService = queueService;
+        this.audioQueue = audioQueue;
+    }
+    async addTestJob(body) {
+        return this.queueService.addTestJob(body);
+    }
+    async addEpubParsingJob(body) {
+        return this.queueService.addEpubParsingJob(body);
+    }
+    async getQueueStatus() {
+        const waiting = await this.audioQueue.getWaitingCount();
+        const active = await this.audioQueue.getActiveCount();
+        const completed = await this.audioQueue.getCompletedCount();
+        const failed = await this.audioQueue.getFailedCount();
+        return {
+            waiting,
+            active,
+            completed,
+            failed,
+        };
+    }
+    async getJobs() {
+        const waiting = await this.audioQueue.getWaiting();
+        const active = await this.audioQueue.getActive();
+        const completed = await this.audioQueue.getCompleted();
+        const failed = await this.audioQueue.getFailed();
+        return {
+            waiting: waiting.map(job => ({
+                id: job.id,
+                name: job.name,
+                data: job.data,
+                timestamp: job.timestamp,
+            })),
+            active: active.map(job => ({
+                id: job.id,
+                name: job.name,
+                data: job.data,
+                timestamp: job.timestamp,
+            })),
+            completed: completed.map(job => ({
+                id: job.id,
+                name: job.name,
+                data: job.data,
+                returnvalue: job.returnvalue,
+                finishedOn: job.finishedOn,
+            })),
+            failed: failed.map(job => ({
+                id: job.id,
+                name: job.name,
+                data: job.data,
+                failedReason: job.failedReason,
+                finishedOn: job.finishedOn,
+            })),
+        };
+    }
+};
+exports.QueueController = QueueController;
+tslib_1.__decorate([
+    (0, common_1.Post)('test'),
+    tslib_1.__param(0, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], QueueController.prototype, "addTestJob", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('parse-epub'),
+    tslib_1.__param(0, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], QueueController.prototype, "addEpubParsingJob", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('status'),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", []),
+    tslib_1.__metadata("design:returntype", Promise)
+], QueueController.prototype, "getQueueStatus", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('jobs'),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", []),
+    tslib_1.__metadata("design:returntype", Promise)
+], QueueController.prototype, "getJobs", null);
+exports.QueueController = QueueController = tslib_1.__decorate([
+    (0, common_1.Controller)('queue'),
+    tslib_1.__param(1, (0, bullmq_1.InjectQueue)('audio-processing')),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof queue_service_1.QueueService !== "undefined" && queue_service_1.QueueService) === "function" ? _a : Object, typeof (_b = typeof bullmq_2.Queue !== "undefined" && bullmq_2.Queue) === "function" ? _b : Object])
+], QueueController);
 
 
 /***/ })
