@@ -17,6 +17,11 @@ export class BooksController {
     return this.booksService.getBook(id);
   }
 
+  @Get()
+  async getAllBooks() {
+    return this.booksService.getAllBooks();
+  }
+
   @Post(':id/paragraphs')
   async createParagraphs(
     @Param('id') id: string,

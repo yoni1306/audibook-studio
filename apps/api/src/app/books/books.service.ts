@@ -8,11 +8,7 @@ export class BooksService {
 
   constructor(private prisma: PrismaService) {}
 
-  async createBook(data: {
-    title: string;
-    author?: string;
-    s3Key: string;
-  }) {
+  async createBook(data: { title: string; author?: string; s3Key: string }) {
     return this.prisma.book.create({
       data: {
         title: data.title,
@@ -30,13 +26,16 @@ export class BooksService {
     });
   }
 
-  async createParagraphs(bookId: string, paragraphs: Array<{
-    chapterNumber: number;
-    orderIndex: number;
-    content: string;
-  }>) {
+  async createParagraphs(
+    bookId: string,
+    paragraphs: Array<{
+      chapterNumber: number;
+      orderIndex: number;
+      content: string;
+    }>
+  ) {
     return this.prisma.paragraph.createMany({
-      data: paragraphs.map(p => ({
+      data: paragraphs.map((p) => ({
         ...p,
         bookId,
       })),
@@ -49,6 +48,17 @@ export class BooksService {
       include: {
         paragraphs: {
           orderBy: { orderIndex: 'asc' },
+        },
+      },
+    });
+  }
+
+  async getAllBooks() {
+    return this.prisma.book.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        _count: {
+          select: { paragraphs: true },
         },
       },
     });

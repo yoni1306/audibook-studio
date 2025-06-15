@@ -398,7 +398,7 @@ let BooksService = BooksService_1 = class BooksService {
     }
     async createParagraphs(bookId, paragraphs) {
         return this.prisma.paragraph.createMany({
-            data: paragraphs.map(p => ({
+            data: paragraphs.map((p) => ({
                 ...p,
                 bookId,
             })),
@@ -410,6 +410,16 @@ let BooksService = BooksService_1 = class BooksService {
             include: {
                 paragraphs: {
                     orderBy: { orderIndex: 'asc' },
+                },
+            },
+        });
+    }
+    async getAllBooks() {
+        return this.prisma.book.findMany({
+            orderBy: { createdAt: 'desc' },
+            include: {
+                _count: {
+                    select: { paragraphs: true },
                 },
             },
         });
@@ -515,6 +525,9 @@ let BooksController = class BooksController {
     async getBook(id) {
         return this.booksService.getBook(id);
     }
+    async getAllBooks() {
+        return this.booksService.getAllBooks();
+    }
     async createParagraphs(id, body) {
         return this.booksService.createParagraphs(id, body.paragraphs);
     }
@@ -537,6 +550,12 @@ tslib_1.__decorate([
     tslib_1.__metadata("design:paramtypes", [String]),
     tslib_1.__metadata("design:returntype", Promise)
 ], BooksController.prototype, "getBook", null);
+tslib_1.__decorate([
+    (0, common_1.Get)(),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", []),
+    tslib_1.__metadata("design:returntype", Promise)
+], BooksController.prototype, "getAllBooks", null);
 tslib_1.__decorate([
     (0, common_1.Post)(':id/paragraphs'),
     tslib_1.__param(0, (0, common_1.Param)('id')),
