@@ -4,6 +4,7 @@ import { AppController } from './app.controller';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { S3Module } from './s3/s3.module';
+import { QueueModule } from './queue/queue.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { S3Module } from './s3/s3.module';
     PrismaModule,
     HealthModule,
     S3Module,
+    QueueModule,
   ],
   controllers: [AppController],
 })
