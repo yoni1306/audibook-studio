@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { Worker, Job } from 'bullmq';
 import * as dotenv from 'dotenv';
+import { parseEpub } from './epub-parser';
 
 // Load environment variables
 dotenv.config();
@@ -18,14 +19,65 @@ const worker = new Worker(
       case 'test-job':
         logger.log(`Test job message: ${job.data.message}`);
         // Simulate some work
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, 2000));
         return { processed: true, message: job.data.message };
 
       case 'parse-epub':
-        logger.log(`Parsing EPUB: ${job.data.s3Key} for book ${job.data.bookId}`);
-        // TODO: Implement EPUB parsing in Day 5
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        return { processed: true, bookId: job.data.bookId };
+        logger.log(
+          `Parsing EPUB: ${job.data.s3Key} for book ${job.data.bookId}`
+        );
+
+        try {
+          // TODO: Download from S3
+          // For now, we'll use mock data
+          const paragraphs = await parseEpub(job.data.s3Key);
+
+          // Save to database
+          const response = await fetch(
+            `http://localhost:3333/api/books/${job.data.bookId}/paragraphs`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ paragraphs }),
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(
+              `Failed to save paragraphs: ${response.statusText}`
+            );
+          }
+
+          // Update book status
+          await fetch(
+            `http://localhost:3333/api/books/${job.data.bookId}/status`,
+            {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'READY' }),
+            }
+          );
+
+          return {
+            processed: true,
+            bookId: job.data.bookId,
+            paragraphCount: paragraphs.length,
+          };
+        } catch (error) {
+          logger.error(`Failed to parse EPUB: ${error.message}`);
+
+          // Update book status to ERROR
+          await fetch(
+            `http://localhost:3333/api/books/${job.data.bookId}/status`,
+            {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'ERROR' }),
+            }
+          );
+
+          throw error;
+        }
 
       default:
         logger.warn(`Unknown job type: ${job.name}`);
