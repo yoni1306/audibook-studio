@@ -13,3 +13,12 @@ out
 node_modules
 
 /generated/prisma
+# Nx temporary files
+tmp/
+*.generated.*.json
+
+# Or more specifically
+tmp/apps/*/serve/
+
+# build output
+dist/

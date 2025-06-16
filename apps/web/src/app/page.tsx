@@ -10,6 +10,9 @@ export default function HomePage() {
           <li>
             <a href="/books">View Books</a>
           </li>
+          <li>
+            <a href="/queue">Queue Monitor</a>
+          </li>
         </ul>
       </nav>
     </div>
