@@ -23,7 +23,11 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 var import_common = require("@nestjs/common");
 var import_bullmq = require("bullmq");
 var dotenv = __toESM(require("dotenv"));
+var fs = __toESM(require("fs/promises"));
+var import_s3_client = require("./s3-client");
 var import_epub_parser = require("./epub-parser");
+var import_database = require("./database.service");
+var import_client = require("@prisma/client");
 dotenv.config();
 const logger = new import_common.Logger("Worker");
 const worker = new import_bullmq.Worker(
@@ -41,28 +45,16 @@ const worker = new import_bullmq.Worker(
           `Parsing EPUB: ${job.data.s3Key} for book ${job.data.bookId}`
         );
         try {
-          const paragraphs = await (0, import_epub_parser.parseEpub)(job.data.s3Key);
-          const response = await fetch(
-            `http://localhost:3333/api/books/${job.data.bookId}/paragraphs`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ paragraphs })
-            }
-          );
-          if (!response.ok) {
-            throw new Error(
-              `Failed to save paragraphs: ${response.statusText}`
-            );
+          const localPath = await (0, import_s3_client.downloadFromS3)(job.data.s3Key);
+          await (0, import_database.updateBookStatus)(job.data.bookId, import_client.BookStatus.PROCESSING);
+          const paragraphs = await (0, import_epub_parser.parseEpub)(localPath);
+          if (paragraphs.length === 0) {
+            throw new Error("No paragraphs extracted from EPUB");
           }
-          await fetch(
-            `http://localhost:3333/api/books/${job.data.bookId}/status`,
-            {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ status: "READY" })
-            }
-          );
+          await (0, import_database.saveParagraphs)(job.data.bookId, paragraphs);
+          await (0, import_database.updateBookStatus)(job.data.bookId, import_client.BookStatus.READY);
+          await fs.unlink(localPath).catch(() => {
+          });
           return {
             processed: true,
             bookId: job.data.bookId,
@@ -70,14 +62,7 @@ const worker = new import_bullmq.Worker(
           };
         } catch (error) {
           logger.error(`Failed to parse EPUB: ${error.message}`);
-          await fetch(
-            `http://localhost:3333/api/books/${job.data.bookId}/status`,
-            {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ status: "ERROR" })
-            }
-          );
+          await (0, import_database.updateBookStatus)(job.data.bookId, import_client.BookStatus.ERROR);
           throw error;
         }
       case "generate-audio":

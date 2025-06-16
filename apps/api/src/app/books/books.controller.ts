@@ -30,29 +30,6 @@ export class BooksController {
     return this.booksService.getAllBooks();
   }
 
-  @Post(':id/paragraphs')
-  async createParagraphs(
-    @Param('id') id: string,
-    @Body()
-    body: {
-      paragraphs: Array<{
-        chapterNumber: number;
-        orderIndex: number;
-        content: string;
-      }>;
-    }
-  ) {
-    return this.booksService.createParagraphs(id, body.paragraphs);
-  }
-
-  @Patch(':id/status')
-  async updateStatus(
-    @Param('id') id: string,
-    @Body() body: { status: string }
-  ) {
-    return this.booksService.updateBookStatus(id, body.status as any);
-  }
-
   @Patch('paragraphs/:paragraphId')
   async updateParagraph(
     @Param('paragraphId') paragraphId: string,

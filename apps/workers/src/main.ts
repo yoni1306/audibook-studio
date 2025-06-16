@@ -1,7 +1,11 @@
 import { Logger } from '@nestjs/common';
 import { Worker, Job } from 'bullmq';
 import * as dotenv from 'dotenv';
+import * as fs from 'fs/promises';
+import { downloadFromS3 } from './s3-client';
 import { parseEpub } from './epub-parser';
+import { saveParagraphs, updateBookStatus } from './database.service';
+import { BookStatus } from '@prisma/client';
 
 // Load environment variables
 dotenv.config();
@@ -28,35 +32,27 @@ const worker = new Worker(
         );
 
         try {
-          // TODO: Download from S3
-          // For now, we'll use mock data
-          const paragraphs = await parseEpub(job.data.s3Key);
+          // Download EPUB from S3
+          const localPath = await downloadFromS3(job.data.s3Key);
 
-          // Save to database
-          const response = await fetch(
-            `http://localhost:3333/api/books/${job.data.bookId}/paragraphs`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ paragraphs }),
-            }
-          );
+          // Update status to PROCESSING
+          await updateBookStatus(job.data.bookId, BookStatus.PROCESSING);
 
-          if (!response.ok) {
-            throw new Error(
-              `Failed to save paragraphs: ${response.statusText}`
-            );
+          // Parse the EPUB
+          const paragraphs = await parseEpub(localPath);
+
+          if (paragraphs.length === 0) {
+            throw new Error('No paragraphs extracted from EPUB');
           }
 
-          // Update book status
-          await fetch(
-            `http://localhost:3333/api/books/${job.data.bookId}/status`,
-            {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ status: 'READY' }),
-            }
-          );
+          // Save directly to database
+          await saveParagraphs(job.data.bookId, paragraphs);
+
+          // Update book status to READY
+          await updateBookStatus(job.data.bookId, BookStatus.READY);
+
+          // Clean up temp file
+          await fs.unlink(localPath).catch(() => {});
 
           return {
             processed: true,
@@ -67,14 +63,7 @@ const worker = new Worker(
           logger.error(`Failed to parse EPUB: ${error.message}`);
 
           // Update book status to ERROR
-          await fetch(
-            `http://localhost:3333/api/books/${job.data.bookId}/status`,
-            {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ status: 'ERROR' }),
-            }
-          );
+          await updateBookStatus(job.data.bookId, BookStatus.ERROR);
 
           throw error;
         }
