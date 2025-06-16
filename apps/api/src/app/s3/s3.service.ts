@@ -7,6 +7,7 @@ import {
   HeadBucketCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { HeadObjectCommand } from '@aws-sdk/client-s3';
 
 @Injectable()
 export class S3Service {
@@ -16,7 +17,7 @@ export class S3Service {
 
   constructor(private configService: ConfigService) {
     const endpoint = this.configService.get('S3_ENDPOINT');
-    
+
     this.s3Client = new S3Client({
       region: this.configService.get('AWS_REGION', 'us-east-1'),
       credentials: {
@@ -29,7 +30,10 @@ export class S3Service {
       }),
     });
 
-    this.bucketName = this.configService.get('S3_BUCKET_NAME', 'audibook-storage');
+    this.bucketName = this.configService.get(
+      'S3_BUCKET_NAME',
+      'audibook-storage'
+    );
     this.initializeBucket();
   }
 
@@ -64,5 +68,42 @@ export class S3Service {
     });
 
     return { url, key };
+  }
+
+  async waitForFile(
+    key: string,
+    maxAttempts = 20,
+    delayMs = 500
+  ): Promise<boolean> {
+    this.logger.log(`Waiting for file ${key} to be available in S3...`);
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await this.s3Client.send(
+          new HeadObjectCommand({
+            Bucket: this.bucketName,
+            Key: key,
+          })
+        );
+        this.logger.log(`File ${key} is available after ${attempt} attempts`);
+        return true;
+      } catch (error) {
+        if (error.name === 'NotFound' && attempt < maxAttempts) {
+          this.logger.debug(
+            `Attempt ${attempt}/${maxAttempts}: File not yet available, waiting ${delayMs}ms...`
+          );
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        } else if (attempt === maxAttempts) {
+          this.logger.error(
+            `File ${key} not available after ${maxAttempts} attempts`
+          );
+          return false;
+        } else {
+          throw error;
+        }
+      }
+    }
+
+    return false;
   }
 }
