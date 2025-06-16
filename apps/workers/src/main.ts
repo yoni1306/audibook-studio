@@ -45,7 +45,7 @@ const worker = new Worker(
             throw new Error('No paragraphs extracted from EPUB');
           }
 
-          // Save directly to database
+          // Save directly to database (NOT via HTTP)
           await saveParagraphs(job.data.bookId, paragraphs);
 
           // Update book status to READY
