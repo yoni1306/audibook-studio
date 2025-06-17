@@ -18,7 +18,11 @@ interface Job {
   state?: string;
   timestamp: number;
   failedReason?: string;
+  stacktrace?: string[];
   returnvalue?: any;
+  processedOn?: number;
+  finishedOn?: number;
+  attemptsMade?: number;
 }
 
 export default function QueuePage() {
@@ -26,6 +30,7 @@ export default function QueuePage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [selectedStatus, setSelectedStatus] = useState('waiting');
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [expandedJobs, setExpandedJobs] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetchStatus();
@@ -87,6 +92,27 @@ export default function QueuePage() {
     }
   };
 
+  const toggleJobExpanded = (jobId: string) => {
+    const newExpanded = new Set(expandedJobs);
+    if (newExpanded.has(jobId)) {
+      newExpanded.delete(jobId);
+    } else {
+      newExpanded.add(jobId);
+    }
+    setExpandedJobs(newExpanded);
+  };
+
+  const formatTimestamp = (timestamp?: number) => {
+    if (!timestamp) return 'N/A';
+    return new Date(timestamp).toLocaleString();
+  };
+
+  const getJobDuration = (job: Job) => {
+    if (!job.processedOn || !job.finishedOn) return 'N/A';
+    const duration = job.finishedOn - job.processedOn;
+    return `${(duration / 1000).toFixed(2)}s`;
+  };
+
   return (
     <div style={{ padding: '20px' }}>
       <h1>Queue Monitor</h1>
@@ -123,13 +149,15 @@ export default function QueuePage() {
               Waiting: <strong>{status.waiting}</strong>
             </div>
             <div>
-              Active: <strong>{status.active}</strong>
+              Active:{' '}
+              <strong style={{ color: 'orange' }}>{status.active}</strong>
             </div>
             <div>
-              Completed: <strong>{status.completed}</strong>
+              Completed:{' '}
+              <strong style={{ color: 'green' }}>{status.completed}</strong>
             </div>
             <div>
-              Failed: <strong>{status.failed}</strong>
+              Failed: <strong style={{ color: 'red' }}>{status.failed}</strong>
             </div>
             <div>
               Delayed: <strong>{status.delayed}</strong>
@@ -156,8 +184,11 @@ export default function QueuePage() {
         </select>
 
         {(selectedStatus === 'completed' || selectedStatus === 'failed') && (
-          <button onClick={() => cleanJobs(selectedStatus)}>
-            Clean {selectedStatus} jobs
+          <button
+            onClick={() => cleanJobs(selectedStatus)}
+            style={{ padding: '5px 10px' }}
+          >
+            Clean all {selectedStatus} jobs
           </button>
         )}
       </div>
@@ -172,40 +203,177 @@ export default function QueuePage() {
               style={{
                 marginBottom: '10px',
                 padding: '10px',
-                border: '1px solid #ddd',
+                border: `2px solid ${
+                  selectedStatus === 'failed'
+                    ? '#ff4444'
+                    : selectedStatus === 'completed'
+                    ? '#44ff44'
+                    : selectedStatus === 'active'
+                    ? '#ffaa44'
+                    : '#dddddd'
+                }`,
                 borderRadius: '5px',
-                fontSize: '12px',
+                backgroundColor:
+                  selectedStatus === 'failed' ? '#fff5f5' : 'white',
               }}
             >
-              <div>
-                <strong>ID:</strong> {job.id}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  cursor: 'pointer',
+                }}
+                onClick={() => toggleJobExpanded(job.id)}
+              >
+                <div>
+                  <strong>Job #{job.id}</strong> - {job.name}
+                  {job.attemptsMade && job.attemptsMade > 1 && (
+                    <span style={{ color: 'orange', marginLeft: '10px' }}>
+                      (Attempt {job.attemptsMade})
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '12px', color: '#666' }}>
+                  {formatTimestamp(job.timestamp)}
+                  {job.finishedOn && ` • Duration: ${getJobDuration(job)}`}
+                </div>
               </div>
-              <div>
-                <strong>Type:</strong> {job.name}
-              </div>
-              <div>
-                <strong>Data:</strong>{' '}
-                <pre>{JSON.stringify(job.data, null, 2)}</pre>
-              </div>
+
+              {/* Failed job error display */}
               {job.failedReason && (
-                <div style={{ color: 'red' }}>
-                  <strong>Error:</strong> {job.failedReason}
-                </div>
-              )}
-              {job.returnvalue && (
-                <div style={{ color: 'green' }}>
-                  <strong>Result:</strong>{' '}
-                  <pre>{JSON.stringify(job.returnvalue, null, 2)}</pre>
-                </div>
-              )}
-              {selectedStatus === 'failed' && (
-                <button
-                  onClick={() => retryJob(job.id)}
-                  style={{ marginTop: '5px' }}
+                <div
+                  style={{
+                    marginTop: '10px',
+                    padding: '10px',
+                    backgroundColor: '#ffeeee',
+                    borderRadius: '3px',
+                    border: '1px solid #ffcccc',
+                  }}
                 >
-                  Retry
-                </button>
+                  <strong style={{ color: 'red' }}>Error:</strong>
+                  <div
+                    style={{
+                      marginTop: '5px',
+                      fontFamily: 'monospace',
+                      fontSize: '12px',
+                    }}
+                  >
+                    {job.failedReason}
+                  </div>
+                </div>
               )}
+
+              {/* Expandable details */}
+              {expandedJobs.has(job.id) && (
+                <div style={{ marginTop: '10px' }}>
+                  <details open>
+                    <summary style={{ cursor: 'pointer', fontWeight: 'bold' }}>
+                      Job Data
+                    </summary>
+                    <pre
+                      style={{
+                        fontSize: '11px',
+                        backgroundColor: '#f5f5f5',
+                        padding: '10px',
+                        borderRadius: '3px',
+                        overflow: 'auto',
+                      }}
+                    >
+                      {JSON.stringify(job.data, null, 2)}
+                    </pre>
+                  </details>
+
+                  {job.stacktrace && job.stacktrace.length > 0 && (
+                    <details style={{ marginTop: '10px' }}>
+                      <summary
+                        style={{
+                          cursor: 'pointer',
+                          fontWeight: 'bold',
+                          color: 'red',
+                        }}
+                      >
+                        Stack Trace
+                      </summary>
+                      <pre
+                        style={{
+                          fontSize: '11px',
+                          backgroundColor: '#fff5f5',
+                          padding: '10px',
+                          borderRadius: '3px',
+                          overflow: 'auto',
+                          color: 'red',
+                        }}
+                      >
+                        {job.stacktrace.join('\n')}
+                      </pre>
+                    </details>
+                  )}
+
+                  {job.returnvalue && (
+                    <details style={{ marginTop: '10px' }}>
+                      <summary
+                        style={{
+                          cursor: 'pointer',
+                          fontWeight: 'bold',
+                          color: 'green',
+                        }}
+                      >
+                        Result
+                      </summary>
+                      <pre
+                        style={{
+                          fontSize: '11px',
+                          backgroundColor: '#f5fff5',
+                          padding: '10px',
+                          borderRadius: '3px',
+                          overflow: 'auto',
+                        }}
+                      >
+                        {JSON.stringify(job.returnvalue, null, 2)}
+                      </pre>
+                    </details>
+                  )}
+                </div>
+              )}
+
+              {/* Actions */}
+              <div style={{ marginTop: '10px', display: 'flex', gap: '10px' }}>
+                {selectedStatus === 'failed' && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      retryJob(job.id);
+                    }}
+                    style={{
+                      padding: '5px 15px',
+                      backgroundColor: '#4CAF50',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '3px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Retry Job
+                  </button>
+                )}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleJobExpanded(job.id);
+                  }}
+                  style={{
+                    padding: '5px 15px',
+                    backgroundColor: '#2196F3',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '3px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {expandedJobs.has(job.id) ? 'Show Less' : 'Show More'}
+                </button>
+              </div>
             </div>
           ))
         )}

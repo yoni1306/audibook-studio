@@ -1,11 +1,11 @@
 import { Logger } from '@nestjs/common';
 import { Worker, Job } from 'bullmq';
 import * as dotenv from 'dotenv';
-import * as fs from 'fs/promises';
 import { downloadFromS3 } from './s3-client';
 import { parseEpub } from './epub-parser';
 import { saveParagraphs, updateBookStatus } from './database.service';
 import { BookStatus } from '@prisma/client';
+import * as fs from 'fs/promises';
 
 // Load environment variables
 dotenv.config();
@@ -22,7 +22,6 @@ const worker = new Worker(
     switch (job.name) {
       case 'test-job':
         logger.log(`Test job message: ${job.data.message}`);
-        // Simulate some work
         await new Promise((resolve) => setTimeout(resolve, 2000));
         return { processed: true, message: job.data.message };
 
@@ -45,7 +44,7 @@ const worker = new Worker(
             throw new Error('No paragraphs extracted from EPUB');
           }
 
-          // Save directly to database (NOT via HTTP)
+          // Save directly to database
           await saveParagraphs(job.data.bookId, paragraphs);
 
           // Update book status to READY
@@ -70,7 +69,6 @@ const worker = new Worker(
 
       case 'generate-audio':
         logger.log(`Generating audio for paragraph ${job.data.paragraphId}`);
-        // TODO: Implement actual TTS in Day 8-9
         await new Promise((resolve) => setTimeout(resolve, 1000));
         logger.log(
           `Audio generation placeholder for: "${job.data.content.substring(
@@ -112,6 +110,12 @@ logger.log('🚀 Worker started and listening for jobs...');
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   logger.log('SIGTERM received, closing worker...');
+  await worker.close();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  logger.log('SIGINT received, closing worker...');
   await worker.close();
   process.exit(0);
 });
