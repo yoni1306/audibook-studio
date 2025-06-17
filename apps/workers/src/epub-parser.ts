@@ -1,11 +1,12 @@
 import { Logger } from '@nestjs/common';
 import { JSDOM } from 'jsdom';
-import { promisify } from 'util';
+import * as fs from 'fs'; // Regular fs, not fs/promises
+import * as fsPromises from 'fs/promises';
+import * as path from 'path';
+import * as unzipper from 'unzipper';
+import { parseStringPromise } from 'xml2js';
 
 const logger = new Logger('EpubParser');
-
-// Use require for epub since it doesn't have proper ES module support
-const EPub = require('epub');
 
 export async function parseEpub(epubPath: string): Promise<
   Array<{
@@ -21,82 +22,164 @@ export async function parseEpub(epubPath: string): Promise<
   }> = [];
 
   try {
-    logger.log(`Parsing EPUB file: ${epubPath}`);
+    logger.log(`Parsing EPUB 3.0 file: ${epubPath}`);
 
-    // Create epub instance
-    const epub = new EPub(epubPath);
+    // Extract EPUB to temp directory
+    const tempDir = path.join('/tmp', `epub-${Date.now()}`);
+    await fsPromises.mkdir(tempDir, { recursive: true });
 
-    // Parse the EPUB
+    // Unzip the EPUB
     await new Promise<void>((resolve, reject) => {
-      epub.parse();
-      epub.on('end', () => resolve());
-      epub.on('error', reject);
+      fs.createReadStream(epubPath)
+        .pipe(unzipper.Extract({ path: tempDir }))
+        .on('close', resolve)
+        .on('error', reject);
     });
 
-    logger.log(`Book loaded: ${epub.metadata.title}`);
+    logger.log(`Extracted EPUB to: ${tempDir}`);
+
+    // Read container.xml to find content.opf
+    const containerPath = path.join(tempDir, 'META-INF', 'container.xml');
+    const containerXml = await fsPromises.readFile(containerPath, 'utf-8');
+    const container = await parseStringPromise(containerXml);
+
+    const opfPath = container.container.rootfiles[0].rootfile[0].$['full-path'];
+    const opfDir = path.dirname(path.join(tempDir, opfPath));
+    const opfContent = await fsPromises.readFile(
+      path.join(tempDir, opfPath),
+      'utf-8'
+    );
+    const opf = await parseStringPromise(opfContent);
+
+    // Get spine order (reading order)
+    const spine = opf.package.spine[0].itemref;
+    const manifest = opf.package.manifest[0].item;
+
+    // Create manifest map
+    const manifestMap = new Map();
+    manifest.forEach((item: any) => {
+      manifestMap.set(item.$.id, item.$.href);
+    });
 
     let orderIndex = 0;
 
-    // Process each chapter
-    for (let i = 0; i < epub.flow.length; i++) {
-      const chapter = epub.flow[i];
+    // Process each spine item
+    for (let chapterIndex = 0; chapterIndex < spine.length; chapterIndex++) {
+      const itemId = spine[chapterIndex].$.idref;
+      const href = manifestMap.get(itemId);
+
+      if (!href) continue;
+
+      const contentPath = path.join(opfDir, href);
 
       try {
-        // Get chapter content
-        const chapterHtml = await promisify(epub.getChapter.bind(epub))(
-          chapter.id
-        );
+        const content = await fsPromises.readFile(contentPath, 'utf-8');
 
-        // Parse HTML content
-        const dom = new JSDOM(chapterHtml);
+        // Parse HTML/XHTML content
+        const dom = new JSDOM(content, {
+          contentType: 'application/xhtml+xml',
+        });
         const document = dom.window.document;
 
-        // Find all paragraphs
-        const paragraphElements = document.querySelectorAll('p');
+        // Remove script and style elements
+        document.querySelectorAll('script, style').forEach((el) => el.remove());
 
-        paragraphElements.forEach((p) => {
-          const text = p.textContent?.trim();
-          if (text && text.length > 0) {
-            paragraphs.push({
-              chapterNumber: i + 1,
-              orderIndex: orderIndex++,
-              content: text,
-            });
-          }
-        });
+        // Extract text from various elements
+        const textElements = document.querySelectorAll(
+          'p, h1, h2, h3, h4, h5, h6, div, section'
+        );
 
-        // Also check for divs that might contain text
-        const divElements = document.querySelectorAll('div');
-        divElements.forEach((div) => {
-          // Check if div has meaningful text content
-          const hasOnlyTextNodes = Array.from(div.childNodes).every(
-            (node) => node.nodeType === 3 || node.nodeName === 'BR'
+        textElements.forEach((element) => {
+          // Get direct text content
+          const texts: string[] = [];
+
+          // Collect all text nodes
+          const walker = document.createTreeWalker(
+            element,
+            dom.window.NodeFilter.SHOW_TEXT,
+            {
+              acceptNode: (node) => {
+                const text = node.textContent?.trim();
+                if (text && text.length > 0) {
+                  return dom.window.NodeFilter.FILTER_ACCEPT;
+                }
+                return dom.window.NodeFilter.FILTER_SKIP;
+              },
+            }
           );
 
-          if (hasOnlyTextNodes) {
-            const text = div.textContent?.trim();
-            if (text && text.length > 50) {
-              // Minimum length to avoid headers
+          let node;
+          let currentText = '';
+          while ((node = walker.nextNode())) {
+            currentText += ' ' + node.textContent?.trim();
+          }
+
+          currentText = currentText.trim();
+
+          // Only add if has substantial content
+          if (currentText.length > 10) {
+            // Split very long texts into smaller paragraphs
+            if (currentText.length > 500) {
+              const sentences = currentText.match(/[^.!?]+[.!?]+/g) || [
+                currentText,
+              ];
+              let paragraph = '';
+
+              sentences.forEach((sentence) => {
+                paragraph += sentence + ' ';
+                if (paragraph.length > 300) {
+                  paragraphs.push({
+                    chapterNumber: chapterIndex + 1,
+                    orderIndex: orderIndex++,
+                    content: paragraph.trim(),
+                  });
+                  paragraph = '';
+                }
+              });
+
+              if (paragraph.trim().length > 10) {
+                paragraphs.push({
+                  chapterNumber: chapterIndex + 1,
+                  orderIndex: orderIndex++,
+                  content: paragraph.trim(),
+                });
+              }
+            } else {
               paragraphs.push({
-                chapterNumber: i + 1,
+                chapterNumber: chapterIndex + 1,
                 orderIndex: orderIndex++,
-                content: text,
+                content: currentText,
               });
             }
           }
         });
       } catch (error) {
-        logger.error(`Error processing chapter ${i}:`, error);
+        logger.error(
+          `Error processing chapter ${chapterIndex} (${href}):`,
+          error
+        );
       }
     }
 
+    // Clean up temp directory
+    await fsPromises
+      .rm(tempDir, { recursive: true, force: true })
+      .catch(() => {});
+
     logger.log(
-      `Extracted ${paragraphs.length} paragraphs from ${epub.flow.length} chapters`
+      `Extracted ${paragraphs.length} paragraphs from ${spine.length} chapters`
     );
+
+    // If no paragraphs found, log the issue
+    if (paragraphs.length === 0) {
+      logger.error(
+        'No paragraphs extracted. EPUB might have an unusual structure.'
+      );
+    }
 
     return paragraphs;
   } catch (error) {
-    logger.error('Error parsing EPUB:', error);
+    logger.error('Error parsing EPUB 3.0:', error);
     throw error;
   }
 }
