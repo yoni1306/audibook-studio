@@ -113,8 +113,12 @@ export default function BookDetailPage() {
           <div
             key={paragraph.id}
             style={{
+              direction: 'rtl',
+              textAlign: 'right',
+              padding: '20px',
+              maxWidth: '800px',
+              margin: '0 auto',
               marginBottom: '20px',
-              padding: '15px',
               backgroundColor: '#f5f5f5',
               borderRadius: '5px',
               position: 'relative',
