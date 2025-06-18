@@ -106,4 +106,10 @@ export class BooksService {
       },
     });
   }
+
+  async getParagraph(paragraphId: string) {
+    return this.prisma.paragraph.findUnique({
+      where: { id: paragraphId },
+    });
+  }
 }

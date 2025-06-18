@@ -81,6 +81,47 @@ export async function updateParagraphAudio(
   }
 }
 
+export async function getParagraph(paragraphId: string) {
+  try {
+    return await prisma.paragraph.findUnique({
+      where: { id: paragraphId },
+      include: { book: true },
+    });
+  } catch (error) {
+    logger.error(`Failed to get paragraph: ${error}`);
+    throw error;
+  }
+}
+
+export async function updateParagraphAudioError(paragraphId: string) {
+  try {
+    await prisma.paragraph.update({
+      where: { id: paragraphId },
+      data: {
+        audioStatus: AudioStatus.ERROR,
+      },
+    });
+  } catch (error) {
+    logger.error(`Failed to update paragraph audio error: ${error}`);
+  }
+}
+
+export async function updateParagraphStatus(
+  paragraphId: string,
+  status: AudioStatus
+) {
+  try {
+    await prisma.paragraph.update({
+      where: { id: paragraphId },
+      data: { audioStatus: status },
+    });
+    logger.log(`Updated paragraph ${paragraphId} audio status to ${status}`);
+  } catch (error) {
+    logger.error(`Failed to update paragraph status: ${error}`);
+    throw error;
+  }
+}
+
 // Initialize connection
 prisma
   .$connect()

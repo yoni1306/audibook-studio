@@ -1,4 +1,8 @@
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  GetObjectCommand,
+  PutObjectCommand,
+} from '@aws-sdk/client-s3';
 import { Logger } from '@nestjs/common';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -39,6 +43,31 @@ export async function downloadFromS3(s3Key: string): Promise<string> {
     return tempPath;
   } catch (error) {
     logger.error(`Failed to download from S3: ${error}`);
+    throw error;
+  }
+}
+
+export async function uploadToS3(
+  localPath: string,
+  s3Key: string,
+  contentType = 'audio/mpeg'
+): Promise<void> {
+  try {
+    logger.log(`Uploading ${localPath} to S3 as ${s3Key}`);
+
+    const fileContent = await fs.readFile(localPath);
+
+    const command = new PutObjectCommand({
+      Bucket: process.env.S3_BUCKET_NAME || 'audibook-storage',
+      Key: s3Key,
+      Body: fileContent,
+      ContentType: contentType,
+    });
+
+    await s3Client.send(command);
+    logger.log(`Successfully uploaded to S3: ${s3Key}`);
+  } catch (error) {
+    logger.error(`Failed to upload to S3: ${error}`);
     throw error;
   }
 }

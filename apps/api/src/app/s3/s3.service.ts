@@ -7,7 +7,7 @@ import {
   HeadBucketCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { HeadObjectCommand } from '@aws-sdk/client-s3';
+import { HeadObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 
 @Injectable()
 export class S3Service {
@@ -105,5 +105,18 @@ export class S3Service {
     }
 
     return false;
+  }
+
+  async getSignedUrl(key: string): Promise<string> {
+    const command = new GetObjectCommand({
+      Bucket: this.bucketName,
+      Key: key,
+    });
+
+    const url = await getSignedUrl(this.s3Client, command, {
+      expiresIn: 3600, // 1 hour
+    });
+
+    return url;
   }
 }
