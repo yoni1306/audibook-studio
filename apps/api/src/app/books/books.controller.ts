@@ -1,33 +1,27 @@
-import {
-  Controller,
-  Post,
-  Get,
-  Param,
-  Body,
-  Patch,
-  NotFoundException,
-} from '@nestjs/common';
+import { Controller, Post, Get, Patch, Param, Body, NotFoundException, Redirect } from '@nestjs/common';
 import { BooksService } from './books.service';
+import { S3Service } from '../s3/s3.service';
 
 @Controller('books')
 export class BooksController {
-  constructor(private booksService: BooksService) {}
+  constructor(
+    private booksService: BooksService,
+    private s3Service: S3Service
+  ) {}
 
   @Post()
-  async createBook(
-    @Body() body: { title: string; author?: string; s3Key: string }
-  ) {
+  async createBook(@Body() body: { title: string; author?: string; s3Key: string }) {
     return this.booksService.createBook(body);
-  }
-
-  @Get(':id')
-  async getBook(@Param('id') id: string) {
-    return this.booksService.getBook(id);
   }
 
   @Get()
   async getAllBooks() {
     return this.booksService.getAllBooks();
+  }
+
+  @Get(':id')
+  async getBook(@Param('id') id: string) {
+    return this.booksService.getBook(id);
   }
 
   @Patch('paragraphs/:paragraphId')
@@ -43,5 +37,19 @@ export class BooksController {
       }
       throw error;
     }
+  }
+
+  @Get('paragraphs/:paragraphId/audio')
+  @Redirect()
+  async streamAudio(@Param('paragraphId') paragraphId: string) {
+    const paragraph = await this.booksService.getParagraph(paragraphId);
+    
+    if (!paragraph || !paragraph.audioS3Key) {
+      throw new NotFoundException('Audio not found');
+    }
+    
+    const url = await this.s3Service.getSignedUrl(paragraph.audioS3Key);
+    
+    return { url };
   }
 }

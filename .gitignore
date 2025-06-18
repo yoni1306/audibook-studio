@@ -22,3 +22,6 @@ tmp/apps/*/serve/
 
 # build output
 dist/
+
+# Local development files
+.env

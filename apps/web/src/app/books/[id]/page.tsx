@@ -11,6 +11,7 @@ interface Paragraph {
   content: string;
   audioStatus: string;
   audioS3Key: string | null;
+  audioDuration: number | null;
 }
 
 interface Book {
@@ -30,12 +31,24 @@ export default function BookDetailPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
   const [saving, setSaving] = useState(false);
+  const [generatingAll, setGeneratingAll] = useState(false);
 
   useEffect(() => {
     if (bookId) {
       fetchBook();
     }
   }, [bookId]);
+
+  // Refresh every 5 seconds to check audio status
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (book?.paragraphs.some((p) => p.audioStatus === 'GENERATING')) {
+        fetchBook();
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [book]);
 
   const fetchBook = async () => {
     try {
@@ -74,7 +87,6 @@ export default function BookDetailPage() {
       );
 
       if (response.ok) {
-        // Refresh the book data
         await fetchBook();
         setEditingId(null);
         setEditContent('');
@@ -89,8 +101,86 @@ export default function BookDetailPage() {
     }
   };
 
+  const generateAllAudio = async () => {
+    if (!book) return;
+
+    const pendingParagraphs = book.paragraphs.filter(
+      (p) => p.audioStatus === 'PENDING' || p.audioStatus === 'ERROR'
+    );
+
+    if (pendingParagraphs.length === 0) {
+      alert('All paragraphs already have audio or are being processed');
+      return;
+    }
+
+    setGeneratingAll(true);
+
+    for (const paragraph of pendingParagraphs) {
+      await fetch(
+        `http://localhost:3333/api/books/paragraphs/${paragraph.id}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: paragraph.content }),
+        }
+      );
+    }
+
+    alert(`Queued ${pendingParagraphs.length} paragraphs for audio generation`);
+    setGeneratingAll(false);
+
+    // Refresh to show updated status
+    setTimeout(fetchBook, 1000);
+  };
+
+  const generateAudioForParagraph = async (
+    paragraphId: string,
+    content: string
+  ) => {
+    try {
+      const response = await fetch(
+        `http://localhost:3333/api/books/paragraphs/${paragraphId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content }),
+        }
+      );
+
+      if (response.ok) {
+        // Refresh to show updated status
+        setTimeout(fetchBook, 1000);
+      }
+    } catch (error) {
+      console.error('Error generating audio:', error);
+    }
+  };
+
+  const getAudioStatusIcon = (status: string) => {
+    switch (status) {
+      case 'READY':
+        return '✅';
+      case 'GENERATING':
+        return '⏳';
+      case 'ERROR':
+        return '❌';
+      case 'PENDING':
+        return '⏸️';
+      default:
+        return '❓';
+    }
+  };
+
   if (loading) return <div>Loading book...</div>;
   if (!book) return <div>Book not found</div>;
+
+  const audioStats = {
+    ready: book.paragraphs.filter((p) => p.audioStatus === 'READY').length,
+    generating: book.paragraphs.filter((p) => p.audioStatus === 'GENERATING')
+      .length,
+    pending: book.paragraphs.filter((p) => p.audioStatus === 'PENDING').length,
+    error: book.paragraphs.filter((p) => p.audioStatus === 'ERROR').length,
+  };
 
   return (
     <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
@@ -103,6 +193,60 @@ export default function BookDetailPage() {
       </p>
       <p>Total paragraphs: {book.paragraphs.length}</p>
 
+      <div
+        style={{
+          padding: '15px',
+          backgroundColor: '#f0f0f0',
+          borderRadius: '5px',
+          marginBottom: '20px',
+        }}
+      >
+        <h3>Audio Status</h3>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, 1fr)',
+            gap: '10px',
+          }}
+        >
+          <div>
+            ✅ Ready: <strong>{audioStats.ready}</strong>
+          </div>
+          <div>
+            ⏳ Generating: <strong>{audioStats.generating}</strong>
+          </div>
+          <div>
+            ⏸️ Pending: <strong>{audioStats.pending}</strong>
+          </div>
+          <div>
+            ❌ Error: <strong>{audioStats.error}</strong>
+          </div>
+        </div>
+        {/* <button
+          onClick={generateAllAudio}
+          disabled={generatingAll || audioStats.pending === 0}
+          style={{
+            marginTop: '10px',
+            padding: '10px 20px',
+            backgroundColor: '#0070f3',
+            color: 'white',
+            border: 'none',
+            borderRadius: '5px',
+            cursor:
+              generatingAll || audioStats.pending === 0
+                ? 'not-allowed'
+                : 'pointer',
+            opacity: generatingAll || audioStats.pending === 0 ? 0.6 : 1,
+          }}
+        >
+          {generatingAll
+            ? 'Queueing...'
+            : `Generate Audio for ${
+                audioStats.pending + audioStats.error
+              } Paragraphs`}
+        </button> */}
+      </div>
+
       <h2>Content</h2>
       <p style={{ fontSize: '14px', color: '#666' }}>
         Click on any paragraph to edit. Changes will queue audio regeneration.
@@ -113,12 +257,8 @@ export default function BookDetailPage() {
           <div
             key={paragraph.id}
             style={{
-              direction: 'rtl',
-              textAlign: 'right',
-              padding: '20px',
-              maxWidth: '800px',
-              margin: '0 auto',
               marginBottom: '20px',
+              padding: '15px',
               backgroundColor: '#f5f5f5',
               borderRadius: '5px',
               position: 'relative',
@@ -133,9 +273,15 @@ export default function BookDetailPage() {
                 right: '10px',
                 fontSize: '12px',
                 color: '#666',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
               }}
             >
-              Chapter {paragraph.chapterNumber} | #{paragraph.orderIndex + 1}
+              <span>{getAudioStatusIcon(paragraph.audioStatus)}</span>
+              <span>
+                Chapter {paragraph.chapterNumber} | #{paragraph.orderIndex + 1}
+              </span>
             </div>
 
             {editingId === paragraph.id ? (
@@ -190,9 +336,143 @@ export default function BookDetailPage() {
                 <p style={{ marginTop: '20px', marginBottom: '10px' }}>
                   {paragraph.content}
                 </p>
-                <div style={{ fontSize: '12px', color: '#666' }}>
-                  Audio: {paragraph.audioStatus}
-                  {paragraph.audioS3Key && ' ✓'}
+                {/* Audio Section */}
+                <div style={{ marginTop: '15px' }}>
+                  {paragraph.audioStatus === 'READY' && paragraph.audioS3Key ? (
+                    <div
+                      style={{
+                        padding: '10px',
+                        backgroundColor: '#e8f5e9',
+                        borderRadius: '5px',
+                      }}
+                    >
+                      <audio controls style={{ width: '100%' }}>
+                        <source
+                          src={`http://localhost:3333/api/books/paragraphs/${paragraph.id}/audio`}
+                          type="audio/mpeg"
+                        />
+                        Your browser does not support the audio element.
+                      </audio>
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginTop: '5px',
+                        }}
+                      >
+                        <span style={{ fontSize: '12px', color: '#666' }}>
+                          {paragraph.audioDuration &&
+                            `Duration: ${Math.round(
+                              paragraph.audioDuration
+                            )} seconds`}
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            generateAudioForParagraph(
+                              paragraph.id,
+                              paragraph.content
+                            );
+                          }}
+                          style={{
+                            padding: '5px 10px',
+                            fontSize: '12px',
+                            backgroundColor: '#4CAF50',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          🔄 Regenerate
+                        </button>
+                      </div>
+                    </div>
+                  ) : paragraph.audioStatus === 'GENERATING' ? (
+                    <div
+                      style={{
+                        padding: '10px',
+                        backgroundColor: '#fff3e0',
+                        borderRadius: '5px',
+                        color: '#f57c00',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <div>🔊 Generating audio...</div>
+                      <div style={{ fontSize: '12px', marginTop: '5px' }}>
+                        This may take a moment. Page will auto-refresh.
+                      </div>
+                    </div>
+                  ) : paragraph.audioStatus === 'ERROR' ? (
+                    <div
+                      style={{
+                        padding: '10px',
+                        backgroundColor: '#ffebee',
+                        borderRadius: '5px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <span style={{ color: '#c62828' }}>
+                        ❌ Audio generation failed
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          generateAudioForParagraph(
+                            paragraph.id,
+                            paragraph.content
+                          );
+                        }}
+                        style={{
+                          padding: '5px 15px',
+                          backgroundColor: '#f44336',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '3px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        🔄 Retry
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        padding: '10px',
+                        backgroundColor: '#f5f5f5',
+                        borderRadius: '5px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <span style={{ color: '#666', fontSize: '14px' }}>
+                        ⏸️ No audio generated
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          generateAudioForParagraph(
+                            paragraph.id,
+                            paragraph.content
+                          );
+                        }}
+                        style={{
+                          padding: '5px 15px',
+                          backgroundColor: '#2196F3',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '3px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        🎵 Generate Audio
+                      </button>
+                    </div>
+                  )}
                 </div>
               </>
             )}

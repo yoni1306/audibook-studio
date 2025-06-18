@@ -1,11 +1,18 @@
 import { Logger } from '@nestjs/common';
 import { Worker, Job } from 'bullmq';
 import * as dotenv from 'dotenv';
-import { downloadFromS3 } from './s3-client';
+import { downloadFromS3, uploadToS3 } from './s3-client';
 import { parseEpub } from './epub-parser';
-import { saveParagraphs, updateBookStatus } from './database.service';
-import { BookStatus } from '@prisma/client';
+import {
+  getParagraph,
+  saveParagraphs,
+  updateBookStatus,
+  updateParagraphAudio,
+  updateParagraphStatus,
+} from './database.service';
+import { AudioStatus, BookStatus } from '@prisma/client';
 import * as fs from 'fs/promises';
+import { getTTSService } from './tts-service';
 
 // Load environment variables
 dotenv.config();
@@ -69,14 +76,60 @@ const worker = new Worker(
 
       case 'generate-audio':
         logger.log(`Generating audio for paragraph ${job.data.paragraphId}`);
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        logger.log(
-          `Audio generation placeholder for: "${job.data.content.substring(
-            0,
-            50
-          )}..."`
-        );
-        return { processed: true, paragraphId: job.data.paragraphId };
+
+        try {
+          // Mark as GENERATING
+          await updateParagraphStatus(
+            job.data.paragraphId,
+            AudioStatus.GENERATING
+          );
+
+          // Get paragraph details
+          const paragraph = await getParagraph(job.data.paragraphId);
+          if (!paragraph) {
+            throw new Error('Paragraph not found');
+          }
+
+          // Generate audio
+          const ttsService = getTTSService();
+          const outputPath = `/tmp/audio-${job.data.paragraphId}.mp3`;
+
+          const result = await ttsService.generateAudio(
+            paragraph.content,
+            outputPath
+          );
+
+          // Upload to S3
+          const s3Key = `audio/${job.data.bookId}/${job.data.paragraphId}.mp3`;
+          await uploadToS3(outputPath, s3Key);
+
+          // Update database - sets status to READY
+          await updateParagraphAudio(
+            job.data.paragraphId,
+            s3Key,
+            result.duration
+          );
+
+          // Clean up temp file
+          await fs.unlink(outputPath).catch(() => {});
+
+          logger.log(
+            `Audio generated successfully for paragraph ${job.data.paragraphId}`
+          );
+          return {
+            processed: true,
+            paragraphId: job.data.paragraphId,
+            duration: result.duration,
+            s3Key,
+          };
+        } catch (error) {
+          logger.error(`Failed to generate audio: ${error.message}`);
+
+          // Mark as ERROR
+          await updateParagraphStatus(job.data.paragraphId, AudioStatus.ERROR);
+
+          throw error;
+        }
 
       default:
         logger.warn(`Unknown job type: ${job.name}`);
