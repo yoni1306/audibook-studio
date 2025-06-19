@@ -1,174 +1,373 @@
-import { Logger } from '@nestjs/common';
-import { Worker, Job } from 'bullmq';
 import * as dotenv from 'dotenv';
-import { downloadFromS3, uploadToS3 } from './s3-client';
+import * as path from 'path';
+
+// Load environment-specific .env file
+const envFile =
+  process.env['NODE_ENV'] === 'production' ? '.env.production' : '.env.local';
+dotenv.config({ path: path.resolve(process.cwd(), envFile) });
+
+import { Worker, Job } from 'bullmq';
+import { downloadFromS3 } from './s3-client';
 import { parseEpub } from './epub-parser';
 import {
-  getParagraph,
   saveParagraphs,
   updateBookStatus,
-  updateParagraphAudio,
+  getParagraph,
   updateParagraphStatus,
+  updateParagraphAudio,
 } from './database.service';
-import { AudioStatus, BookStatus } from '@prisma/client';
+import { BookStatus, AudioStatus } from '@prisma/client';
 import * as fs from 'fs/promises';
 import { getTTSService } from './tts-service';
+import { uploadToS3 } from './s3-client';
+import { createLogger } from '@audibook/logger';
+import {
+  withCorrelationId,
+  generateCorrelationId,
+} from '@audibook/correlation';
 
-// Load environment variables
-dotenv.config();
+// Set service name for logging
+process.env['SERVICE_NAME'] = 'audibook-worker';
 
-const logger = new Logger('Worker');
+const logger = createLogger('Worker');
 
 // Create worker
 const worker = new Worker(
   'audio-processing',
   async (job: Job) => {
-    logger.log(`Processing job ${job.id} of type ${job.name}`);
-    logger.log(`Job data:`, job.data);
+    // Extract correlation ID from job data or generate new one
+    const correlationId = job.data.correlationId || generateCorrelationId();
 
-    switch (job.name) {
-      case 'test-job':
-        logger.log(`Test job message: ${job.data.message}`);
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        return { processed: true, message: job.data.message };
+    // Run job processing with correlation context
+    return withCorrelationId(correlationId, async () => {
+      logger.info(`Processing job ${job.id} of type ${job.name}`, {
+        jobId: job.id,
+        jobType: job.name,
+        jobData: job.data,
+      });
 
-      case 'parse-epub':
-        logger.log(
-          `Parsing EPUB: ${job.data.s3Key} for book ${job.data.bookId}`
-        );
+      const startTime = Date.now();
 
-        try {
-          // Download EPUB from S3
-          const localPath = await downloadFromS3(job.data.s3Key);
+      logger.info('Job started', {
+        jobId: job.id,
+        jobType: job.name,
+        attemptNumber: job.attemptsMade + 1,
+        maxAttempts: job.opts.attempts || 1,
+      });
 
-          // Update status to PROCESSING
-          await updateBookStatus(job.data.bookId, BookStatus.PROCESSING);
+      try {
+        switch (job.name) {
+          case 'test-job':
+            logger.info('Processing test job', {
+              message: job.data.message,
+            });
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            logger.info('Test job completed', {
+              duration: Date.now() - startTime,
+            });
+            return { processed: true, message: job.data.message };
 
-          // Parse the EPUB
-          const paragraphs = await parseEpub(localPath);
+          case 'parse-epub':
+            logger.info('Starting EPUB parsing', {
+              bookId: job.data.bookId,
+              s3Key: job.data.s3Key,
+            });
 
-          if (paragraphs.length === 0) {
-            throw new Error('No paragraphs extracted from EPUB');
-          }
+            try {
+              // Download EPUB from S3
+              logger.debug('Downloading EPUB from S3', {
+                s3Key: job.data.s3Key,
+              });
+              const downloadStart = Date.now();
+              const localPath = await downloadFromS3(job.data.s3Key);
+              logger.info('EPUB downloaded successfully', {
+                downloadDuration: Date.now() - downloadStart,
+                localPath,
+              });
 
-          // Save directly to database
-          await saveParagraphs(job.data.bookId, paragraphs);
+              // Update status to PROCESSING
+              await updateBookStatus(job.data.bookId, BookStatus.PROCESSING);
+              logger.debug('Book status updated to PROCESSING');
 
-          // Update book status to READY
-          await updateBookStatus(job.data.bookId, BookStatus.READY);
+              // Parse the EPUB
+              logger.info('Starting EPUB parsing', {
+                localPath,
+              });
+              const parseStart = Date.now();
+              const paragraphs = await parseEpub(localPath);
+              logger.info('EPUB parsed successfully', {
+                parseDuration: Date.now() - parseStart,
+                paragraphCount: paragraphs.length,
+                chapters: [...new Set(paragraphs.map((p) => p.chapterNumber))]
+                  .length,
+              });
 
-          // Clean up temp file
-          await fs.unlink(localPath).catch(() => {});
+              if (paragraphs.length === 0) {
+                throw new Error('No paragraphs extracted from EPUB');
+              }
 
-          return {
-            processed: true,
-            bookId: job.data.bookId,
-            paragraphCount: paragraphs.length,
-          };
-        } catch (error) {
-          logger.error(`Failed to parse EPUB: ${error.message}`);
+              // Save directly to database
+              logger.info('Saving paragraphs to database', {
+                count: paragraphs.length,
+              });
+              const saveStart = Date.now();
+              await saveParagraphs(job.data.bookId, paragraphs);
+              logger.info('Paragraphs saved successfully', {
+                saveDuration: Date.now() - saveStart,
+              });
 
-          // Update book status to ERROR
-          await updateBookStatus(job.data.bookId, BookStatus.ERROR);
+              // Update book status to READY
+              await updateBookStatus(job.data.bookId, BookStatus.READY);
+              logger.info('Book processing completed', {
+                bookId: job.data.bookId,
+                totalDuration: Date.now() - startTime,
+                paragraphCount: paragraphs.length,
+              });
 
-          throw error;
+              // Clean up temp file
+              await fs.unlink(localPath).catch((error) => {
+                logger.warn('Failed to clean up temp file', {
+                  path: localPath,
+                  error: error.message,
+                });
+              });
+
+              return {
+                processed: true,
+                bookId: job.data.bookId,
+                paragraphCount: paragraphs.length,
+                duration: Date.now() - startTime,
+              };
+            } catch (error) {
+              logger.error('EPUB parsing failed', {
+                bookId: job.data.bookId,
+                error: error.message,
+                stack: error.stack,
+                duration: Date.now() - startTime,
+              });
+
+              // Update book status to ERROR
+              await updateBookStatus(job.data.bookId, BookStatus.ERROR);
+
+              throw error;
+            }
+
+          case 'generate-audio':
+            logger.info('Starting audio generation', {
+              paragraphId: job.data.paragraphId,
+              bookId: job.data.bookId,
+              contentLength: job.data.content?.length,
+            });
+
+            try {
+              // Mark as GENERATING
+              await updateParagraphStatus(
+                job.data.paragraphId,
+                AudioStatus.GENERATING
+              );
+              logger.debug('Paragraph status updated to GENERATING');
+
+              // Get paragraph details
+              const paragraph = await getParagraph(job.data.paragraphId);
+              if (!paragraph) {
+                throw new Error('Paragraph not found');
+              }
+
+              logger.debug('Paragraph retrieved', {
+                paragraphId: paragraph.id,
+                contentLength: paragraph.content.length,
+                chapterNumber: paragraph.chapterNumber,
+                orderIndex: paragraph.orderIndex,
+              });
+
+              // Generate audio
+              const ttsService = getTTSService();
+              const outputPath = `/tmp/audio-${job.data.paragraphId}.mp3`;
+
+              logger.info('Calling TTS service', {
+                outputPath,
+                contentPreview: paragraph.content.substring(0, 50) + '...',
+              });
+              const ttsStart = Date.now();
+              const result = await ttsService.generateAudio(
+                paragraph.content,
+                outputPath
+              );
+              logger.info('TTS generation completed', {
+                ttsDuration: Date.now() - ttsStart,
+                audioDuration: result.duration,
+                filePath: result.filePath,
+              });
+
+              // Upload to S3
+              const s3Key = `audio/${job.data.bookId}/${job.data.paragraphId}.mp3`;
+              logger.debug('Uploading audio to S3', {
+                s3Key,
+                localPath: outputPath,
+              });
+              const uploadStart = Date.now();
+              await uploadToS3(outputPath, s3Key);
+              logger.info('Audio uploaded to S3', {
+                uploadDuration: Date.now() - uploadStart,
+                s3Key,
+              });
+
+              await updateParagraphAudio(
+                job.data.paragraphId,
+                s3Key,
+                result.duration
+              );
+
+              logger.info('Audio generation completed successfully', {
+                paragraphId: job.data.paragraphId,
+                totalDuration: Date.now() - startTime,
+                audioDuration: result.duration,
+                s3Key,
+              });
+
+              // Clean up temp file
+              await fs.unlink(outputPath).catch((error) => {
+                logger.warn('Failed to clean up temp audio file', {
+                  path: outputPath,
+                  error: error.message,
+                });
+              });
+
+              return {
+                processed: true,
+                paragraphId: job.data.paragraphId,
+                duration: result.duration,
+                s3Key,
+                processingTime: Date.now() - startTime,
+              };
+            } catch (error) {
+              logger.error('Audio generation failed', {
+                paragraphId: job.data.paragraphId,
+                error: error.message,
+                stack: error.stack,
+                duration: Date.now() - startTime,
+              });
+
+              // Mark as ERROR
+              await updateParagraphStatus(
+                job.data.paragraphId,
+                AudioStatus.ERROR
+              );
+
+              throw error;
+            }
+
+          default:
+            logger.warn('Unknown job type received', {
+              jobType: job.name,
+              jobId: job.id,
+            });
+            throw new Error(`Unknown job type: ${job.name}`);
         }
-
-      case 'generate-audio':
-        logger.log(`Generating audio for paragraph ${job.data.paragraphId}`);
-
-        try {
-          // Mark as GENERATING
-          await updateParagraphStatus(
-            job.data.paragraphId,
-            AudioStatus.GENERATING
-          );
-
-          // Get paragraph details
-          const paragraph = await getParagraph(job.data.paragraphId);
-          if (!paragraph) {
-            throw new Error('Paragraph not found');
-          }
-
-          // Generate audio
-          const ttsService = getTTSService();
-          const outputPath = `/tmp/audio-${job.data.paragraphId}.mp3`;
-
-          const result = await ttsService.generateAudio(
-            paragraph.content,
-            outputPath
-          );
-
-          // Upload to S3
-          const s3Key = `audio/${job.data.bookId}/${job.data.paragraphId}.mp3`;
-          await uploadToS3(outputPath, s3Key);
-
-          // Update database - sets status to READY
-          await updateParagraphAudio(
-            job.data.paragraphId,
-            s3Key,
-            result.duration
-          );
-
-          // Clean up temp file
-          await fs.unlink(outputPath).catch(() => {});
-
-          logger.log(
-            `Audio generated successfully for paragraph ${job.data.paragraphId}`
-          );
-          return {
-            processed: true,
-            paragraphId: job.data.paragraphId,
-            duration: result.duration,
-            s3Key,
-          };
-        } catch (error) {
-          logger.error(`Failed to generate audio: ${error.message}`);
-
-          // Mark as ERROR
-          await updateParagraphStatus(job.data.paragraphId, AudioStatus.ERROR);
-
-          throw error;
-        }
-
-      default:
-        logger.warn(`Unknown job type: ${job.name}`);
-        throw new Error(`Unknown job type: ${job.name}`);
-    }
+      } catch (error) {
+        logger.error('Job processing failed', {
+          jobId: job.id,
+          jobType: job.name,
+          error: error.message,
+          stack: error.stack,
+          duration: Date.now() - startTime,
+          willRetry: job.attemptsMade < (job.opts.attempts || 1) - 1,
+        });
+        throw error;
+      }
+    });
   },
   {
     connection: {
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT, 10) || 6379,
+      host: process.env['REDIS_HOST'] || 'localhost',
+      port: parseInt(process.env['REDIS_PORT'], 10) || 6379,
     },
-    concurrency: 1,
+    concurrency: parseInt(process.env['WORKER_CONCURRENCY'], 10) || 1,
   }
 );
 
-// Worker event handlers
+// Worker event handlers with structured logging
 worker.on('completed', (job) => {
-  logger.log(`Job ${job.id} completed`);
+  withCorrelationId(job.data.correlationId || generateCorrelationId(), () => {
+    logger.info('Job completed successfully', {
+      jobId: job.id,
+      jobType: job.name,
+      returnValue: job.returnvalue,
+    });
+  });
 });
 
 worker.on('failed', (job, err) => {
-  logger.error(`Job ${job?.id} failed:`, err);
+  withCorrelationId(job?.data?.correlationId || generateCorrelationId(), () => {
+    logger.error('Job failed', {
+      jobId: job?.id,
+      jobType: job?.name,
+      error: err.message,
+      stack: err.stack,
+      attempts: job?.attemptsMade,
+    });
+  });
 });
 
 worker.on('active', (job) => {
-  logger.log(`Job ${job.id} started`);
+  withCorrelationId(job.data.correlationId || generateCorrelationId(), () => {
+    logger.info('Job became active', {
+      jobId: job.id,
+      jobType: job.name,
+      previousAttempts: job.attemptsMade,
+    });
+  });
 });
 
-logger.log('🚀 Worker started and listening for jobs...');
+worker.on('stalled', (jobId) => {
+  logger.warn('Job stalled', {
+    jobId,
+    message: 'Job stalled and will be retried',
+  });
+});
 
-// Graceful shutdown
+worker.on('error', (error) => {
+  logger.error('Worker error', {
+    error: error.message,
+    stack: error.stack,
+  });
+});
+
+logger.info('Worker started successfully', {
+  service: 'audibook-worker',
+  concurrency: worker.concurrency,
+  redisHost: process.env['REDIS_HOST'] || 'localhost',
+  redisPort: process.env['REDIS_PORT'] || 6379,
+});
+
+// Graceful shutdown with logging
 process.on('SIGTERM', async () => {
-  logger.log('SIGTERM received, closing worker...');
+  logger.info('SIGTERM received, starting graceful shutdown');
   await worker.close();
+  logger.info('Worker closed successfully');
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
-  logger.log('SIGINT received, closing worker...');
+  logger.info('SIGINT received, starting graceful shutdown');
   await worker.close();
+  logger.info('Worker closed successfully');
   process.exit(0);
+});
+
+// Handle uncaught errors
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught exception', {
+    error: error.message,
+    stack: error.stack,
+  });
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled rejection', {
+    reason,
+    promise,
+  });
+  process.exit(1);
 });

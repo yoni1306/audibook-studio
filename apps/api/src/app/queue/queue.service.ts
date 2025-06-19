@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { getCurrentCorrelationId } from '@audibook/correlation';
 
 @Injectable()
 export class QueueService {
@@ -8,15 +9,19 @@ export class QueueService {
 
   constructor(@InjectQueue('audio-processing') private audioQueue: Queue) {}
 
-  async addTestJob(data: { message: string }) {
-    const job = await this.audioQueue.add('test-job', data);
-    this.logger.log(`Added test job ${job.id} to queue`);
-    return { jobId: job.id };
-  }
-
   async addEpubParsingJob(data: { bookId: string; s3Key: string }) {
-    const job = await this.audioQueue.add('parse-epub', data);
-    this.logger.log(`Added EPUB parsing job ${job.id} for book ${data.bookId}`);
+    const correlationId = getCurrentCorrelationId();
+    const job = await this.audioQueue.add('parse-epub', {
+      ...data,
+      correlationId,
+    });
+    this.logger.log(
+      `Added EPUB parsing job ${job.id} for book ${data.bookId}`,
+      {
+        jobId: job.id,
+        correlationId,
+      }
+    );
     return { jobId: job.id };
   }
 
@@ -25,9 +30,17 @@ export class QueueService {
     bookId: string;
     content: string;
   }) {
-    const job = await this.audioQueue.add('generate-audio', data);
+    const correlationId = getCurrentCorrelationId();
+    const job = await this.audioQueue.add('generate-audio', {
+      ...data,
+      correlationId,
+    });
     this.logger.log(
-      `Added audio generation job ${job.id} for paragraph ${data.paragraphId}`
+      `Added audio generation job ${job.id} for paragraph ${data.paragraphId}`,
+      {
+        jobId: job.id,
+        correlationId,
+      }
     );
     return { jobId: job.id };
   }

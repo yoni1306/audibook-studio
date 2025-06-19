@@ -15,8 +15,8 @@ export class AzureTTSService {
   private defaultVoice: string;
 
   constructor() {
-    const speechKey = process.env.AZURE_SPEECH_KEY;
-    const speechRegion = process.env.AZURE_SPEECH_REGION || 'westeurope';
+    const speechKey = process.env['AZURE_SPEECH_KEY'];
+    const speechRegion = process.env['AZURE_SPEECH_REGION'] || 'westeurope';
 
     if (!speechKey) {
       throw new Error('AZURE_SPEECH_KEY is required');
@@ -28,7 +28,7 @@ export class AzureTTSService {
     );
 
     // Hebrew neural voice - AvriNeural (male) or HilaNeural (female)
-    this.defaultVoice = process.env.AZURE_SPEECH_VOICE || 'he-IL-AvriNeural';
+    this.defaultVoice = process.env['AZURE_SPEECH_VOICE'] || 'he-IL-AvriNeural';
     this.speechConfig.speechSynthesisVoiceName = this.defaultVoice;
 
     // Set output format to MP3
@@ -41,7 +41,7 @@ export class AzureTTSService {
   async generateAudio(
     text: string,
     outputPath: string,
-    options?: TTSOptions
+    _options?: TTSOptions
   ): Promise<{
     duration: number;
     filePath: string;
@@ -208,7 +208,7 @@ export class AzureTTSService {
         const outputPath = `/tmp/test-${voice}.mp3`;
         await this.generateAudio(testText, outputPath, { voice });
         logger.log(`✓ ${voice} works correctly`);
-        await fs.unlink(outputPath).catch(() => {});
+        await fs.unlink(outputPath).catch((err) => logger.warn(`Failed to delete test file: ${err.message}`));
       } catch (error) {
         logger.error(`✗ ${voice} failed: ${error.message}`);
       }

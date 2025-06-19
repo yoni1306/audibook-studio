@@ -14,7 +14,10 @@
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
     "baseUrl": ".",
-    "paths": {}
+    "paths": {
+      "@audibook/correlation": ["libs/shared/correlation/src/index.ts"],
+      "@audibook/logger": ["libs/shared/logger/src/index.ts"]
+    }
   },
   "exclude": ["node_modules", "tmp"]
 }

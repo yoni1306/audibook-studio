@@ -1,11 +1,28 @@
-import { Logger } from '@nestjs/common';
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+
+// Load environment-specific .env file
+const envFile =
+  process.env['NODE_ENV'] === 'production' ? '.env.production' : '.env.local';
+dotenv.config({ path: path.resolve(process.cwd(), envFile) });
+
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app/app.module';
+import { createLogger } from '@audibook/logger';
+import { WinstonModule } from 'nest-winston';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  
-  // Enable CORS for the Next.js app
+  // Set service name
+  process.env['SERVICE_NAME'] = 'audibook-api';
+
+  const logger = createLogger('API');
+
+  const app = await NestFactory.create(AppModule, {
+    logger: WinstonModule.createLogger({
+      instance: logger,
+    }),
+  });
+
   app.enableCors({
     origin: 'http://localhost:3000',
     credentials: true,
@@ -14,16 +31,15 @@ async function bootstrap() {
   const globalPrefix = 'api';
   app.setGlobalPrefix(globalPrefix);
 
-  const port = process.env.PORT || 3333;
-  
+  const port = process.env['PORT'] || 3333;
+
   await app.listen(port);
-  
-  Logger.log(
-    `🚀 Application is running on: http://localhost:${port}/${globalPrefix}`
-  );
-  Logger.log(
-    `🏥 Health check available at: http://localhost:${port}/${globalPrefix}/health`
-  );
+
+  logger.info('Application started', {
+    port,
+    prefix: globalPrefix,
+    url: `http://localhost:${port}/${globalPrefix}`,
+  });
 }
 
 bootstrap();
