@@ -5,10 +5,16 @@ import {
   getCorrelationId,
   withCorrelationId,
 } from '@audibook/correlation';
-import { logger } from '@audibook/logger';
+import { createLogger } from '@audibook/logger';
 
 @Injectable()
 export class CorrelationIdMiddleware implements NestMiddleware {
+  private logger;
+
+  constructor(context = 'Correlation') {
+    this.logger = createLogger(context);
+  }
+
   use(req: Request, res: Response, next: NextFunction) {
     const correlationId = getCorrelationId(req);
     const startTime = Date.now();
@@ -19,7 +25,7 @@ export class CorrelationIdMiddleware implements NestMiddleware {
     res.on('finish', () => {
       const duration = Date.now() - startTime;
       withCorrelationId(correlationId, () => {
-        logger.info('Request completed', {
+        this.logger.info('Request completed', {
           method: req.method,
           path: req.path,
           statusCode: res.statusCode,
@@ -30,7 +36,7 @@ export class CorrelationIdMiddleware implements NestMiddleware {
     });
 
     withCorrelationId(correlationId, () => {
-      logger.info('Incoming request', {
+      this.logger.info('Incoming request', {
         method: req.method,
         path: req.path,
         correlationId,

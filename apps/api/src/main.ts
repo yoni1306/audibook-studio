@@ -11,9 +11,10 @@ import { AppModule } from './app/app.module';
 import { createLogger } from '@audibook/logger';
 import { WinstonModule } from 'nest-winston';
 
+// Set service name for logging
+process.env['SERVICE_NAME'] = 'audibook-api';
+
 async function bootstrap() {
-  // Set service name
-  process.env['SERVICE_NAME'] = 'audibook-api';
 
   const logger = createLogger('API');
 
