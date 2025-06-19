@@ -50,13 +50,27 @@ export default function BookDetailPage() {
     return () => clearInterval(interval);
   }, [book]);
 
+  // Add correlation ID generator for frontend
+  function generateCorrelationId() {
+    return `web-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  // Add to all fetch requests
   const fetchBook = async () => {
+    const correlationId = generateCorrelationId();
     try {
-      const response = await fetch(`http://localhost:3333/api/books/${bookId}`);
+      const response = await fetch(
+        `http://localhost:3333/api/books/${bookId}`,
+        {
+          headers: {
+            'x-correlation-id': correlationId,
+          },
+        }
+      );
       const data = await response.json();
       setBook(data);
     } catch (error) {
-      console.error('Error fetching book:', error);
+      console.error('Error fetching book:', error, { correlationId });
     } finally {
       setLoading(false);
     }

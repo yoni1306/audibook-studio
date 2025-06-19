@@ -10,13 +10,13 @@ import * as path from 'path';
 const logger = new Logger('S3Client');
 
 const s3Client = new S3Client({
-  region: process.env.AWS_REGION || 'us-east-1',
+  region: process.env['AWS_REGION'] || 'us-east-1',
   credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || 'test-access-key',
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || 'test-secret-key',
+    accessKeyId: process.env['AWS_ACCESS_KEY_ID'] || 'test-access-key',
+    secretAccessKey: process.env['AWS_SECRET_ACCESS_KEY'] || 'test-secret-key',
   },
-  ...(process.env.S3_ENDPOINT && {
-    endpoint: process.env.S3_ENDPOINT,
+  ...(process.env['S3_ENDPOINT'] && {
+    endpoint: process.env['S3_ENDPOINT'],
     forcePathStyle: true,
   }),
 });
@@ -26,7 +26,7 @@ export async function downloadFromS3(s3Key: string): Promise<string> {
     logger.log(`Downloading ${s3Key} from S3`);
 
     const command = new GetObjectCommand({
-      Bucket: process.env.S3_BUCKET_NAME || 'audibook-storage',
+      Bucket: process.env['S3_BUCKET_NAME'] || 'audibook-storage',
       Key: s3Key,
     });
 
@@ -58,7 +58,7 @@ export async function uploadToS3(
     const fileContent = await fs.readFile(localPath);
 
     const command = new PutObjectCommand({
-      Bucket: process.env.S3_BUCKET_NAME || 'audibook-storage',
+      Bucket: process.env['S3_BUCKET_NAME'] || 'audibook-storage',
       Key: s3Key,
       Body: fileContent,
       ContentType: contentType,

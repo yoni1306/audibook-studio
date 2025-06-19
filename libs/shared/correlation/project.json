@@ -1,0 +1,19 @@
+{
+  "name": "correlation",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/correlation/src",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/shared/correlation",
+        "main": "libs/shared/correlation/src/index.ts",
+        "tsConfig": "libs/shared/correlation/tsconfig.lib.json",
+        "assets": ["libs/shared/correlation/*.md"]
+      }
+    }
+  }
+}

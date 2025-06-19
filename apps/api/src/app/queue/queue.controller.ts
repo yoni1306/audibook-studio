@@ -10,11 +10,6 @@ export class QueueController {
     @InjectQueue('audio-processing') private audioQueue: Queue
   ) {}
 
-  @Post('test')
-  async addTestJob(@Body() body: { message: string }) {
-    return this.queueService.addTestJob(body);
-  }
-
   @Post('parse-epub')
   async addEpubParsingJob(@Body() body: { bookId: string; s3Key: string }) {
     return this.queueService.addEpubParsingJob(body);

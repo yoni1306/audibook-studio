@@ -9,7 +9,7 @@ const path = require('path');
 const fs = require('fs');
 const originalResolveFilename = Module._resolveFilename;
 const distPath = __dirname;
-const manifest = [];
+const manifest = [{"module":"@audibook/correlation","exactMatch":"libs/shared/correlation/src/index.js","pattern":"libs/shared/correlation/src/index.ts"},{"module":"@audibook/logger","exactMatch":"libs/shared/logger/src/index.js","pattern":"libs/shared/logger/src/index.ts"}];
 
 Module._resolveFilename = function(request, parent) {
   let found;
