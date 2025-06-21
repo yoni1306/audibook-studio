@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BookStatus } from '@prisma/client';
 import { QueueService } from '../queue/queue.service';
+import { TextFixesService } from './text-fixes.service';
+import { UpdateParagraphResponseDto } from './dto/paragraph-update.dto';
 
 @Injectable()
 export class BooksService {
@@ -9,7 +11,8 @@ export class BooksService {
 
   constructor(
     private prisma: PrismaService,
-    private queueService: QueueService
+    private queueService: QueueService,
+    private textFixesService: TextFixesService
   ) {}
 
   async createBook(data: { title: string; author?: string; s3Key: string }) {
@@ -30,10 +33,10 @@ export class BooksService {
     });
   }
 
-  async updateParagraph(paragraphId: string, content: string) {
+  async updateParagraph(paragraphId: string, content: string, generateAudio = false): Promise<UpdateParagraphResponseDto> {
     this.logger.log(`Attempting to update paragraph with ID: ${paragraphId}`);
 
-    // First, check if the paragraph exists
+    // First, get the existing paragraph to track changes
     const existingParagraph = await this.prisma.paragraph.findUnique({
       where: { id: paragraphId },
     });
@@ -41,6 +44,21 @@ export class BooksService {
     if (!existingParagraph) {
       this.logger.error(`Paragraph not found with ID: ${paragraphId}`);
       throw new Error(`Paragraph not found with ID: ${paragraphId}`);
+    }
+
+    // Track text changes if content is different
+    let textChanges = [];
+    if (existingParagraph.content !== content) {
+      this.logger.log(`Tracking text changes for paragraph ${paragraphId}`);
+      textChanges = await this.textFixesService.processParagraphUpdate(
+        paragraphId,
+        existingParagraph.content,
+        content
+      );
+      
+      this.logger.log(
+        `Detected ${textChanges.length} text changes for paragraph ${paragraphId}`
+      );
     }
 
     // Update the paragraph
@@ -53,20 +71,34 @@ export class BooksService {
       },
       include: {
         book: true,
+        textFixes: {
+          orderBy: { createdAt: 'desc' },
+          take: 10, // Include recent fixes
+        },
       },
     });
 
-    // Queue audio generation
-    await this.queueService.addAudioGenerationJob({
-      paragraphId: paragraph.id,
-      bookId: paragraph.bookId,
-      content: paragraph.content,
-    });
+    // Queue audio generation only if requested
+    if (generateAudio) {
+      await this.queueService.addAudioGenerationJob({
+        paragraphId: paragraph.id,
+        bookId: paragraph.bookId,
+        content: paragraph.content,
+      });
+      
+      this.logger.log(
+        `Updated paragraph ${paragraphId}, tracked ${textChanges.length} changes, and queued audio generation for this paragraph`
+      );
+    } else {
+      this.logger.log(
+        `Updated paragraph ${paragraphId}, tracked ${textChanges.length} changes, audio generation skipped`
+      );
+    }
 
-    this.logger.log(
-      `Updated paragraph ${paragraphId} and queued audio generation`
-    );
-    return paragraph;
+    return {
+      ...paragraph,
+      textChanges, // Include the changes in the response
+    } as UpdateParagraphResponseDto;
   }
 
   async createParagraphs(
@@ -91,6 +123,12 @@ export class BooksService {
       include: {
         paragraphs: {
           orderBy: { orderIndex: 'asc' },
+          include: {
+            textFixes: {
+              orderBy: { createdAt: 'desc' },
+              take: 5, // Include recent fixes for each paragraph
+            },
+          },
         },
       },
     });
@@ -101,7 +139,9 @@ export class BooksService {
       orderBy: { createdAt: 'desc' },
       include: {
         _count: {
-          select: { paragraphs: true },
+          select: { 
+            paragraphs: true,
+          },
         },
       },
     });
@@ -110,6 +150,51 @@ export class BooksService {
   async getParagraph(paragraphId: string) {
     return this.prisma.paragraph.findUnique({
       where: { id: paragraphId },
+      include: {
+        book: true,
+        textFixes: {
+          orderBy: { createdAt: 'desc' },
+        },
+      },
     });
+  }
+
+  // New methods for text fixes functionality
+
+  async getParagraphTextFixes(paragraphId: string) {
+    return this.textFixesService.getParagraphFixes(paragraphId);
+  }
+
+  async getBookTextFixes(bookId: string) {
+    return this.textFixesService.getBookFixes(bookId);
+  }
+
+  async getTextFixesStatistics() {
+    return this.textFixesService.getFixesStatistics();
+  }
+
+  async findSimilarFixes(originalWord: string, limit = 10) {
+    return this.textFixesService.findSimilarFixes(originalWord, limit);
+  }
+
+  // Get all unique word fixes across the system
+  async getAllWordFixes() {
+    const fixes = await this.prisma.textFix.groupBy({
+      by: ['originalWord', 'fixedWord', 'fixType'],
+      _count: {
+        id: true,
+      },
+      orderBy: [
+        { _count: { id: 'desc' } },
+        { originalWord: 'asc' },
+      ],
+    });
+
+    return fixes.map(fix => ({
+      originalWord: fix.originalWord,
+      fixedWord: fix.fixedWord,
+      fixType: fix.fixType,
+      occurrences: fix._count.id,
+    }));
   }
 }

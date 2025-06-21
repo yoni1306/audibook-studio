@@ -11,8 +11,8 @@ import { createLogger } from '@audibook/logger';
 export class CorrelationIdMiddleware implements NestMiddleware {
   private logger;
 
-  constructor(context = 'Correlation') {
-    this.logger = createLogger(context);
+  constructor() {
+    this.logger = createLogger('Correlation');
   }
 
   use(req: Request, res: Response, next: NextFunction) {
