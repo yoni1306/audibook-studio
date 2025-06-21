@@ -22,7 +22,6 @@ export interface BulkFixSuggestion {
 }
 
 interface BulkFixModalProps {
-  isOpen: boolean;
   onClose: () => void;
   suggestions: BulkFixSuggestion[];
   bookId: string;
@@ -33,7 +32,6 @@ interface BulkFixModalProps {
 const logger = createLogger('BulkFixModal');
 
 export default function BulkFixModal({ 
-  isOpen, 
   onClose, 
   suggestions, 
   bookId, 
@@ -42,37 +40,14 @@ export default function BulkFixModal({
   const [selectedFixes, setSelectedFixes] = useState<{[key: string]: string[]}>({});
   const [applying, setApplying] = useState(false);
   const [expandedWord, setExpandedWord] = useState<string | null>(null);
-  const [loadingPreviews, setLoadingPreviews] = useState(true);
-  const [showPreviews, setShowPreviews] = useState(true);
   
-  // Function to handle loading previews
-  const handleLoadPreviews = () => {
-    setLoadingPreviews(true);
-    // Simulate loading delay for better UX
-    setTimeout(() => {
-      setLoadingPreviews(false);
-    }, 800);
-  };
-  
-  // Log the suggestions we received when they change
+  // Handle modal opening and initialization
   useEffect(() => {
-    if (isOpen && suggestions?.length > 0) {
+    if (suggestions.length > 0) {
+      // Always log when modal opens, regardless of suggestions length
       logger.debug('Received bulk fix suggestions:', suggestions);
-      // Set loading state when modal opens
-      setLoadingPreviews(true);
       
-      // Simulate loading delay for better UX
-      const timer = setTimeout(() => {
-        setLoadingPreviews(false);
-      }, 800);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [isOpen, suggestions]);
-
-  useEffect(() => {
-    if (isOpen) {
-      // Initialize with all paragraphs selected by default and automatically show previews
+      // Initialize with all paragraphs selected by default
       const initialSelection: {[key: string]: string[]} = {};
       suggestions.forEach(suggestion => {
         const key = `${suggestion.originalWord}:${suggestion.fixedWord}`;
@@ -86,12 +61,8 @@ export default function BulkFixModal({
         }
       });
       setSelectedFixes(initialSelection);
-      
-      // Automatically show previews when modal opens
-      setShowPreviews(true);
-      handleLoadPreviews();
     }
-  }, [isOpen, suggestions]);
+  }, [suggestions]);
 
   const handleToggleParagraph = (wordKey: string, paragraphId: string) => {
     setSelectedFixes(prev => {
@@ -120,20 +91,39 @@ export default function BulkFixModal({
   };
 
   const handleApply = async () => {
+    console.log('🔧 Starting bulk fix application...');
+    console.log('📊 Selected fixes:', selectedFixes);
+    
+    const fixesToApply = Object.entries(selectedFixes).map(([wordKey, paragraphIds]) => {
+      const suggestion = suggestions.find(s => `${s.originalWord}:${s.fixedWord}` === wordKey);
+      if (!suggestion) {
+        console.warn(`⚠️ No suggestion found for wordKey: ${wordKey}`);
+        console.warn(`🔍 Available suggestions:`, suggestions.map(s => `${s.originalWord}:${s.fixedWord}`));
+        return null;
+      }
+      
+      const fix = {
+        originalWord: suggestion.originalWord,
+        fixedWord: suggestion.fixedWord,
+        paragraphIds: paragraphIds
+      };
+      
+      console.log(`📝 Prepared fix: "${fix.originalWord}" → "${fix.fixedWord}" for ${fix.paragraphIds.length} paragraphs:`, fix.paragraphIds);
+      return fix;
+    }).filter(Boolean);
+
+    console.log(`🎯 Total fixes to apply: ${fixesToApply.length}`);
+    console.log('📋 Complete fixes payload:', fixesToApply);
+
+    if (fixesToApply.length === 0) {
+      console.warn('⚠️ No fixes to apply - exiting early');
+      return;
+    }
+
     setApplying(true);
     
     try {
-      const fixes = Object.entries(selectedFixes)
-        .filter(([_, paragraphIds]) => paragraphIds.length > 0)
-        .map(([wordKey, paragraphIds]) => {
-          const [originalWord, fixedWord] = wordKey.split(':');
-          return {
-            originalWord,
-            fixedWord,
-            paragraphIds
-          };
-        });
-
+      console.log('🚀 Making API call to http://localhost:3333/api/books/bulk-fixes...');
       const response = await fetch('http://localhost:3333/api/books/bulk-fixes', {
         method: 'POST',
         headers: {
@@ -141,21 +131,39 @@ export default function BulkFixModal({
         },
         body: JSON.stringify({
           bookId,
-          fixes
+          fixes: fixesToApply,
         }),
       });
 
+      console.log(`📡 API Response status: ${response.status} ${response.statusText}`);
+      
       if (!response.ok) {
-        throw new Error('Failed to apply bulk fixes');
+        const errorText = await response.text();
+        console.error('❌ API Error response:', errorText);
+        throw new Error(`Failed to apply fixes: ${response.status} ${response.statusText}`);
       }
 
       const result = await response.json();
-      onApplyFixes(result);
-      onClose();
+      console.log('✅ API Success response:', result);
+      console.log(`📈 Results: ${result.totalParagraphsUpdated} paragraphs updated, ${result.totalWordsFixed} words fixed`);
+
+      if (result.totalParagraphsUpdated > 0) {
+        console.log('🎉 Fixes applied successfully! Calling onApplyFixes callback...');
+        onApplyFixes?.(result);
+        onClose();
+      } else {
+        console.warn('⚠️ No paragraphs were updated - this might indicate an issue');
+      }
     } catch (error) {
-      console.error('Error applying bulk fixes:', error);
-      alert('Failed to apply bulk fixes. Please try again.');
+      console.error('💥 Error applying bulk fixes:', error);
+      console.error('🔍 Error details:', {
+        message: error.message,
+        stack: error.stack,
+        bookId,
+        fixesCount: fixesToApply.length
+      });
     } finally {
+      console.log('🏁 Bulk fix application completed');
       setApplying(false);
     }
   };
@@ -164,7 +172,7 @@ export default function BulkFixModal({
     return Object.values(selectedFixes).reduce((total, paragraphIds) => total + paragraphIds.length, 0);
   };
 
-  if (!isOpen) return null;
+  if (suggestions.length === 0) return null;
 
 
 
@@ -247,17 +255,15 @@ export default function BulkFixModal({
               previewAfter: string;
             }> = [];
             
-            if (suggestion.paragraphIds) {
-              // New DTO format
-              allParagraphIds = suggestion.paragraphIds;
-              // We don't have paragraph details in the new format
-              // This is a limitation until we update the backend to include paragraph details
-              logger.debug(`Using paragraphIds for ${suggestion.originalWord}->${suggestion.fixedWord}`);
-            } else if (suggestion.paragraphs) {
-              // Old format with paragraph details
+            if (suggestion.paragraphs) {
+              // New format with paragraph details (preferred)
               allParagraphIds = suggestion.paragraphs.map(p => p.id);
               paragraphsToRender = suggestion.paragraphs;
               logger.debug(`Using paragraphs for ${suggestion.originalWord}->${suggestion.fixedWord}`);
+            } else if (suggestion.paragraphIds) {
+              // Fallback to just IDs if no paragraph details
+              allParagraphIds = suggestion.paragraphIds;
+              logger.debug(`Using paragraphIds only for ${suggestion.originalWord}->${suggestion.fixedWord}`);
             }
             
             const allSelected = allParagraphIds.length === selectedParagraphs.length;
@@ -281,11 +287,11 @@ export default function BulkFixModal({
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ color: '#dc2626', fontWeight: '500' }}>"{suggestion.originalWord}"</span>
-                        <span style={{ color: '#9ca3af' }}>→</span>
-                        <span style={{ color: '#16a34a', fontWeight: '500' }}>"{suggestion.fixedWord}"</span>
+                        <span style={{ color: '#dc2626', fontWeight: '500', fontSize: '15px' }}>"{suggestion.originalWord}"</span>
+                        <span style={{ color: '#9ca3af', fontSize: '15px' }}>→</span>
+                        <span style={{ color: '#16a34a', fontWeight: '500', fontSize: '15px' }}>"{suggestion.fixedWord}"</span>
                       </div>
-                      <span style={{ fontSize: '14px', color: '#6b7280' }}>
+                      <span style={{ fontSize: '15px', color: '#6b7280' }}>
                         Found in {suggestion.paragraphs?.length || suggestion.paragraphIds?.length} paragraphs
                       </span>
                     </div>
@@ -297,13 +303,13 @@ export default function BulkFixModal({
                           onChange={() => handleToggleAll(wordKey, allParagraphIds)}
                           style={{ borderRadius: '4px' }}
                         />
-                        <span style={{ fontSize: '14px', color: '#374151' }}>Select all</span>
+                        <span style={{ fontSize: '15px', color: '#374151' }}>Select all</span>
                       </label>
                       <button
                         onClick={() => setExpandedWord(isExpanded ? null : wordKey)}
                         style={{
                           color: '#2563eb',
-                          fontSize: '14px',
+                          fontSize: '15px',
                           background: 'none',
                           border: 'none',
                           cursor: 'pointer'
@@ -316,172 +322,94 @@ export default function BulkFixModal({
                 </div>
 
                 <div style={{ padding: '16px' }}>
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-                    gap: '12px'
-                  }}>
-                    {paragraphsToRender.length === 0 && (
-                      <div style={{ padding: '12px', color: '#6b7280', fontSize: '14px' }}>
-                        {suggestion.count} occurrences in {suggestion.paragraphIds?.length || 0} paragraphs
-                      </div>
-                    )}
-                    {showPreviews ? (
-                      loadingPreviews ? (
-                        <div style={{
-                          padding: '40px',
-                          textAlign: 'center'
-                        }}>
-                          <div style={{
-                            border: '4px solid #f3f3f3',
-                            borderTop: '4px solid #3498db',
-                            borderRadius: '50%',
-                            width: '30px',
-                            height: '30px',
-                            animation: 'spin 1s linear infinite',
-                            margin: '0 auto 15px auto'
-                          }}></div>
-                          <p style={{ color: '#6b7280' }}>Loading previews...</p>
-                          <style jsx>{`
-                            @keyframes spin {
-                              0% { transform: rotate(0deg); }
-                              100% { transform: rotate(360deg); }
-                            }
-                          `}</style>
-                        </div>
-                      ) : (
-                        suggestion.paragraphs?.map((paragraph, pIdx) => {
-                          const isExpanded = expandedWord === wordKey;
-                          const allParagraphIds = suggestion.paragraphs?.map(p => p.id) || [];
-                          return (
-                            <div
-                              key={paragraph.id}
-                              style={{
-                                padding: '12px',
-                                borderBottom: pIdx < (suggestion.paragraphs?.length || 0) - 1 ? '1px solid #e5e7eb' : 'none'
-                              }}
-                            >
-                              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer' }}>
-                                <input
-                                  type="checkbox"
-                                  checked={selectedFixes[wordKey]?.includes(paragraph.id) || false}
-                                  onChange={() => handleToggleParagraph(wordKey, paragraph.id)}
-                                  style={{ marginTop: '4px' }}
-                                />
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px',
-                                    fontSize: '14px',
-                                    color: '#6b7280',
-                                    marginBottom: '4px'
-                                  }}>
-                                    <span>Ch. {paragraph.chapterNumber}</span>
-                                    <span>Para. {paragraph.orderIndex + 1}</span>
-                                    <span style={{
-                                      backgroundColor: '#fef3c7',
-                                      color: '#d97706',
-                                      padding: '2px 6px',
-                                      borderRadius: '4px',
-                                      fontSize: '12px'
-                                    }}>
-                                      {paragraph.occurrences} occurrence{paragraph.occurrences > 1 ? 's' : ''}
-                                    </span>
-                                  </div>
-                                  
-                                  {isExpanded && (
-                                    <div style={{ marginTop: '8px' }}>
-                                      <div style={{ fontSize: '12px', marginBottom: '8px' }}>
-                                        <div style={{ color: '#6b7280', marginBottom: '4px' }}>Before:</div>
-                                        <div style={{
-                                          backgroundColor: '#fef2f2',
-                                          border: '1px solid #fecaca',
-                                          borderRadius: '4px',
-                                          padding: '8px',
-                                          color: '#374151',
-                                          maxHeight: '200px',
-                                          overflowY: 'auto',
-                                          whiteSpace: 'pre-wrap'
-                                        }}>
-                                          {paragraph.previewBefore.split('.').map((sentence, idx) => {
-                                            // Skip empty sentences
-                                            if (!sentence.trim()) return null;
-                                            
-                                            // Check if this sentence contains the original word
-                                            const hasWord = new RegExp(`(^|\\s|[\\p{P}])(${suggestion.originalWord})($|\\s|[\\p{P}])`, 'ui').test(sentence);
-                                            
-                                            // Check if text contains Hebrew characters
-                                            const containsHebrew = /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence);
-                                            
-                                            return (
-                                              <div key={idx} style={{
-                                                padding: '2px 0',
-                                                backgroundColor: hasWord ? '#ffedd5' : 'transparent',
-                                                margin: '2px 0',
-                                                direction: containsHebrew ? 'rtl' : 'ltr',
-                                                textAlign: containsHebrew ? 'right' : 'left'
-                                              }}>
-                                                {sentence.trim()}{idx < paragraph.previewBefore.split('.').length - 1 ? '.' : ''}
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                      </div>
-                                      <div style={{ fontSize: '12px' }}>
-                                        <div style={{ color: '#6b7280', marginBottom: '4px' }}>After:</div>
-                                        <div style={{
-                                          backgroundColor: '#f0fdf4',
-                                          border: '1px solid #bbf7d0',
-                                          borderRadius: '4px',
-                                          padding: '8px',
-                                          color: '#374151',
-                                          maxHeight: '200px',
-                                          overflowY: 'auto',
-                                          whiteSpace: 'pre-wrap'
-                                        }}>
-                                          {paragraph.previewAfter.split('.').map((sentence, idx) => {
-                                            // Skip empty sentences
-                                            if (!sentence.trim()) return null;
-                                            
-                                            // Check if this sentence contains the fixed word
-                                            const hasWord = new RegExp(`(^|\\s|[\\p{P}])(${suggestion.fixedWord})($|\\s|[\\p{P}])`, 'ui').test(sentence);
-                                            
-                                            // Check if text contains Hebrew characters
-                                            const containsHebrew = /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence);
-                                            
-                                            return (
-                                              <div key={idx} style={{
-                                                padding: '2px 0',
-                                                backgroundColor: hasWord ? '#dcfce7' : 'transparent',
-                                                margin: '2px 0',
-                                                direction: containsHebrew ? 'rtl' : 'ltr',
-                                                textAlign: containsHebrew ? 'right' : 'left'
-                                              }}>
-                                                {sentence.trim()}{idx < paragraph.previewAfter.split('.').length - 1 ? '.' : ''}
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              </label>
+                  <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                    {paragraphsToRender.map((paragraph, pIdx) => (
+                      <li key={paragraph.id} style={{ marginBottom: '12px' }}>
+                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={selectedFixes[wordKey]?.includes(paragraph.id) || false}
+                            onChange={() => handleToggleParagraph(wordKey, paragraph.id)}
+                            style={{ marginTop: '4px' }}
+                          />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              fontSize: '15px',
+                              color: '#6b7280',
+                              marginBottom: '4px'
+                            }}>
+                              <span>Ch. {paragraph.chapterNumber}</span>
+                              <span>Para. {paragraph.orderIndex + 1}</span>
+                              <span style={{
+                                backgroundColor: '#fef3c7',
+                                color: '#d97706',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontSize: '12px'
+                              }}>
+                                {paragraph.occurrences} occurrence{paragraph.occurrences > 1 ? 's' : ''}
+                              </span>
                             </div>
-                          );
-                        })
-                      )
-                    ) : (
-                      <div style={{
-                        padding: '20px',
-                        textAlign: 'center',
-                        color: '#6b7280'
-                      }}>
-                          <p>No preview content available.</p>
-                        </div>
-                    )}
-                  </div>
+                            {isExpanded && (
+                              <div style={{ marginTop: '8px' }}>
+                                <div style={{ fontSize: '15px', marginBottom: '8px' }}>
+                                  <div style={{ color: '#6b7280', marginBottom: '4px' }}>Before:</div>
+                                  <div style={{
+                                    backgroundColor: '#fef2f2',
+                                    border: '1px solid #fecaca',
+                                    borderRadius: '4px',
+                                    padding: '8px',
+                                    color: '#374151',
+                                    maxHeight: '200px',
+                                    overflowY: 'auto',
+                                    whiteSpace: 'pre-wrap',
+                                    fontSize: '15px'
+                                  }}>
+                                    {paragraph.previewBefore.split('.').map((sentence, idx) => (
+                                      <div key={idx} style={{
+                                        padding: '2px 0',
+                                        direction: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'rtl' : 'ltr',
+                                        textAlign: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'right' : 'left'
+                                      }}>
+                                        {sentence.trim()}{idx < paragraph.previewBefore.split('.').length - 1 ? '.' : ''}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div style={{ fontSize: '15px' }}>
+                                  <div style={{ color: '#6b7280', marginBottom: '4px' }}>After:</div>
+                                  <div style={{
+                                    backgroundColor: '#f0fdf4',
+                                    border: '1px solid #bbf7d0',
+                                    borderRadius: '4px',
+                                    padding: '8px',
+                                    color: '#374151',
+                                    maxHeight: '200px',
+                                    overflowY: 'auto',
+                                    whiteSpace: 'pre-wrap',
+                                    fontSize: '15px'
+                                  }}>
+                                    {paragraph.previewAfter.split('.').map((sentence, idx) => (
+                                      <div key={idx} style={{
+                                        padding: '2px 0',
+                                        direction: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'rtl' : 'ltr',
+                                        textAlign: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'right' : 'left'
+                                      }}>
+                                        {sentence.trim()}{idx < paragraph.previewAfter.split('.').length - 1 ? '.' : ''}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               </div>
             );
@@ -496,7 +424,7 @@ export default function BulkFixModal({
           borderTop: '1px solid #e5e7eb',
           backgroundColor: '#f9fafb'
         }}>
-          <div style={{ fontSize: '14px', color: '#6b7280' }}>
+          <div style={{ fontSize: '15px', color: '#6b7280' }}>
             {getTotalSelected()} paragraphs selected for fixing
           </div>
           <div style={{ display: 'flex', gap: '12px' }}>
