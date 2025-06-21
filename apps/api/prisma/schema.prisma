@@ -23,21 +23,41 @@ model Book {
 }
 
 model Paragraph {
-  id            String    @id @default(uuid())
+  id            String      @id @default(uuid())
   bookId        String
-  book          Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  book          Book        @relation(fields: [bookId], references: [id], onDelete: Cascade)
   chapterNumber Int
-  orderIndex    Int       // Order within the book
-  content       String    @db.Text
-  audioS3Key    String?   // S3 key for generated audio
+  orderIndex    Int         // Order within the book
+  content       String      @db.Text
+  audioS3Key    String?     // S3 key for generated audio
   audioStatus   AudioStatus @default(PENDING)
-  audioDuration Float?    // Duration in seconds
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  audioDuration Float?      // Duration in seconds
+  textFixes     TextFix[]   // Track all text fixes for this paragraph
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
   @@unique([bookId, orderIndex])
   @@index([bookId])
   @@map("paragraphs")
+}
+
+model TextFix {
+  id           String    @id @default(uuid())
+  paragraphId  String
+  paragraph    Paragraph @relation(fields: [paragraphId], references: [id], onDelete: Cascade)
+  originalText String    @db.Text // The original paragraph content
+  fixedText    String    @db.Text // The fixed paragraph content
+  originalWord String    // The specific word that was changed
+  fixedWord    String    // What the word was changed to
+  wordPosition Int       // Position of the word in the paragraph (word index)
+  fixType      String?   // Optional categorization like 'pronunciation', 'grammar', etc.
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([paragraphId])
+  @@index([originalWord])
+  @@index([fixedWord])
+  @@map("text_fixes")
 }
 
 enum BookStatus {

@@ -6,6 +6,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { S3Module } from './s3/s3.module';
 import { QueueModule } from './queue/queue.module';
 import { BooksModule } from './books/books.module';
+import { LogsModule } from './logs/logs.module';
+import { CorrelationModule } from './middleware/correlation.module';
 import { CorrelationIdMiddleware } from './middleware/correlation.middleware';
 
 @Module({
@@ -19,6 +21,8 @@ import { CorrelationIdMiddleware } from './middleware/correlation.middleware';
     S3Module,
     QueueModule,
     BooksModule,
+    LogsModule,
+    CorrelationModule,
   ],
   controllers: [AppController],
 })

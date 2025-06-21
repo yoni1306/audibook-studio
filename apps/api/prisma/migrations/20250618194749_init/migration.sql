@@ -46,3 +46,28 @@ CREATE UNIQUE INDEX "paragraphs_bookId_orderIndex_key" ON "paragraphs"("bookId",
 
 -- AddForeignKey
 ALTER TABLE "paragraphs" ADD CONSTRAINT "paragraphs_bookId_fkey" FOREIGN KEY ("bookId") REFERENCES "books"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- CreateTable for tracking text fixes
+CREATE TABLE "text_fixes" (
+    "id" TEXT NOT NULL,
+    "paragraphId" TEXT NOT NULL,
+    "originalText" TEXT NOT NULL,
+    "fixedText" TEXT NOT NULL,
+    "originalWord" TEXT NOT NULL,
+    "fixedWord" TEXT NOT NULL,
+    "wordPosition" INTEGER NOT NULL,
+    "fixType" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "text_fixes_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex for better performance
+CREATE INDEX "text_fixes_paragraphId_idx" ON "text_fixes"("paragraphId");
+CREATE INDEX "text_fixes_originalWord_idx" ON "text_fixes"("originalWord");
+CREATE INDEX "text_fixes_fixedWord_idx" ON "text_fixes"("fixedWord");
+
+-- Add foreign key constraint
+ALTER TABLE "text_fixes" ADD CONSTRAINT "text_fixes_paragraphId_fkey" 
+    FOREIGN KEY ("paragraphId") REFERENCES "paragraphs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
