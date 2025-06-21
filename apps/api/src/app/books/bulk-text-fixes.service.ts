@@ -277,71 +277,72 @@ export class BulkTextFixesService {
     return result;
   }
 
-/**
- * Creates a preview snippet showing the word in context
- * @param content The paragraph content
- * @param word The word to highlight
- * @param contextLength The length of context to include (used as fallback)
- * @returns A preview with the complete sentences containing the word
- */
-private createPreview(content: string, word: string, contextLength = 50): string {
-  // For Hebrew words, we need to use our special matching function
-  const matches = this.findHebrewWordMatches(content, word);
-  
-  if (!matches || matches.length === 0) {
-    // Fallback to the original behavior
-    return content.substring(0, contextLength) + '...';
-  }
-
-  // Find all sentences containing the matched word
-  // Split content by sentence endings (., !, ?)
-  const sentenceRegex = /[^.!?]+[.!?]+/g;
-  const sentences = [];
-  let sentenceMatch;
-  
-  while ((sentenceMatch = sentenceRegex.exec(content)) !== null) {
-    const sentence = sentenceMatch[0];
-    // Check if this sentence contains our word
-    const wordInSentence = this.findHebrewWordMatches(sentence, word);
-    if (wordInSentence && wordInSentence.length > 0) {
-      sentences.push(sentence.trim());
+  /**
+   * Creates a preview snippet showing the word in context
+   * @param content The paragraph content
+   * @param word The word to highlight
+   * @param contextLength The length of context to include (used as fallback)
+   * @returns A preview with the complete sentences containing the word
+   */
+  private createPreview(content: string, word: string, contextLength = 50): string {
+    // For Hebrew words, we need to use our special matching function
+    const matches = this.findHebrewWordMatches(content, word);
+    
+    if (!matches || matches.length === 0) {
+      // Fallback to the original behavior
+      return content.substring(0, contextLength) + '...';
     }
-  }
-  
-  // If no complete sentences found, fall back to the original behavior
-  if (sentences.length === 0) {
-    const index = content.indexOf(matches[0]);
-    const start = Math.max(0, index - contextLength);
-    const end = Math.min(content.length, index + matches[0].length + contextLength);
-    
-    let preview = content.substring(start, end);
-    
-    if (start > 0) preview = '...' + preview;
-    if (end < content.length) preview = preview + '...';
-    
-    return preview;
-  }
-  
-  // Join the sentences with a space
-  return sentences.join(' ');
-}
 
-/**
- * Escapes special regex characters
- */
-private escapeRegExp(string: string): string {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+    // Find all sentences containing the matched word
+    // Split content by sentence endings (., !, ?)
+    const sentenceRegex = /[^.!?]+[.!?]+/g;
+    const sentences = [];
+    let sentenceMatch;
+    
+    while ((sentenceMatch = sentenceRegex.exec(content)) !== null) {
+      const sentence = sentenceMatch[0];
+      // Check if this sentence contains our word
+      const wordInSentence = this.findHebrewWordMatches(sentence, word);
+      if (wordInSentence && wordInSentence.length > 0) {
+        sentences.push(sentence.trim());
+      }
+    }
+    
+    // If no complete sentences found, fall back to the original behavior
+    if (sentences.length === 0) {
+      const index = content.indexOf(matches[0]);
+      const start = Math.max(0, index - contextLength);
+      const end = Math.min(content.length, index + matches[0].length + contextLength);
+      
+      let preview = content.substring(start, end);
+      
+      if (start > 0) preview = '...' + preview;
+      if (end < content.length) preview = preview + '...';
+      
+      return preview;
+    }
+    
+    // Join the sentences with a space
+    return sentences.join(' ');
+  }
+
+  /**
+   * Escapes special regex characters
+   */
+  private escapeRegExp(string: string): string {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
 
   /**
    * Finds matches of a Hebrew word in text, properly handling word boundaries
    * This is needed because JavaScript's \b doesn't work correctly with Hebrew characters
+   * Uses exact matching - words must match exactly including niqqud
    * @param text The text to search in
    * @param word The Hebrew word to find
    * @returns An array of matches (similar to String.match() result)
    */
   private findHebrewWordMatches(text: string, word: string): RegExpMatchArray | null {
-    // Escape the word for regex safety
+    // Escape the search word for regex safety
     const escapedWord = this.escapeRegExp(word);
     
     // Create a pattern that matches the word when surrounded by spaces, punctuation, or at start/end of text
@@ -354,7 +355,7 @@ private escapeRegExp(string: string): string {
       const matches = [];
       let match;
       
-      // Find all matches and extract just the word part (capture group 2)
+      // Find all matches in the text and return them as-is
       while ((match = regex.exec(text)) !== null) {
         matches.push(match[2]);
       }
