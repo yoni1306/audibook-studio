@@ -52,10 +52,21 @@ export class BulkTextFixesService {
       return [];
     }
 
-    const suggestions: BulkFixSuggestion[] = [];
-
     // Get all paragraphs in the book except the one just edited
-    const bookParagraphs = await this.prisma.paragraph.findMany({
+    const bookParagraphs = await this.fetchBookParagraphs(bookId, excludeParagraphId);
+    this.logger.debug(`Found ${bookParagraphs.length} paragraphs to check for similar fixes`);
+
+    // Process each word change to find similar fixes
+    const suggestions = await this.processBulkFixSuggestions(wordChanges, bookParagraphs);
+
+    return suggestions;
+  }
+
+  /**
+   * Fetches all paragraphs in a book except the excluded one
+   */
+  private async fetchBookParagraphs(bookId: string, excludeParagraphId: string) {
+    return this.prisma.paragraph.findMany({
       where: {
         bookId,
         id: { not: excludeParagraphId },
@@ -65,54 +76,25 @@ export class BulkTextFixesService {
         { orderIndex: 'asc' },
       ],
     });
-    
-    this.logger.debug(`Found ${bookParagraphs.length} paragraphs to check for similar fixes`);
+  }
 
-    // For each word change, find paragraphs that contain the original word
+  /**
+   * Processes word changes to find bulk fix suggestions
+   */
+  private async processBulkFixSuggestions(
+    wordChanges: WordChange[], 
+    bookParagraphs: Array<{ 
+      id: string; 
+      chapterNumber: number; 
+      orderIndex: number; 
+      content: string 
+    }>
+  ): Promise<BulkFixSuggestion[]> {
+    const suggestions: BulkFixSuggestion[] = [];
+
     for (const change of wordChanges) {
       this.logger.debug(`Looking for paragraphs containing word: '${change.originalWord}'`);
-      const matchingParagraphs = [];
-
-      for (const paragraph of bookParagraphs) {
-        // For Hebrew text, we need a special approach for word boundaries
-        // since \b doesn't work correctly with Hebrew characters
-        const matches = this.findHebrewWordMatches(paragraph.content, change.originalWord);
-        
-        if (matches && matches.length > 0) {
-          // Create preview of the change
-          // Use the same Hebrew-aware approach for replacement
-          let previewAfter = paragraph.content;
-          
-          // Create a pattern that matches the word with proper boundaries
-          const escapedWord = this.escapeRegExp(change.originalWord);
-          const pattern = `(^|\\s|[\\p{P}])(${escapedWord})($|\\s|[\\p{P}])`;
-          
-          try {
-            // Replace all occurrences while preserving the surrounding characters
-            const regex = new RegExp(pattern, 'gu');
-            previewAfter = previewAfter.replace(regex, (match, before, word, after) => {
-              return `${before}${change.fixedWord}${after}`;
-            });
-          } catch (error) {
-            // Fallback to standard regex replacement if Unicode regex fails
-            this.logger.error(`Error using Unicode regex for Hebrew word replacement: ${error}`);
-            previewAfter = paragraph.content.replace(
-              new RegExp(`\\b${this.escapeRegExp(change.originalWord)}\\b`, 'gi'),
-              change.fixedWord
-            );
-          }
-
-          matchingParagraphs.push({
-            id: paragraph.id,
-            chapterNumber: paragraph.chapterNumber,
-            orderIndex: paragraph.orderIndex,
-            content: paragraph.content,
-            occurrences: matches.length,
-            previewBefore: this.createPreview(paragraph.content, change.originalWord),
-            previewAfter: this.createPreview(previewAfter, change.fixedWord),
-          });
-        }
-      }
+      const matchingParagraphs = this.findMatchingParagraphs(change, bookParagraphs);
 
       if (matchingParagraphs.length > 0) {
         this.logger.debug(`Found ${matchingParagraphs.length} paragraphs containing '${change.originalWord}'`);
@@ -127,6 +109,62 @@ export class BulkTextFixesService {
     }
 
     return suggestions;
+  }
+
+  /**
+   * Finds paragraphs that contain the original word and creates preview content
+   */
+  private findMatchingParagraphs(
+    change: WordChange,
+    bookParagraphs: Array<{ id: string; chapterNumber: number; orderIndex: number; content: string }>
+  ) {
+    const matchingParagraphs = [];
+
+    for (const paragraph of bookParagraphs) {
+      // For Hebrew text, we need a special approach for word boundaries
+      const matches = this.findHebrewWordMatches(paragraph.content, change.originalWord);
+      
+      if (matches && matches.length > 0) {
+        // Create preview with the fixed word applied
+        const previewAfter = this.createFixedPreviewContent(paragraph.content, change.originalWord, change.fixedWord);
+
+        matchingParagraphs.push({
+          id: paragraph.id,
+          chapterNumber: paragraph.chapterNumber,
+          orderIndex: paragraph.orderIndex,
+          content: paragraph.content,
+          occurrences: matches.length,
+          previewBefore: this.createPreview(paragraph.content, change.originalWord),
+          previewAfter: this.createPreview(previewAfter, change.fixedWord),
+        });
+      }
+    }
+
+    return matchingParagraphs;
+  }
+
+  /**
+   * Creates a preview of content with the original word replaced by the fixed word
+   */
+  private createFixedPreviewContent(content: string, originalWord: string, fixedWord: string): string {
+    // Create a pattern that matches the word with proper boundaries
+    const escapedWord = this.escapeRegExp(originalWord);
+    const pattern = `(^|\\s|[\\p{P}])(${escapedWord})($|\\s|[\\p{P}])`;
+    
+    try {
+      // Replace all occurrences while preserving the surrounding characters
+      const regex = new RegExp(pattern, 'gu');
+      return content.replace(regex, (match, before, word, after) => {
+        return `${before}${fixedWord}${after}`;
+      });
+    } catch (error) {
+      // Fallback to standard regex replacement if Unicode regex fails
+      this.logger.error(`Error using Unicode regex for Hebrew word replacement: ${error}`);
+      return content.replace(
+        new RegExp(`\\b${this.escapeRegExp(originalWord)}\\b`, 'gi'),
+        fixedWord
+      );
+    }
   }
 
   /**
