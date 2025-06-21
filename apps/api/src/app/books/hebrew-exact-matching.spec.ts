@@ -156,24 +156,26 @@ describe('BulkTextFixesService - Hebrew Exact Matching', () => {
       expect(result).toBeNull();
     });
 
-    it('should handle words with special regex characters exactly', () => {
+    it('should match word ignoring punctuation', () => {
       const text = 'שלום! איך שלומך?';
-      const word = 'שלום!';
+      const word = 'שלום';
       
       const result = findHebrewWordMatches(text, word);
       
       expect(result).toBeTruthy();
       expect(result).toHaveLength(1);
-      expect(result[0]).toBe('שלום!');
+      expect(result[0]).toBe('שלום');
     });
 
-    it('should NOT match word without exclamation when searching with exclamation', () => {
-      const text = 'שלום איך שלומך?';  // שלום without !
-      const word = 'שלום!';            // שלום with !
+    it('should match word before various punctuation marks', () => {
+      const text = 'שלום, שלום! שלום? שלום. שלום;';
+      const word = 'שלום';
       
       const result = findHebrewWordMatches(text, word);
       
-      expect(result).toBeNull();
+      expect(result).toBeTruthy();
+      expect(result).toHaveLength(5);
+      expect(result.every(match => match === 'שלום')).toBe(true);
     });
   });
 });

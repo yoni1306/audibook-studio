@@ -217,7 +217,6 @@ export default function BookDetailPage() {
       {/* Bulk Fix Modal */}
       {showBulkFixModal && pendingBulkFix && (
         <BulkFixModal
-          isOpen={showBulkFixModal}
           onClose={() => setShowBulkFixModal(false)}
           suggestions={pendingBulkFix.suggestions}
           bookId={bookId}

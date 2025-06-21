@@ -13,6 +13,16 @@ export interface BulkFixSuggestion {
   fixType: string;
   paragraphIds: string[];
   count: number;
+  // Include full paragraph details for the UI
+  paragraphs: Array<{
+    id: string;
+    chapterNumber: number;
+    orderIndex: number;
+    content: string;
+    occurrences: number;
+    previewBefore: string;
+    previewAfter: string;
+  }>;
 }
 
 export interface UpdateParagraphResponseDto {

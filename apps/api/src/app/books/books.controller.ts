@@ -29,7 +29,9 @@ export class BooksController {
         // These fields don't exist in the service format, so we provide default values
         fixType: 'spelling', // Default fix type
         paragraphIds,
-        count: suggestion.paragraphs.reduce((sum, p) => sum + p.occurrences, 0)
+        count: suggestion.paragraphs.reduce((sum, p) => sum + p.occurrences, 0),
+        // Include the full paragraph details for the UI
+        paragraphs: suggestion.paragraphs
       };
     });
   }
@@ -106,7 +108,26 @@ export class BooksController {
       }>;
     }
   ) {
-    return this.bulkTextFixesService.applyBulkFixes(body.bookId, body.fixes);
+    console.log(' [API] Bulk fixes endpoint called');
+    console.log(' [API] Request body:', JSON.stringify(body, null, 2));
+    console.log(` [API] Book ID: ${body.bookId}`);
+    console.log(` [API] Number of fixes: ${body.fixes.length}`);
+    
+    try {
+      const result = await this.bulkTextFixesService.applyBulkFixes(body.bookId, body.fixes);
+      console.log(' [API] Bulk fixes completed successfully');
+      console.log(' [API] Result:', JSON.stringify(result, null, 2));
+      return result;
+    } catch (error) {
+      console.error(' [API] Error in bulk fixes endpoint:', error);
+      console.error(' [API] Error details:', {
+        message: error.message,
+        stack: error.stack,
+        bookId: body.bookId,
+        fixesCount: body.fixes.length
+      });
+      throw error;
+    }
   }
 
   // Get suggested fixes for a paragraph based on historical data

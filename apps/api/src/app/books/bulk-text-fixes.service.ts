@@ -24,6 +24,7 @@ export interface BulkFixResult {
     chapterNumber: number;
     orderIndex: number;
     wordsFixed: number;
+    changes: WordChange[];
   }>;
 }
 
@@ -178,103 +179,153 @@ export class BulkTextFixesService {
       paragraphIds: string[];
     }>
   ): Promise<BulkFixResult> {
-    const result: BulkFixResult = {
-      totalParagraphsUpdated: 0,
-      totalWordsFixed: 0,
-      updatedParagraphs: [],
-    };
+    this.logger.log(`🔧 Starting bulk fixes application for book: ${bookId}`);
+    this.logger.log(`📊 Received ${fixes.length} fixes: ${JSON.stringify(fixes.map(f => `"${f.originalWord}" → "${f.fixedWord}" (${f.paragraphIds.length} paragraphs)`))}`);
+    
+    // Group fixes by paragraph ID
+    const paragraphFixes = new Map<string, Array<{ originalWord: string; fixedWord: string }>>();
+    
+    fixes.forEach(fix => {
+      this.logger.log(`📝 Processing fix: "${fix.originalWord}" → "${fix.fixedWord}" for paragraphs: ${JSON.stringify(fix.paragraphIds)}`);
+      fix.paragraphIds.forEach(paragraphId => {
+        if (!paragraphFixes.has(paragraphId)) {
+          paragraphFixes.set(paragraphId, []);
+        }
+        const fixesForParagraph = paragraphFixes.get(paragraphId);
+        if (fixesForParagraph) {
+          fixesForParagraph.push({
+            originalWord: fix.originalWord,
+            fixedWord: fix.fixedWord
+          });
+        }
+      });
+    });
 
-    this.logger.log(`Applying bulk fixes to ${fixes.length} word changes in book ${bookId}`);
+    this.logger.log(`🎯 Grouped fixes by paragraph: ${paragraphFixes.size} paragraphs to process`);
+    paragraphFixes.forEach((fixes, paragraphId) => {
+      this.logger.log(`📋 Paragraph ${paragraphId}: ${fixes.length} fixes`);
+    });
+
+    const updatedParagraphs = [];
+    let totalWordsFixed = 0;
 
     try {
       await this.prisma.$transaction(async (tx) => {
-        const processedParagraphs = new Set<string>();
+        this.logger.log('🚀 Starting database transaction...');
+        
+        for (const [paragraphId, paragraphFixesList] of paragraphFixes.entries()) {
+          this.logger.log(`🔍 Processing paragraph ${paragraphId} with ${paragraphFixesList.length} fixes...`);
+          
+          // Find the paragraph
+          const paragraph = await tx.paragraph.findUnique({
+            where: { id: paragraphId },
+          });
 
-        for (const fix of fixes) {
-          for (const paragraphId of fix.paragraphIds) {
-            if (processedParagraphs.has(paragraphId)) continue;
+          if (!paragraph) {
+            this.logger.log(`⚠️ Paragraph ${paragraphId} not found - skipping`);
+            continue;
+          }
 
-            // Get current paragraph content
-            const paragraph = await tx.paragraph.findUnique({
-              where: { id: paragraphId },
-            });
+          this.logger.log(`📄 Found paragraph ${paragraphId}: "${paragraph.content.substring(0, 100)}${paragraph.content.length > 100 ? '...' : ''}"`);
 
-            if (!paragraph) {
-              this.logger.warn(`Paragraph ${paragraphId} not found, skipping`);
-              continue;
-            }
+          let updatedContent = paragraph.content;
+          let wordsFixedInParagraph = 0;
 
-            // Apply the fix
-            const wordRegex = new RegExp(`\\b${this.escapeRegExp(fix.originalWord)}\\b`, 'g');
-            const originalContent = paragraph.content;
-            const newContent = originalContent.replace(wordRegex, fix.fixedWord);
+          // Apply all fixes for this paragraph
+          for (const fix of paragraphFixesList) {
+            this.logger.log(`🔧 Applying fix: "${fix.originalWord}" → "${fix.fixedWord}"`);
+            this.logger.log(`📄 Paragraph content to search in: "${updatedContent}"`);
+            this.logger.log(`🔍 Looking for exact word: "${fix.originalWord}" (length: ${fix.originalWord.length})`);
             
-            // Count how many words were actually replaced
-            const originalMatches = originalContent.match(wordRegex) || [];
-            const wordsFixed = originalMatches.length;
-
-            if (wordsFixed > 0) {
-              // Update paragraph content (but keep existing audio status and S3 key)
-              await tx.paragraph.update({
-                where: { id: paragraphId },
-                data: {
-                  content: newContent,
-                  // NOTE: We don't reset audioStatus or audioS3Key for bulk fixes
-                  // The existing audio remains valid since these are just text corrections
-                },
-              });
-
-              // Track the text changes
-              const changes = this.textFixesService.analyzeTextChanges(originalContent, newContent);
+            const matches = this.findHebrewWordMatches(updatedContent, fix.originalWord);
+            this.logger.log(`🎯 Found ${matches ? matches.length : 0} matches for "${fix.originalWord}"`);
+            
+            if (matches && matches.length > 0) {
+              this.logger.log(`✅ Matches found: ${JSON.stringify(matches)}`);
+              const beforeContent = updatedContent;
               
-              // Save text fixes
-              for (const change of changes) {
-                await tx.textFix.create({
-                  data: {
-                    paragraphId,
-                    originalText: originalContent,
-                    fixedText: newContent,
-                    originalWord: change.originalWord,
-                    fixedWord: change.fixedWord,
-                    wordPosition: change.position,
-                    fixType: change.fixType || null,
-                  },
-                });
+              // Replace all occurrences using the same Hebrew-aware pattern
+              const escapedWord = this.escapeRegExp(fix.originalWord);
+              const pattern = `(^|\\s|[\\p{P}])(${escapedWord})(?=\\s|[\\p{P}]|$)`;
+              try {
+                const regex = new RegExp(pattern, 'gu');
+                updatedContent = updatedContent.replace(regex, `$1${fix.fixedWord}`);
+              } catch (error) {
+                this.logger.error(`Error using Unicode regex for Hebrew word replacement: ${error}`);
+                // Fallback to standard word boundary regex
+                const fallbackRegex = new RegExp(`\\b${escapedWord}\\b`, 'g');
+                updatedContent = updatedContent.replace(fallbackRegex, fix.fixedWord);
               }
-
-              result.updatedParagraphs.push({
-                paragraphId,
-                chapterNumber: paragraph.chapterNumber,
-                orderIndex: paragraph.orderIndex,
-                wordsFixed,
-              });
-
-              result.totalWordsFixed += wordsFixed;
-              processedParagraphs.add(paragraphId);
+              
+              if (beforeContent !== updatedContent) {
+                wordsFixedInParagraph += matches.length;
+                this.logger.log(`✅ Successfully replaced ${matches.length} occurrences of "${fix.originalWord}" with "${fix.fixedWord}"`);
+                this.logger.log(`📝 Content changed from: "${beforeContent.substring(0, 100)}${beforeContent.length > 100 ? '...' : ''}"`);
+                this.logger.log(`📝 Content changed to: "${updatedContent.substring(0, 100)}${updatedContent.length > 100 ? '...' : ''}"`);
+              } else {
+                this.logger.log(`⚠️ Content unchanged after attempting to replace "${fix.originalWord}" - this might indicate a matching issue`);
+              }
+            } else {
+              this.logger.log(`⚠️ No matches found for "${fix.originalWord}" in paragraph ${paragraphId}`);
             }
           }
-        }
 
-        result.totalParagraphsUpdated = processedParagraphs.size;
+          // Update the paragraph if any changes were made
+          if (updatedContent !== paragraph.content) {
+            this.logger.log(`💾 Updating paragraph ${paragraphId} with ${wordsFixedInParagraph} words fixed`);
+            
+            await tx.paragraph.update({
+              where: { id: paragraphId },
+              data: {
+                content: updatedContent,
+              },
+            });
+
+            // Analyze the changes for the response
+            const changes = this.textFixesService.analyzeTextChanges(
+              paragraph.content,
+              updatedContent
+            );
+
+            updatedParagraphs.push({
+              paragraphId,
+              chapterNumber: paragraph.chapterNumber,
+              orderIndex: paragraph.orderIndex,
+              wordsFixed: wordsFixedInParagraph,
+              changes,
+            });
+
+            totalWordsFixed += wordsFixedInParagraph;
+            this.logger.log(`✅ Paragraph ${paragraphId} updated successfully`);
+          } else {
+            this.logger.log(`⚠️ No changes made to paragraph ${paragraphId} - content remained the same`);
+          }
+        }
+        
+        this.logger.log('✅ Database transaction completed successfully');
       });
 
-      // NOTE: We don't queue audio generation for bulk-applied paragraphs
-      // Audio will only be generated for the original paragraph that was manually edited
+      const result = {
+        totalParagraphsUpdated: updatedParagraphs.length,
+        totalWordsFixed,
+        updatedParagraphs,
+      };
 
-      this.logger.log(
-        `Bulk fix completed: ${result.totalParagraphsUpdated} paragraphs updated, ${result.totalWordsFixed} words fixed`
-      );
-
+      this.logger.log(`🎉 Bulk fixes completed successfully!`);
+      this.logger.log(`📈 Final results: ${result.totalParagraphsUpdated} paragraphs updated, ${result.totalWordsFixed} words fixed`);
+      
+      return result;
     } catch (error) {
-      this.logger.error('Error applying bulk fixes:', error);
+      this.logger.error('💥 Error applying bulk fixes:', error);
+      this.logger.error('🔍 Error details:', {
+        message: error.message,
+        stack: error.stack,
+        bookId,
+        fixesCount: fixes.length,
+        paragraphCount: paragraphFixes.size
+      });
       throw error;
     }
-
-    this.logger.log(
-      `Bulk fix completed: ${result.totalParagraphsUpdated} paragraphs updated, ${result.totalWordsFixed} words fixed`
-    );
-    
-    return result;
   }
 
   /**
@@ -336,7 +387,7 @@ export class BulkTextFixesService {
   /**
    * Finds matches of a Hebrew word in text, properly handling word boundaries
    * This is needed because JavaScript's \b doesn't work correctly with Hebrew characters
-   * Uses exact matching - words must match exactly including niqqud
+   * Uses exact matching - words must match exactly including niqqud, but ignores punctuation
    * @param text The text to search in
    * @param word The Hebrew word to find
    * @returns An array of matches (similar to String.match() result)
@@ -346,8 +397,8 @@ export class BulkTextFixesService {
     const escapedWord = this.escapeRegExp(word);
     
     // Create a pattern that matches the word when surrounded by spaces, punctuation, or at start/end of text
-    // This is a more reliable approach for Hebrew text than using \b
-    const pattern = `(^|\\s|[\\p{P}])(${escapedWord})($|\\s|[\\p{P}])`;
+    // The word itself should not include punctuation, but can be followed by it
+    const pattern = `(^|\\s|[\\p{P}])(${escapedWord})(?=\\s|[\\p{P}]|$)`;
     
     try {
       // Use Unicode flag 'u' to properly handle Unicode characters
@@ -355,7 +406,7 @@ export class BulkTextFixesService {
       const matches = [];
       let match;
       
-      // Find all matches in the text and return them as-is
+      // Find all matches in the text and return only the word part (without punctuation)
       while ((match = regex.exec(text)) !== null) {
         matches.push(match[2]);
       }
