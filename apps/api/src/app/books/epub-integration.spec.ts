@@ -7,6 +7,16 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BooksModule } from './books.module';
 import { BookStatus } from '@prisma/client';
 
+/*
+I want you to change the integration test to do the following - 
+1. call create book endpoint in books ctrl with stub data, just to have a generated book id
+2. call queue ctrl parse epub with the book id and s3 key. in add epub parsing job of queue service mock getCurrentCorrelationId function
+3. wait for the book to be enqueued in worker and parse-epub job to start. mock downloadFromS3 to return the local path of the epub file "test_book.epub" from the artifacts folder.
+4. wait for the book to be completely processed.
+5. call getbook in books controller with the book id
+6. assert book paragraphs text contains numbered list
+*/
+
 // Import the actual parseEpub function from workers
 import { parseEpub } from '../../../workers/src/epub-parser';
 
