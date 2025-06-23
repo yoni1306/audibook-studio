@@ -42,11 +42,11 @@ export function addCorrelationHeader(
 // Helper for logging with correlation ID
 export interface CorrelationContext {
   correlationId: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export function getCorrelationContext(
-  additionalContext?: Record<string, any>
+  additionalContext?: Record<string, unknown>
 ): CorrelationContext {
   const correlationId = getCurrentCorrelationId() || 'no-correlation-id';
   return {

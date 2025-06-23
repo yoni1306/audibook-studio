@@ -15,9 +15,9 @@ describe('BulkTextFixesService', () => {
   
   // Hebrew test cases with niqqud and abbreviations
   const mockWordChanges = [
-    { originalWord: 'וגם', fixedWord: 'וְגַם', position: 10, fixType: 'niqqud' },
-    { originalWord: 'אות', fixedWord: 'אוֹת', position: 20, fixType: 'niqqud' },
-    { originalWord: 'ארה״ב', fixedWord: 'ארצות הברית', position: 30, fixType: 'abbreviation' }
+    { originalWord: 'וגם', correctedWord: 'וְגַם', position: 10, fixType: 'niqqud' },
+    { originalWord: 'אות', correctedWord: 'אוֹת', position: 20, fixType: 'niqqud' },
+    { originalWord: 'ארה״ב', correctedWord: 'ארצות הברית', position: 30, fixType: 'abbreviation' }
   ];
   
   // We're using mockWordChanges for all test cases
@@ -191,7 +191,7 @@ describe('BulkTextFixesService', () => {
       // Check וגם -> וְגַם
       const vogamResult = result.find(r => r.originalWord === 'וגם');
       expect(vogamResult).toBeDefined();
-      expect(vogamResult.fixedWord).toBe('וְגַם');
+      expect(vogamResult.correctedWord).toBe('וְגַם');
       expect(vogamResult.paragraphs.length).toBe(2); // Should find in paragraphs 1 and 4
       expect(vogamResult.paragraphs.map(p => p.id)).toContain('paragraph-1');
       expect(vogamResult.paragraphs.map(p => p.id)).toContain('paragraph-4');
@@ -199,7 +199,7 @@ describe('BulkTextFixesService', () => {
       // Check אות -> אוֹת
       const otResult = result.find(r => r.originalWord === 'אות');
       expect(otResult).toBeDefined();
-      expect(otResult.fixedWord).toBe('אוֹת');
+      expect(otResult.correctedWord).toBe('אוֹת');
       
       // With our improved Hebrew word boundary detection, we now correctly match אות in אות-יד
       // This is actually the correct behavior for Hebrew text
@@ -212,7 +212,7 @@ describe('BulkTextFixesService', () => {
       // Check ארה״ב -> ארצות הברית
       const usaResult = result.find(r => r.originalWord === 'ארה״ב');
       expect(usaResult).toBeDefined();
-      expect(usaResult.fixedWord).toBe('ארצות הברית');
+      expect(usaResult.correctedWord).toBe('ארצות הברית');
       expect(usaResult.paragraphs.length).toBe(2); // Should find in paragraphs 4 and 6
       expect(usaResult.paragraphs.map(p => p.id)).toContain('paragraph-4');
       expect(usaResult.paragraphs.map(p => p.id)).toContain('paragraph-6');
@@ -220,7 +220,7 @@ describe('BulkTextFixesService', () => {
 
     it('should handle words with special regex characters', async () => {
       const specialWordChanges = [
-        { originalWord: 'שלום!', fixedWord: 'שלום', position: 10, fixType: 'spelling' }
+        { originalWord: 'שלום!', correctedWord: 'שלום', position: 10, fixType: 'spelling' }
       ];
 
       // Mock paragraphs with special characters
@@ -255,7 +255,7 @@ describe('BulkTextFixesService', () => {
 
     it('should return empty array when no paragraphs match', async () => {
       const nonMatchingChanges = [
-        { originalWord: 'nonexistent', fixedWord: 'word', position: 10, fixType: 'spelling' }
+        { originalWord: 'nonexistent', correctedWord: 'word', position: 10, fixType: 'spelling' }
       ];
 
       const result = await service.findSimilarFixesInBook(
@@ -271,7 +271,7 @@ describe('BulkTextFixesService', () => {
     it('should handle Hebrew text with and without niqqud', async () => {
       // Test with a word with niqqud that should match the same word without niqqud
       const niqqudChanges = [
-        { originalWord: 'אוֹת', fixedWord: 'אות', position: 10, fixType: 'niqqud' }
+        { originalWord: 'אוֹת', correctedWord: 'אות', position: 10, fixType: 'niqqud' }
       ];
 
       // Mock paragraphs with the word without niqqud
@@ -314,7 +314,7 @@ describe('BulkTextFixesService', () => {
       
       // Test with a Hebrew word that might be part of other words
       const wordBoundaryChanges = [
-        { originalWord: 'ספר', fixedWord: 'ספרים', position: 10, fixType: 'spelling' }
+        { originalWord: 'ספר', correctedWord: 'ספרים', position: 10, fixType: 'spelling' }
       ];
 
       // Mock paragraphs with the word as part of other words
@@ -489,7 +489,7 @@ describe('BulkTextFixesService', () => {
   it('should verify the actual behavior of findSimilarFixesInBook with Hebrew', async () => {
     // Create a minimal test case focusing on the core issue
     const minimalWordChanges = [
-      { originalWord: 'ספר', fixedWord: 'ספרים', position: 10, fixType: 'spelling' }
+      { originalWord: 'ספר', correctedWord: 'ספרים', position: 10, fixType: 'spelling' }
     ];
     
     const minimalParagraphs = [

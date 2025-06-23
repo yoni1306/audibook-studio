@@ -78,7 +78,7 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       const fixes = [
         {
           originalWord: 'וגם',
-          fixedWord: 'וְגַם',
+          correctedWord: 'וְגַם',
           paragraphIds: [mockParagraphId],
         },
       ];
@@ -88,7 +88,7 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       textFixesService.analyzeTextChanges = jest.fn().mockReturnValue([
         {
           originalWord: 'וגם',
-          fixedWord: 'וְגַם',
+          correctedWord: 'וְגַם',
           position: 15,
           fixType: 'spelling',
         },
@@ -120,7 +120,7 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       const fixes = [
         {
           originalWord: 'וְגַם', // Looking for word WITH niqqud
-          fixedWord: 'וגם',     // Replace with word WITHOUT niqqud
+          correctedWord: 'וגם',     // Replace with word WITHOUT niqqud
           paragraphIds: [mockParagraphId],
         },
       ];
@@ -146,12 +146,12 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       const fixes = [
         {
           originalWord: 'ספר',
-          fixedWord: 'סֵפֶר',
+          correctedWord: 'סֵפֶר',
           paragraphIds: [mockParagraphId],
         },
         {
           originalWord: 'וגם',
-          fixedWord: 'וְגַם',
+          correctedWord: 'וְגַם',
           paragraphIds: [mockParagraphId],
         },
       ];
@@ -159,9 +159,9 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       mockTransaction.paragraph.findUnique.mockResolvedValue(paragraphWithMultipleWords);
       mockTransaction.paragraph.update.mockResolvedValue(paragraphWithMultipleWords);
       textFixesService.analyzeTextChanges = jest.fn().mockReturnValue([
-        { originalWord: 'ספר', fixedWord: 'סֵפֶר', position: 3, fixType: 'spelling' },
-        { originalWord: 'ספר', fixedWord: 'סֵפֶר', position: 25, fixType: 'spelling' },
-        { originalWord: 'וגם', fixedWord: 'וְגַם', position: 12, fixType: 'spelling' },
+        { originalWord: 'ספר', correctedWord: 'סֵפֶר', position: 3, fixType: 'spelling' },
+        { originalWord: 'ספר', correctedWord: 'סֵפֶר', position: 25, fixType: 'spelling' },
+        { originalWord: 'וגם', correctedWord: 'וְגַם', position: 12, fixType: 'spelling' },
       ]);
 
       // Act
@@ -189,7 +189,7 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       const fixes = [
         {
           originalWord: 'וגם',
-          fixedWord: 'וְגַם',
+          correctedWord: 'וְגַם',
           paragraphIds: [mockParagraphId],
         },
       ];
@@ -197,7 +197,7 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       mockTransaction.paragraph.findUnique.mockResolvedValue(paragraphStartingWithWord);
       mockTransaction.paragraph.update.mockResolvedValue(paragraphStartingWithWord);
       textFixesService.analyzeTextChanges = jest.fn().mockReturnValue([
-        { originalWord: 'וגם', fixedWord: 'וְגַם', position: 0, fixType: 'spelling' },
+        { originalWord: 'וגם', correctedWord: 'וְגַם', position: 0, fixType: 'spelling' },
       ]);
 
       // Act
@@ -224,7 +224,7 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       const fixes = [
         {
           originalWord: 'וגם',
-          fixedWord: 'וְגַם',
+          correctedWord: 'וְגַם',
           paragraphIds: [mockParagraphId],
         },
       ];
@@ -232,7 +232,7 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       mockTransaction.paragraph.findUnique.mockResolvedValue(paragraphEndingWithWord);
       mockTransaction.paragraph.update.mockResolvedValue(paragraphEndingWithWord);
       textFixesService.analyzeTextChanges = jest.fn().mockReturnValue([
-        { originalWord: 'וגם', fixedWord: 'וְגַם', position: 13, fixType: 'spelling' },
+        { originalWord: 'וגם', correctedWord: 'וְגַם', position: 13, fixType: 'spelling' },
       ]);
 
       // Act
@@ -259,7 +259,7 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       const fixes = [
         {
           originalWord: 'וגם',
-          fixedWord: 'וְגַם',
+          correctedWord: 'וְגַם',
           paragraphIds: [mockParagraphId],
         },
       ];
@@ -267,8 +267,8 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       mockTransaction.paragraph.findUnique.mockResolvedValue(paragraphWithPunctuation);
       mockTransaction.paragraph.update.mockResolvedValue(paragraphWithPunctuation);
       textFixesService.analyzeTextChanges = jest.fn().mockReturnValue([
-        { originalWord: 'וגם', fixedWord: 'וְגַם', position: 11, fixType: 'spelling' },
-        { originalWord: 'וגם', fixedWord: 'וְגַם', position: 35, fixType: 'spelling' },
+        { originalWord: 'וגם', correctedWord: 'וְגַם', position: 11, fixType: 'spelling' },
+        { originalWord: 'וגם', correctedWord: 'וְגַם', position: 35, fixType: 'spelling' },
       ]);
 
       // Act
@@ -295,7 +295,7 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       const fixes = [
         {
           originalWord: 'וגם',
-          fixedWord: 'וְגַם',
+          correctedWord: 'וְגַם',
           paragraphIds: [mockParagraphId],
         },
       ];
@@ -315,7 +315,7 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       const fixes = [
         {
           originalWord: 'וגם',
-          fixedWord: 'וְגַם',
+          correctedWord: 'וְגַם',
           paragraphIds: ['non-existent-id'],
         },
       ];
@@ -351,7 +351,7 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       const fixes = [
         {
           originalWord: 'וגם',
-          fixedWord: 'וְגַם',
+          correctedWord: 'וְגַם',
           paragraphIds: [mockParagraphId],
         },
       ];
@@ -361,7 +361,7 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       textFixesService.analyzeTextChanges = jest.fn().mockReturnValue([
         {
           originalWord: 'וגם',
-          fixedWord: 'וְגַם',
+          correctedWord: 'וְגַם',
           position: 44, // Position of 'וגם' in the sentence
           fixType: 'spelling',
         },
@@ -390,7 +390,7 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       const fixes = [
         {
           originalWord: 'וגם',
-          fixedWord: 'וְגַם',
+          correctedWord: 'וְגַם',
           paragraphIds: [mockParagraphId],
         },
       ];

@@ -58,6 +58,9 @@ export default function RootLayout({
               <Link href="/books" className="nav-link">
                 📚 Books
               </Link>
+              <Link href="/corrections" className="nav-link">
+                📝 Corrections
+              </Link>
               <Link href="/upload" className="nav-link">
                 📤 Upload
               </Link>

@@ -3,7 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 export interface WordChange {
   originalWord: string;
-  fixedWord: string;
+  correctedWord: string;
   position: number;
   fixType?: string;
 }
@@ -17,15 +17,15 @@ export class TextFixesService {
   /**
    * Analyzes differences between original and fixed text to identify word changes
    */
-  analyzeTextChanges(originalText: string, fixedText: string): WordChange[] {
+  analyzeTextChanges(originalText: string, correctedText: string): WordChange[] {
     const changes: WordChange[] = [];
     
     // Split texts into words while preserving position information
     const originalWords = this.tokenizeText(originalText);
-    const fixedWords = this.tokenizeText(fixedText);
+    const correctedWords = this.tokenizeText(correctedText);
     
     // Use a simple diff algorithm to find changes
-    const diffResult = this.computeWordDiff(originalWords, fixedWords);
+    const diffResult = this.computeWordDiff(originalWords, correctedWords);
     
     return diffResult;
   }
@@ -54,22 +54,22 @@ export class TextFixesService {
    */
   private computeWordDiff(
     original: Array<{ word: string; position: number }>,
-    fixed: Array<{ word: string; position: number }>
+    corrected: Array<{ word: string; position: number }>
   ): WordChange[] {
     const changes: WordChange[] = [];
-    const maxLength = Math.max(original.length, fixed.length);
+    const maxLength = Math.max(original.length, corrected.length);
     
     for (let i = 0; i < maxLength; i++) {
       const originalWord = original[i]?.word;
-      const fixedWord = fixed[i]?.word;
+      const correctedWord = corrected[i]?.word;
       
       // Word was changed
-      if (originalWord && fixedWord && originalWord !== fixedWord) {
+      if (originalWord && correctedWord && originalWord !== correctedWord) {
         changes.push({
           originalWord,
-          fixedWord,
-          position: i,
-          fixType: this.classifyChange(originalWord, fixedWord)
+          correctedWord,
+          position: original[i].position,
+          fixType: this.classifyChange(originalWord, correctedWord)
         });
       }
     }
@@ -80,21 +80,58 @@ export class TextFixesService {
   /**
    * Attempts to classify the type of change made
    */
-  private classifyChange(originalWord: string, fixedWord: string): string {
+  private classifyChange(originalWord: string, correctedWord: string): string {
     // Simple heuristics for change classification
-    if (originalWord.length === fixedWord.length) {
+    if (originalWord.length === correctedWord.length) {
       return 'pronunciation'; // Same length, likely pronunciation fix
     }
     
-    if (Math.abs(originalWord.length - fixedWord.length) === 1) {
+    if (Math.abs(originalWord.length - correctedWord.length) === 1) {
       return 'spelling'; // Small change, likely spelling
     }
     
-    if (fixedWord.includes(originalWord) || originalWord.includes(fixedWord)) {
+    if (correctedWord.includes(originalWord) || originalWord.includes(correctedWord)) {
       return 'expansion'; // One word contains the other
     }
     
     return 'substitution'; // Complete word replacement
+  }
+
+  /**
+   * Extract sentence context around a word in the text
+   */
+  private extractSentenceContext(text: string, word: string): string {
+    if (!text || !word) return '';
+    
+    // Find the word in the text (case insensitive)
+    const wordIndex = text.toLowerCase().indexOf(word.toLowerCase());
+    if (wordIndex === -1) return '';
+    
+    // Find sentence boundaries (periods, exclamation marks, question marks)
+    const sentenceEnders = /[.!?]/g;
+    let start = 0;
+    let end = text.length;
+    
+    // Find the start of the sentence (look backwards from word position)
+    for (let i = wordIndex - 1; i >= 0; i--) {
+      if (sentenceEnders.test(text[i])) {
+        start = i + 1;
+        break;
+      }
+    }
+    
+    // Find the end of the sentence (look forwards from word position)
+    sentenceEnders.lastIndex = 0; // Reset regex
+    for (let i = wordIndex; i < text.length; i++) {
+      if (sentenceEnders.test(text[i])) {
+        end = i + 1;
+        break;
+      }
+    }
+    
+    // Extract and clean the sentence
+    const sentence = text.substring(start, end).trim();
+    return sentence || text.substring(Math.max(0, wordIndex - 50), Math.min(text.length, wordIndex + 50)).trim();
   }
 
   /**
@@ -103,7 +140,7 @@ export class TextFixesService {
   async saveTextFixes(
     paragraphId: string,
     originalText: string,
-    fixedText: string,
+    correctedText: string,
     changes: WordChange[]
   ): Promise<void> {
     if (changes.length === 0) {
@@ -116,15 +153,13 @@ export class TextFixesService {
       await this.prisma.$transaction(async (tx) => {
         const textFixes = changes.map(change => ({
           paragraphId,
-          originalText,
-          fixedText,
           originalWord: change.originalWord,
-          fixedWord: change.fixedWord,
-          wordPosition: change.position,
-          fixType: change.fixType || null,
+          correctedWord: change.correctedWord,
+          sentenceContext: this.extractSentenceContext(originalText, change.originalWord),
+          fixType: change.fixType || 'manual',
         }));
 
-        await tx.textFix.createMany({
+        await tx.textCorrection.createMany({
           data: textFixes,
         });
       });
@@ -145,7 +180,7 @@ export class TextFixesService {
    * Gets all text fixes for a specific paragraph
    */
   async getParagraphFixes(paragraphId: string) {
-    return this.prisma.textFix.findMany({
+    return this.prisma.textCorrection.findMany({
       where: { paragraphId },
       orderBy: { createdAt: 'desc' },
     });
@@ -155,7 +190,7 @@ export class TextFixesService {
    * Gets all text fixes for a book
    */
   async getBookFixes(bookId: string) {
-    return this.prisma.textFix.findMany({
+    return this.prisma.textCorrection.findMany({
       where: {
         paragraph: {
           bookId,
@@ -181,12 +216,12 @@ export class TextFixesService {
    * Gets statistics about text fixes across all books
    */
   async getFixesStatistics() {
-    const [totalFixes, fixesByType, mostFixedWords] = await Promise.all([
+    const [totalFixes, fixesByType, mostCorrectedWords] = await Promise.all([
       // Total number of fixes
-      this.prisma.textFix.count(),
+      this.prisma.textCorrection.count(),
       
       // Fixes grouped by type
-      this.prisma.textFix.groupBy({
+      this.prisma.textCorrection.groupBy({
         by: ['fixType'],
         _count: {
           id: true,
@@ -199,8 +234,8 @@ export class TextFixesService {
       }),
       
       // Most frequently fixed words
-      this.prisma.textFix.groupBy({
-        by: ['originalWord', 'fixedWord'],
+      this.prisma.textCorrection.groupBy({
+        by: ['originalWord', 'correctedWord'],
         _count: {
           id: true,
         },
@@ -216,7 +251,7 @@ export class TextFixesService {
     return {
       totalFixes,
       fixesByType,
-      mostFixedWords,
+      mostCorrectedWords,
     };
   }
 
@@ -226,8 +261,8 @@ export class TextFixesService {
    */
   async findSimilarFixes(originalWord: string, limit = 10) {
     // First get the count of each fix
-    const fixCounts = await this.prisma.textFix.groupBy({
-      by: ['originalWord', 'fixedWord', 'fixType'],
+    const fixCounts = await this.prisma.textCorrection.groupBy({
+      by: ['originalWord', 'correctedWord', 'fixType'],
       where: {
         originalWord: {
           contains: originalWord,
@@ -247,7 +282,7 @@ export class TextFixesService {
     // Transform the results to the expected format
     return fixCounts.map(fix => ({
       originalWord: fix.originalWord,
-      fixedWord: fix.fixedWord,
+      correctedWord: fix.correctedWord,
       fixType: fix.fixType,
       count: fix._count.id,
     }));

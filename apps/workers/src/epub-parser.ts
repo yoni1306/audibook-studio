@@ -1,12 +1,12 @@
-import { Logger } from '@nestjs/common';
-import { JSDOM } from 'jsdom';
-import * as fs from 'fs'; // Regular fs, not fs/promises
-import * as fsPromises from 'fs/promises';
-import * as path from 'path';
-import * as unzipper from 'unzipper';
+import path from 'path';
+import { promises as fsPromises } from 'fs';
+import * as fs from 'fs';
 import { parseStringPromise } from 'xml2js';
+import { JSDOM } from 'jsdom';
+import * as unzipper from 'unzipper';
+import { createLogger } from '@audibook/logger';
 
-const logger = new Logger('EpubParser');
+const logger = createLogger('EpubParser');
 
 export async function parseEpub(epubPath: string): Promise<
   Array<{
@@ -22,13 +22,13 @@ export async function parseEpub(epubPath: string): Promise<
   }> = [];
 
   try {
-    logger.log(`Parsing EPUB 3.0 file: ${epubPath}`);
+    logger.info(`Parsing EPUB 3.0 file: ${epubPath}`);
 
     // Extract EPUB to temp directory
     const tempDir = path.join('/tmp', `epub-${Date.now()}`);
     await fsPromises.mkdir(tempDir, { recursive: true });
 
-    // Unzip the EPUB
+    // Unzip the EPUB using unzipper
     await new Promise<void>((resolve, reject) => {
       fs.createReadStream(epubPath)
         .pipe(unzipper.Extract({ path: tempDir }))
@@ -36,7 +36,7 @@ export async function parseEpub(epubPath: string): Promise<
         .on('error', reject);
     });
 
-    logger.log(`Extracted EPUB to: ${tempDir}`);
+    logger.info(`Extracted EPUB to: ${tempDir}`);
 
     // Read container.xml to find content.opf
     const containerPath = path.join(tempDir, 'META-INF', 'container.xml');
@@ -57,7 +57,7 @@ export async function parseEpub(epubPath: string): Promise<
 
     // Create manifest map
     const manifestMap = new Map();
-    manifest.forEach((item: any) => {
+    manifest.forEach((item: { $: { id: string; href: string } }) => {
       manifestMap.set(item.$.id, item.$.href);
     });
 
@@ -90,9 +90,6 @@ export async function parseEpub(epubPath: string): Promise<
         );
 
         textElements.forEach((element) => {
-          // Get direct text content
-          const texts: string[] = [];
-
           // Collect all text nodes
           const walker = document.createTreeWalker(
             element,
@@ -164,22 +161,22 @@ export async function parseEpub(epubPath: string): Promise<
     // Clean up temp directory
     await fsPromises
       .rm(tempDir, { recursive: true, force: true })
-      .catch(() => {});
+      .catch((error) => {
+        logger.error('Failed to clean up temp directory:', error);
+      });
 
-    logger.log(
+    logger.info(
       `Extracted ${paragraphs.length} paragraphs from ${spine.length} chapters`
     );
 
-    // If no paragraphs found, log the issue
+    // If no paragraphs found, log a warning
     if (paragraphs.length === 0) {
-      logger.error(
-        'No paragraphs extracted. EPUB might have an unusual structure.'
-      );
+      logger.warn('No paragraphs found in EPUB file');
     }
 
     return paragraphs;
   } catch (error) {
-    logger.error('Error parsing EPUB 3.0:', error);
+    logger.error('Error parsing EPUB:', error);
     throw error;
   }
 }

@@ -1,7 +1,19 @@
-import { Controller, Post, Get, Patch, Param, Body, NotFoundException, Redirect, Logger } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Param, Body, NotFoundException, Redirect, Logger, InternalServerErrorException } from '@nestjs/common';
 import { BooksService } from './books.service';
 import { BulkTextFixesService } from './bulk-text-fixes.service';
+import { CorrectionLearningService } from './correction-learning.service';
 import { UpdateParagraphRequestDto, UpdateParagraphResponseDto, BulkFixSuggestion as DtoBulkFixSuggestion } from './dto/paragraph-update.dto';
+import { 
+  GetCorrectionSuggestionsDto, 
+  RecordCorrectionDto, 
+  GetWordCorrectionsDto,
+  GetAllCorrectionsDto,
+  CorrectionSuggestionsResponseDto,
+  LearningStatsResponseDto,
+  RecordCorrectionResponseDto,
+  GetAllCorrectionsResponseDto,
+  GetFixTypesResponseDto
+} from './dto/correction-learning.dto';
 import { BulkFixSuggestion as ServiceBulkFixSuggestion } from './bulk-text-fixes.service';
 import { S3Service } from '../s3/s3.service';
 
@@ -12,6 +24,7 @@ export class BooksController {
   constructor(
     private booksService: BooksService,
     private bulkTextFixesService: BulkTextFixesService,
+    private correctionLearningService: CorrectionLearningService,
     private s3Service: S3Service
   ) {}
   
@@ -25,7 +38,7 @@ export class BooksController {
       
       return {
         originalWord: suggestion.originalWord,
-        fixedWord: suggestion.fixedWord,
+        correctedWord: suggestion.correctedWord,
         // These fields don't exist in the service format, so we provide default values
         fixType: 'spelling', // Default fix type
         paragraphIds,
@@ -103,24 +116,24 @@ export class BooksController {
       bookId: string;
       fixes: Array<{
         originalWord: string;
-        fixedWord: string;
+        correctedWord: string;
         paragraphIds: string[];
       }>;
     }
   ) {
-    console.log(' [API] Bulk fixes endpoint called');
-    console.log(' [API] Request body:', JSON.stringify(body, null, 2));
-    console.log(` [API] Book ID: ${body.bookId}`);
-    console.log(` [API] Number of fixes: ${body.fixes.length}`);
+    this.logger.log('Bulk fixes endpoint called');
+    this.logger.log('Request body:', JSON.stringify(body, null, 2));
+    this.logger.log(`Book ID: ${body.bookId}`);
+    this.logger.log(`Number of fixes: ${body.fixes.length}`);
     
     try {
       const result = await this.bulkTextFixesService.applyBulkFixes(body.bookId, body.fixes);
-      console.log(' [API] Bulk fixes completed successfully');
-      console.log(' [API] Result:', JSON.stringify(result, null, 2));
+      this.logger.log('Bulk fixes completed successfully');
+      this.logger.log('Result:', JSON.stringify(result, null, 2));
       return result;
     } catch (error) {
-      console.error(' [API] Error in bulk fixes endpoint:', error);
-      console.error(' [API] Error details:', {
+      this.logger.error('Error in bulk fixes endpoint:', error);
+      this.logger.error('Error details:', {
         message: error.message,
         stack: error.stack,
         bookId: body.bookId,
@@ -151,7 +164,7 @@ export class BooksController {
     @Body() body: {
       wordChanges: Array<{
         originalWord: string;
-        fixedWord: string;
+        correctedWord: string;
         position: number;
         fixType?: string;
       }>;
@@ -181,5 +194,150 @@ export class BooksController {
     const url = await this.s3Service.getSignedUrl(paragraph.audioS3Key);
     
     return { url };
+  }
+
+  // Smart Text Correction Learning System Endpoints
+
+  /**
+   * Get correction suggestions for a given text
+   */
+  @Post('correction-suggestions')
+  async getCorrectionSuggestions(@Body() dto: GetCorrectionSuggestionsDto): Promise<CorrectionSuggestionsResponseDto> {
+    this.logger.log(`Getting correction suggestions for text: ${dto.text.substring(0, 50)}...`);
+    
+    try {
+      const suggestions = await this.correctionLearningService.getCorrectionSuggestions(
+        dto.text,
+        dto.minOccurrences
+      );
+      
+      this.logger.log(`Found ${suggestions.length} correction suggestions`);
+      return {
+        suggestions,
+        totalSuggestions: suggestions.length,
+      };
+    } catch (error) {
+      this.logger.error(`Error getting correction suggestions: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  /**
+   * Record a manual correction for learning
+   */
+  @Post('record-correction')
+  async recordCorrection(@Body() dto: RecordCorrectionDto): Promise<RecordCorrectionResponseDto> {
+    this.logger.log(`Recording correction: ${dto.originalWord} → ${dto.correctedWord}`);
+    
+    try {
+      const correction = await this.correctionLearningService.recordCorrection({
+        originalWord: dto.originalWord,
+        correctedWord: dto.correctedWord,
+        contextSentence: dto.contextSentence,
+        paragraphId: dto.paragraphId,
+        fixType: dto.fixType,
+      });
+      
+      this.logger.log(`Successfully recorded correction with ID: ${correction.id}`);
+      
+      return {
+        id: correction.id,
+        originalWord: correction.originalWord,
+        correctedWord: correction.correctedWord,
+        message: 'Correction recorded successfully',
+      };
+    } catch (error) {
+      this.logger.error(`Error recording correction: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  /**
+   * Get learning system statistics
+   */
+  @Get('correction-learning/stats')
+  async getLearningStats(): Promise<LearningStatsResponseDto> {
+    this.logger.log('Getting correction learning statistics');
+    
+    try {
+      const stats = await this.correctionLearningService.getLearningStats();
+      this.logger.log(`Learning stats: ${stats.totalCorrections} total corrections, ${stats.uniqueWords} unique words`);
+      return stats;
+    } catch (error) {
+      this.logger.error(`Error getting learning stats: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  /**
+   * Get corrections for a specific word
+   */
+  @Post('word-corrections')
+  async getWordCorrections(@Body() dto: GetWordCorrectionsDto): Promise<CorrectionSuggestionsResponseDto> {
+    this.logger.log(`Getting corrections for word: ${dto.originalWord}`);
+    
+    try {
+      const suggestions = await this.correctionLearningService.getWordCorrections(dto.originalWord);
+      this.logger.log(`Found ${suggestions.length} corrections for word: ${dto.originalWord}`);
+      
+      return {
+        suggestions,
+        totalSuggestions: suggestions.length,
+      };
+    } catch (error) {
+      this.logger.error(`Error getting word corrections: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all corrections with filtering and pagination
+   */
+  @Post('all-corrections')
+  async getAllCorrections(@Body() dto: GetAllCorrectionsDto): Promise<GetAllCorrectionsResponseDto> {
+    this.logger.log(`Getting all corrections with filters: ${JSON.stringify(dto)}`);
+    
+    try {
+      const result = await this.correctionLearningService.getAllCorrections(dto);
+      this.logger.log(`Found ${result.corrections.length} corrections (page ${result.page}/${result.totalPages}, total: ${result.total})`);
+      
+      return result;
+    } catch (error) {
+      this.logger.error(`Error getting all corrections: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  /**
+   * Test endpoint to verify routing
+   */
+  @Get('test-endpoint')
+  async testEndpoint() {
+    this.logger.log('🧪 [API] Test endpoint called');
+    return { message: 'Test endpoint working', timestamp: new Date().toISOString() };
+  }
+
+  /**
+   * Get available fix types for filtering
+   */
+  @Get('fix-types')
+  async getFixTypes() {
+    this.logger.log('🔧 [API] Getting available fix types - START');
+    
+    try {
+      const fixTypes = await this.correctionLearningService.getFixTypes();
+      this.logger.log(`📊 [API] Found ${fixTypes.length} fix types: ${JSON.stringify(fixTypes)}`);
+      
+      const response = {
+        fixTypes,
+      };
+      
+      this.logger.log(`🎯 [API] Returning response: ${JSON.stringify(response)}`);
+      
+      return response;
+    } catch (error) {
+      this.logger.error(`💥 [API] Error getting fix types: ${error.message}`, error.stack);
+      throw new InternalServerErrorException('Failed to get fix types');
+    }
   }
 }

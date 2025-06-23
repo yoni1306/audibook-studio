@@ -71,7 +71,7 @@ export class BooksService {
       },
       include: {
         book: true,
-        textFixes: {
+        textCorrections: {
           orderBy: { createdAt: 'desc' },
           take: 10, // Include recent fixes
         },
@@ -124,7 +124,7 @@ export class BooksService {
         paragraphs: {
           orderBy: { orderIndex: 'asc' },
           include: {
-            textFixes: {
+            textCorrections: {
               orderBy: { createdAt: 'desc' },
               take: 5, // Include recent fixes for each paragraph
             },
@@ -152,7 +152,7 @@ export class BooksService {
       where: { id: paragraphId },
       include: {
         book: true,
-        textFixes: {
+        textCorrections: {
           orderBy: { createdAt: 'desc' },
         },
       },
@@ -179,22 +179,35 @@ export class BooksService {
 
   // Get all unique word fixes across the system
   async getAllWordFixes() {
-    const fixes = await this.prisma.textFix.groupBy({
-      by: ['originalWord', 'fixedWord', 'fixType'],
-      _count: {
-        id: true,
+    const fixes = await this.prisma.textCorrection.findMany({
+      include: {
+        paragraph: {
+          include: {
+            book: {
+              select: {
+                id: true,
+                title: true,
+              },
+            },
+          },
+        },
       },
-      orderBy: [
-        { _count: { id: 'desc' } },
-        { originalWord: 'asc' },
-      ],
+      orderBy: {
+        createdAt: 'desc',
+      },
     });
 
     return fixes.map(fix => ({
+      id: fix.id,
       originalWord: fix.originalWord,
-      fixedWord: fix.fixedWord,
+      correctedWord: fix.correctedWord,
       fixType: fix.fixType,
-      occurrences: fix._count.id,
+      createdAt: fix.createdAt,
+      paragraph: {
+        id: fix.paragraph.id,
+        content: fix.paragraph.content,
+        book: fix.paragraph.book,
+      },
     }));
   }
 }

@@ -1,15 +1,15 @@
-import { TextFix } from '@prisma/client';
+import { TextCorrection } from '@prisma/client';
 
 export interface TextChange {
   originalWord: string;
-  fixedWord: string;
+  correctedWord: string;
   position: number;
   fixType: string;
 }
 
 export interface BulkFixSuggestion {
   originalWord: string;
-  fixedWord: string;
+  correctedWord: string;
   fixType: string;
   paragraphIds: string[];
   count: number;
@@ -30,7 +30,7 @@ export interface UpdateParagraphResponseDto {
   content: string;
   bookId: string;
   textChanges?: TextChange[];
-  textFixes?: TextFix[];
+  textFixes?: TextCorrection[];
   bulkSuggestions?: BulkFixSuggestion[];
 }
 
