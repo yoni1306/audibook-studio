@@ -270,10 +270,7 @@ describe('BooksController', () => {
               title: 'Test Book',
             },
           },
-          book: {
-            id: 'book-1',
-            title: 'Test Book',
-          },
+          bookTitle: 'Test Book',
         },
         {
           id: 'correction-2',
@@ -293,10 +290,7 @@ describe('BooksController', () => {
               title: 'Test Book',
             },
           },
-          book: {
-            id: 'book-1',
-            title: 'Test Book',
-          },
+          bookTitle: 'Test Book',
         },
       ],
       total: 2,
@@ -388,8 +382,8 @@ describe('BooksController', () => {
         expect(correction.paragraph).toHaveProperty('id');
         expect(correction.paragraph).toHaveProperty('orderIndex');
         expect(correction.paragraph).toHaveProperty('chapterNumber');
-        expect(correction.book).toHaveProperty('id');
-        expect(correction.book).toHaveProperty('title');
+        expect(correction).toHaveProperty('bookTitle');
+        expect(typeof correction.bookTitle).toBe('string');
       });
     });
 
