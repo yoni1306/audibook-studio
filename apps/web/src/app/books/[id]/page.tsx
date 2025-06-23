@@ -16,6 +16,7 @@ export default function BookDetailPage() {
   const bookId = params.id as string;
   const [book, setBook] = useState<Book | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
   const [saving, setSaving] = useState(false);
@@ -24,6 +25,7 @@ export default function BookDetailPage() {
     paragraphId: string;
     content: string;
     suggestions: BulkFixSuggestion[];
+    audioRequested: boolean;
   } | null>(null);
 
   // Create a logger instance for this component
@@ -54,6 +56,7 @@ export default function BookDetailPage() {
   const fetchBook = async () => {
     const correlationId = generateCorrelationId();
     try {
+      setError(null); // Clear any previous errors
       const response = await fetch(
         `http://localhost:3333/api/books/${bookId}`,
         {
@@ -62,10 +65,34 @@ export default function BookDetailPage() {
           },
         }
       );
+      
+      if (!response.ok) {
+        // This is an actual error (500, network issues, etc.)
+        const errorData = await response.json();
+        setError(`Server error: ${errorData.message || 'An unexpected error occurred'}`);
+        logger.error('Server error from API:', { ...errorData, correlationId });
+        return;
+      }
+      
       const data = await response.json();
-      setBook(data);
+      
+      // Handle new API response structure
+      if (data.found === false) {
+        // Valid response but no data found
+        setBook(null);
+        setError(`Book not found: No book exists with ID "${bookId}"`);
+      } else if (data.book) {
+        // Book found
+        setBook(data.book);
+      } else {
+        // Handle legacy response format (direct book object)
+        setBook(data);
+      }
     } catch (error) {
+      const errorMessage = 'Failed to connect to the server. Please check if the API server is running.';
+      setError(errorMessage);
       console.error('Error fetching book:', error, { correlationId });
+      logger.error('Network error fetching book:', { error: error instanceof Error ? error.message : String(error), correlationId });
     } finally {
       setLoading(false);
     }
@@ -109,6 +136,7 @@ export default function BookDetailPage() {
             paragraphId,
             content: editContent,
             suggestions: result.bulkSuggestions,
+            audioRequested: false,
           });
           setShowBulkFixModal(true);
         } else {
@@ -147,6 +175,20 @@ export default function BookDetailPage() {
       );
 
       if (response.ok) {
+        const result = await response.json();
+        
+        // Check if there are bulk fix suggestions
+        if (result.bulkSuggestions && result.bulkSuggestions.length > 0) {
+          logger.debug('Bulk suggestions found from audio generation:', result.bulkSuggestions);
+          setPendingBulkFix({
+            paragraphId,
+            content,
+            suggestions: result.bulkSuggestions,
+            audioRequested: true, // Audio was requested in this case
+          });
+          setShowBulkFixModal(true);
+        }
+        
         // Refresh to show updated status
         setTimeout(fetchBook, 1000);
       }
@@ -155,18 +197,21 @@ export default function BookDetailPage() {
     }
   };
 
-  const handleBulkFixComplete = (result: any) => {
-    console.log('Bulk fix completed:', result);
+  const handleBulkFixComplete = () => {
+    console.log('Bulk fix completed');
 
-    // Show success message
-    const message = `Successfully applied text fixes to ${result.totalParagraphsUpdated} paragraphs, fixing ${result.totalWordsFixed} words total.\n\nAudio will only be regenerated for the paragraph you originally edited.`;
+    // Show success message based on whether audio was requested
+    const message = pendingBulkFix?.audioRequested 
+      ? 'Successfully applied text fixes. Audio will only be regenerated for the paragraph you originally edited.'
+      : 'Successfully applied text fixes.';
     alert(message);
 
     // Refresh the book data
     fetchBook();
 
-    // Clear pending state
+    // Clear pending state and close modal
     setPendingBulkFix(null);
+    setShowBulkFixModal(false);
   };
 
   const handleSkipBulkFix = () => {
@@ -175,6 +220,7 @@ export default function BookDetailPage() {
   };
 
   if (loading) return <div>Loading book...</div>;
+  if (error) return <div style={{ color: 'red' }}>{error}</div>;
   if (!book) return <div>Book not found</div>;
 
   return (
@@ -220,7 +266,7 @@ export default function BookDetailPage() {
           onClose={() => setShowBulkFixModal(false)}
           suggestions={pendingBulkFix.suggestions}
           bookId={bookId}
-          onApplyFixes={handleBulkFixComplete}
+          onFixesApplied={handleBulkFixComplete}
         />
       )}
     </div>

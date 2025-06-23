@@ -8,16 +8,17 @@ datasource db {
 }
 
 model Book {
-  id          String      @id @default(uuid())
-  title       String
-  author      String?
-  language    String      @default("he")
-  uploadedAt  DateTime    @default(now())
-  s3Key       String      @unique // S3 key for the original EPUB
-  status      BookStatus  @default(PROCESSING)
-  paragraphs  Paragraph[]
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id              String            @id @default(uuid())
+  title           String
+  author          String?
+  language        String            @default("he")
+  uploadedAt      DateTime          @default(now())
+  s3Key           String            @unique // S3 key for the original EPUB
+  status          BookStatus        @default(PROCESSING)
+  paragraphs      Paragraph[]
+  textCorrections TextCorrection[]  // All text corrections for this book
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 
   @@map("books")
 }
@@ -45,6 +46,8 @@ model TextCorrection {
   id              String    @id @default(uuid())
   paragraphId     String
   paragraph       Paragraph @relation(fields: [paragraphId], references: [id], onDelete: Cascade)
+  bookId          String    // Direct reference to book for easier querying
+  book            Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
   originalWord    String    // The specific word that was changed (e.g., "שלום")
   correctedWord   String    // What the word was changed to (e.g., "שָׁלוֹם")
   sentenceContext String    @db.Text // The full sentence context for better matching
@@ -53,6 +56,7 @@ model TextCorrection {
   updatedAt       DateTime  @updatedAt
 
   @@index([paragraphId])
+  @@index([bookId])
   @@index([originalWord])
   @@index([correctedWord])
   @@index([originalWord, correctedWord])

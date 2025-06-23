@@ -20,7 +20,6 @@ export interface BulkFixSuggestion {
 }
 
 interface BulkFixModalProps {
-  isOpen: boolean;
   onClose: () => void;
   suggestions: BulkFixSuggestion[];
   bookId: string;
@@ -32,7 +31,6 @@ const logger = {
 };
 
 export default function BulkFixModal({ 
-  isOpen, 
   onClose, 
   suggestions, 
   bookId, 

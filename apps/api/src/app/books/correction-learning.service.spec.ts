@@ -13,6 +13,9 @@ describe('CorrectionLearningService', () => {
       count: jest.fn(),
       groupBy: jest.fn(),
     },
+    paragraph: {
+      findUnique: jest.fn(),
+    },
   };
 
   beforeEach(async () => {
@@ -27,6 +30,9 @@ describe('CorrectionLearningService', () => {
     }).compile();
 
     service = module.get<CorrectionLearningService>(CorrectionLearningService);
+
+    // Setup default mocks
+    mockPrismaService.paragraph.findUnique.mockResolvedValue({ bookId: 'test-book-id' });
 
     // Suppress logger output during tests
     jest.spyOn(Logger.prototype, 'log').mockImplementation();
@@ -65,6 +71,7 @@ describe('CorrectionLearningService', () => {
       expect(mockPrismaService.textCorrection.create).toHaveBeenCalledWith({
         data: {
           paragraphId: 'test-paragraph-id',
+          bookId: 'test-book-id',
           originalWord: 'שגיאה',
           correctedWord: 'תיקון',
           sentenceContext: 'זה המשפט עם שגיאה בתוכו.',
@@ -95,6 +102,7 @@ describe('CorrectionLearningService', () => {
       expect(mockPrismaService.textCorrection.create).toHaveBeenCalledWith({
         data: {
           paragraphId: 'test-paragraph-id',
+          bookId: 'test-book-id',
           originalWord: 'שגיאה',
           correctedWord: 'תיקון',
           sentenceContext: 'זה המשפט עם שגיאה בתוכו.',
@@ -123,6 +131,7 @@ describe('CorrectionLearningService', () => {
       expect(mockPrismaService.textCorrection.create).toHaveBeenCalledWith({
         data: {
           paragraphId: 'test-paragraph-id',
+          bookId: 'test-book-id',
           originalWord: 'שגיאה',
           correctedWord: 'תיקון',
           sentenceContext: '',
@@ -152,10 +161,12 @@ describe('CorrectionLearningService', () => {
       const createCall = mockPrismaService.textCorrection.create.mock.calls[0][0];
       
       expect(createCall.data).toHaveProperty('paragraphId');
+      expect(createCall.data).toHaveProperty('bookId');
       expect(createCall.data).toHaveProperty('originalWord');
       expect(createCall.data).toHaveProperty('correctedWord');
       expect(createCall.data).toHaveProperty('sentenceContext');
       expect(createCall.data.paragraphId).toBe('test-paragraph-id');
+      expect(createCall.data.bookId).toBe('test-book-id');
       expect(createCall.data.originalWord).toBe('שגיאה');
       expect(createCall.data.correctedWord).toBe('תיקון');
       expect(createCall.data.sentenceContext).toBe('זה המשפט עם שגיאה בתוכו.');
@@ -173,14 +184,14 @@ describe('CorrectionLearningService', () => {
         fixType: 'substitution',
         createdAt: new Date('2025-06-22T10:00:00.000Z'),
         updatedAt: new Date('2025-06-22T10:00:00.000Z'),
+        book: {
+          id: 'book-1',
+          title: 'Test Book',
+        },
         paragraph: {
           id: 'paragraph-1',
           orderIndex: 1,
           chapterNumber: 1,
-          book: {
-            id: 'book-1',
-            title: 'Test Book',
-          },
         },
       },
       {
@@ -192,14 +203,14 @@ describe('CorrectionLearningService', () => {
         fixType: 'insertion',
         createdAt: new Date('2025-06-22T11:00:00.000Z'),
         updatedAt: new Date('2025-06-22T11:00:00.000Z'),
+        book: {
+          id: 'book-1',
+          title: 'Test Book',
+        },
         paragraph: {
           id: 'paragraph-2',
           orderIndex: 2,
           chapterNumber: 2,
-          book: {
-            id: 'book-1',
-            title: 'Test Book',
-          },
         },
       },
     ];
@@ -227,17 +238,17 @@ describe('CorrectionLearningService', () => {
       expect(mockPrismaService.textCorrection.findMany).toHaveBeenCalledWith({
         where: {},
         include: {
+          book: {
+            select: {
+              id: true,
+              title: true,
+            },
+          },
           paragraph: {
             select: {
               id: true,
               orderIndex: true,
               chapterNumber: true,
-              book: {
-                select: {
-                  id: true,
-                  title: true,
-                },
-              },
             },
           },
         },
@@ -266,23 +277,21 @@ describe('CorrectionLearningService', () => {
 
       expect(mockPrismaService.textCorrection.findMany).toHaveBeenCalledWith({
         where: {
-          paragraph: {
-            bookId: 'book-1',
-          },
+          bookId: 'book-1',
           fixType: 'substitution',
         },
         include: {
+          book: {
+            select: {
+              id: true,
+              title: true,
+            },
+          },
           paragraph: {
             select: {
               id: true,
               orderIndex: true,
               chapterNumber: true,
-              book: {
-                select: {
-                  id: true,
-                  title: true,
-                },
-              },
             },
           },
         },
@@ -325,7 +334,7 @@ describe('CorrectionLearningService', () => {
       });
     });
 
-    it('should include all required fields in paragraph selection', async () => {
+    it('should include all required fields in book selection', async () => {
       const filters = {
         page: 1,
         limit: 10,
@@ -340,16 +349,9 @@ describe('CorrectionLearningService', () => {
 
       const findManyCall = mockPrismaService.textCorrection.findMany.mock.calls[0][0];
       
-      expect(findManyCall.include.paragraph.select).toEqual({
+      expect(findManyCall.include.book.select).toEqual({
         id: true,
-        orderIndex: true,
-        chapterNumber: true,
-        book: {
-          select: {
-            id: true,
-            title: true,
-          },
-        },
+        title: true,
       });
     });
 
@@ -377,12 +379,14 @@ describe('CorrectionLearningService', () => {
         expect(correction).toHaveProperty('createdAt');
         expect(correction).toHaveProperty('updatedAt');
         
+        // Verify book structure
+        expect(correction.book).toHaveProperty('id');
+        expect(correction.book).toHaveProperty('title');
+        
         // Verify paragraph structure
         expect(correction.paragraph).toHaveProperty('id');
         expect(correction.paragraph).toHaveProperty('orderIndex');
         expect(correction.paragraph).toHaveProperty('chapterNumber');
-        expect(correction.paragraph.book).toHaveProperty('id');
-        expect(correction.paragraph.book).toHaveProperty('title');
       });
     });
 
@@ -431,7 +435,7 @@ describe('CorrectionLearningService', () => {
 
       const result = await service.getFixTypes();
 
-      expect(result).toEqual(['substitution', 'insertion', 'deletion', 'manual']);
+      expect(result).toEqual({ fixTypes: ['substitution', 'insertion', 'deletion', 'manual'] });
 
       expect(mockPrismaService.textCorrection.findMany).toHaveBeenCalledWith({
         where: {
@@ -454,7 +458,7 @@ describe('CorrectionLearningService', () => {
 
       const result = await service.getFixTypes();
 
-      expect(result).toEqual(['substitution', 'insertion']);
+      expect(result).toEqual({ fixTypes: ['substitution', 'insertion'] });
     });
   });
 });

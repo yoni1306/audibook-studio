@@ -151,8 +151,19 @@ export class TextFixesService {
     try {
       // Save all changes in a transaction
       await this.prisma.$transaction(async (tx) => {
+        // Get the paragraph to find the bookId
+        const paragraph = await tx.paragraph.findUnique({
+          where: { id: paragraphId },
+          select: { bookId: true },
+        });
+
+        if (!paragraph) {
+          throw new Error(`Paragraph ${paragraphId} not found`);
+        }
+
         const textFixes = changes.map(change => ({
           paragraphId,
+          bookId: paragraph.bookId,
           originalWord: change.originalWord,
           correctedWord: change.correctedWord,
           sentenceContext: this.extractSentenceContext(originalText, change.originalWord),

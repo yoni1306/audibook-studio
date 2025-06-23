@@ -5,14 +5,19 @@ import { PrismaService } from '../prisma/prisma.service';
 describe('TextFixesService', () => {
   let service: TextFixesService;
   let mockTxTextCorrection: { createMany: jest.Mock };
+  let mockTxParagraph: { findUnique: jest.Mock };
   let mockPrismaService: {
     $transaction: jest.Mock;
     textCorrection: {
       createMany: jest.Mock;
     };
+    paragraph: {
+      findUnique: jest.Mock;
+    };
   };
 
   const mockParagraphId = 'test-paragraph-id';
+  const mockBookId = 'test-book-id';
   const mockOriginalText = 'זה טקסט עם שגיאה בעברית';
   const mockCorrectedText = 'זה טקסט עם תיקון בעברית';
 
@@ -21,17 +26,25 @@ describe('TextFixesService', () => {
       createMany: jest.fn(),
     };
 
+    mockTxParagraph = {
+      findUnique: jest.fn().mockResolvedValue({ bookId: mockBookId }),
+    };
+
     mockPrismaService = {
       $transaction: jest.fn(),
       textCorrection: {
         createMany: jest.fn(),
       },
+      paragraph: {
+        findUnique: jest.fn(),
+      },
     };
 
     // Mock the transaction to call the callback with a mock tx object
-    mockPrismaService.$transaction.mockImplementation(async (callback: (tx: { textCorrection: { createMany: jest.Mock } }) => Promise<unknown>) => {
+    mockPrismaService.$transaction.mockImplementation(async (callback: (tx: { textCorrection: { createMany: jest.Mock }, paragraph: { findUnique: jest.Mock } }) => Promise<unknown>) => {
       const mockTx = {
         textCorrection: mockTxTextCorrection,
+        paragraph: mockTxParagraph,
       };
       return await callback(mockTx);
     });
@@ -128,6 +141,7 @@ describe('TextFixesService', () => {
       const expectedCorrections = [
         {
           paragraphId: mockParagraphId,
+          bookId: mockBookId,
           originalWord: 'שגיאה',
           correctedWord: 'תיקון',
           sentenceContext: 'זה טקסט עם שגיאה בעברית',
@@ -140,6 +154,10 @@ describe('TextFixesService', () => {
       await service.saveTextFixes(mockParagraphId, mockOriginalText, mockCorrectedText, changes);
 
       expect(mockPrismaService.$transaction).toHaveBeenCalledTimes(1);
+      expect(mockTxParagraph.findUnique).toHaveBeenCalledWith({
+        where: { id: mockParagraphId },
+        select: { bookId: true },
+      });
       expect(mockTxTextCorrection.createMany).toHaveBeenCalledWith({
         data: expectedCorrections,
       });
@@ -158,12 +176,16 @@ describe('TextFixesService', () => {
       expect(mockTxTextCorrection.createMany).toHaveBeenCalledWith({
         data: expect.arrayContaining([
           expect.objectContaining({
+            paragraphId: mockParagraphId,
+            bookId: mockBookId,
             originalWord: 'שגיאה',
             correctedWord: 'תיקון',
             sentenceContext: 'זה טקסט עם שגיאה בעברית',
             fixType: 'substitution',
           }),
           expect.objectContaining({
+            paragraphId: mockParagraphId,
+            bookId: mockBookId,
             originalWord: 'עם',
             correctedWord: 'עם',
             sentenceContext: 'זה טקסט עם שגיאה בעברית',
@@ -186,6 +208,7 @@ describe('TextFixesService', () => {
         data: [
           {
             paragraphId: mockParagraphId,
+            bookId: mockBookId,
             originalWord: 'שגיאה',
             correctedWord: 'תיקון',
             sentenceContext: 'זה טקסט עם שגיאה בעברית',
@@ -230,6 +253,7 @@ describe('TextFixesService', () => {
         data: [
           {
             paragraphId: mockParagraphId,
+            bookId: mockBookId,
             originalWord: 'לא_קיים',
             correctedWord: 'תיקון',
             sentenceContext: '',
