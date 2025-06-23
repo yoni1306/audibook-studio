@@ -8,19 +8,136 @@ import { createLogger } from '@audibook/logger';
 
 const logger = createLogger('EpubParser');
 
-export async function parseEpub(epubPath: string): Promise<
-  Array<{
-    chapterNumber: number;
-    orderIndex: number;
-    content: string;
-  }>
-> {
-  const paragraphs: Array<{
-    chapterNumber: number;
-    orderIndex: number;
-    content: string;
-  }> = [];
+export interface EpubChapter {
+  chapterNumber: number;
+  content: string;
+}
 
+export interface ParsedParagraph {
+  chapterNumber: number;
+  orderIndex: number;
+  content: string;
+}
+
+/**
+ * Parses EPUB content from chapter data and extracts paragraphs
+ * This function handles the actual content parsing logic
+ */
+export function parseEpubContent(chapters: EpubChapter[]): ParsedParagraph[] {
+  const paragraphs: ParsedParagraph[] = [];
+  let orderIndex = 0;
+
+  chapters.forEach((chapter) => {
+    try {
+      // Parse HTML/XHTML content
+      const dom = new JSDOM(chapter.content, {
+        contentType: 'application/xhtml+xml',
+      });
+      const document = dom.window.document;
+
+      // Remove script and style elements
+      document.querySelectorAll('script, style').forEach((el) => el.remove());
+
+      // Find all content elements that should be processed as separate paragraphs
+      const contentElements = document.querySelectorAll(
+        'p, h1, h2, h3, h4, h5, h6, ol, ul'
+      );
+
+      contentElements.forEach((element) => {
+        const text = extractTextFromElement(element);
+        if (text && text.trim().length > 0) {
+          // Split long paragraphs into smaller chunks
+          const chunks = splitLongParagraph(text.trim());
+          chunks.forEach((chunk) => {
+            paragraphs.push({
+              content: chunk,
+              chapterNumber: chapter.chapterNumber,
+              orderIndex: orderIndex++,
+            });
+          });
+        }
+      });
+    } catch (error) {
+      logger.error(`Error parsing chapter ${chapter.chapterNumber}:`, error);
+    }
+  });
+
+  return paragraphs;
+}
+
+/**
+ * Extracts text from a single element, handling lists specially
+ */
+function extractTextFromElement(element: Element): string {
+  const tagName = element.tagName.toLowerCase();
+  
+  if (tagName === 'ol') {
+    // Ordered list - extract with numbering
+    let listText = '';
+    let itemNumber = 1;
+    const listItems = element.querySelectorAll('li');
+    
+    listItems.forEach((li) => {
+      const itemText = li.textContent?.trim();
+      if (itemText && itemText.length > 0) {
+        listText += `${itemNumber}. ${itemText}\n`;
+        itemNumber++;
+      }
+    });
+    
+    return listText.trim();
+  } else if (tagName === 'ul') {
+    // Unordered list - extract with bullets
+    let listText = '';
+    const listItems = element.querySelectorAll('li');
+    
+    listItems.forEach((li) => {
+      const itemText = li.textContent?.trim();
+      if (itemText && itemText.length > 0) {
+        listText += `• ${itemText}\n`;
+      }
+    });
+    
+    return listText.trim();
+  } else {
+    // Regular element - extract text content directly
+    return element.textContent?.trim() || '';
+  }
+}
+
+/**
+ * Splits a long paragraph into smaller chunks
+ */
+function splitLongParagraph(paragraph: string): string[] {
+  // Don't split list content - it has its own structure
+  if (paragraph.includes('• ') || /^\d+\.\s/.test(paragraph)) {
+    return [paragraph];
+  }
+  
+  const sentences = paragraph.match(/[^.!?]+[.!?]+/g) || [paragraph];
+  const chunks: string[] = [];
+  let currentChunk = '';
+
+  sentences.forEach((sentence) => {
+    currentChunk += sentence + ' ';
+    if (currentChunk.length > 300) {
+      chunks.push(currentChunk.trim());
+      currentChunk = '';
+    }
+  });
+
+  if (currentChunk.trim().length > 0) {
+    chunks.push(currentChunk.trim());
+  }
+
+  return chunks;
+}
+
+/**
+ * Main function that extracts EPUB file and parses its content
+ * This function handles file system operations and delegates parsing to parseEpubContent
+ */
+export async function parseEpub(epubPath: string): Promise<ParsedParagraph[]> {
   try {
     logger.info(`Parsing EPUB 3.0 file: ${epubPath}`);
 
@@ -61,9 +178,8 @@ export async function parseEpub(epubPath: string): Promise<
       manifestMap.set(item.$.id, item.$.href);
     });
 
-    let orderIndex = 0;
-
-    // Process each spine item
+    // Extract chapter content
+    const chapters: EpubChapter[] = [];
     for (let chapterIndex = 0; chapterIndex < spine.length; chapterIndex++) {
       const itemId = spine[chapterIndex].$.idref;
       const href = manifestMap.get(itemId);
@@ -74,85 +190,13 @@ export async function parseEpub(epubPath: string): Promise<
 
       try {
         const content = await fsPromises.readFile(contentPath, 'utf-8');
-
-        // Parse HTML/XHTML content
-        const dom = new JSDOM(content, {
-          contentType: 'application/xhtml+xml',
-        });
-        const document = dom.window.document;
-
-        // Remove script and style elements
-        document.querySelectorAll('script, style').forEach((el) => el.remove());
-
-        // Extract text from various elements
-        const textElements = document.querySelectorAll(
-          'p, h1, h2, h3, h4, h5, h6, div, section'
-        );
-
-        textElements.forEach((element) => {
-          // Collect all text nodes
-          const walker = document.createTreeWalker(
-            element,
-            dom.window.NodeFilter.SHOW_TEXT,
-            {
-              acceptNode: (node) => {
-                const text = node.textContent?.trim();
-                if (text && text.length > 0) {
-                  return dom.window.NodeFilter.FILTER_ACCEPT;
-                }
-                return dom.window.NodeFilter.FILTER_SKIP;
-              },
-            }
-          );
-
-          let node;
-          let currentText = '';
-          while ((node = walker.nextNode())) {
-            currentText += ' ' + node.textContent?.trim();
-          }
-
-          currentText = currentText.trim();
-
-          // Only add if has substantial content
-          if (currentText.length > 10) {
-            // Split very long texts into smaller paragraphs
-            if (currentText.length > 500) {
-              const sentences = currentText.match(/[^.!?]+[.!?]+/g) || [
-                currentText,
-              ];
-              let paragraph = '';
-
-              sentences.forEach((sentence) => {
-                paragraph += sentence + ' ';
-                if (paragraph.length > 300) {
-                  paragraphs.push({
-                    chapterNumber: chapterIndex + 1,
-                    orderIndex: orderIndex++,
-                    content: paragraph.trim(),
-                  });
-                  paragraph = '';
-                }
-              });
-
-              if (paragraph.trim().length > 10) {
-                paragraphs.push({
-                  chapterNumber: chapterIndex + 1,
-                  orderIndex: orderIndex++,
-                  content: paragraph.trim(),
-                });
-              }
-            } else {
-              paragraphs.push({
-                chapterNumber: chapterIndex + 1,
-                orderIndex: orderIndex++,
-                content: currentText,
-              });
-            }
-          }
+        chapters.push({
+          chapterNumber: chapterIndex + 1,
+          content,
         });
       } catch (error) {
         logger.error(
-          `Error processing chapter ${chapterIndex} (${href}):`,
+          `Error reading chapter ${chapterIndex} (${href}):`,
           error
         );
       }
@@ -164,6 +208,9 @@ export async function parseEpub(epubPath: string): Promise<
       .catch((error) => {
         logger.error('Failed to clean up temp directory:', error);
       });
+
+    // Parse the extracted chapters
+    const paragraphs = parseEpubContent(chapters);
 
     logger.info(
       `Extracted ${paragraphs.length} paragraphs from ${spine.length} chapters`

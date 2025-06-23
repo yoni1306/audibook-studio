@@ -62,9 +62,14 @@ export default function QueuePage() {
         `http://localhost:3333/api/queue/jobs/${status}`
       );
       const data = await response.json();
-      setJobs(data);
+      // Extract jobs array from the response object
+      const jobsArray = data.jobs || data;
+      // Ensure data is an array, fallback to empty array if not
+      setJobs(Array.isArray(jobsArray) ? jobsArray : []);
     } catch (error) {
       console.error('Error fetching jobs:', error);
+      // Set empty array on error to prevent map errors
+      setJobs([]);
     }
   };
 
