@@ -1,13 +1,13 @@
 export interface TextChange {
   originalWord: string;
-  fixedWord: string;
+  correctedWord: string;
   position: number;
   fixType: string;
 }
 
 export interface BulkFixSuggestion {
   originalWord: string;
-  fixedWord: string;
+  correctedWord: string;
   fixType: string;
   paragraphIds: string[];
   count: number;
@@ -22,7 +22,7 @@ export interface UpdateParagraphResponse {
     id: string;
     paragraphId: string;
     originalWord: string;
-    fixedWord: string;
+    correctedWord: string;
     position: number;
     fixType: string;
     createdAt: string;

@@ -2,7 +2,6 @@ import winston from 'winston';
 import LokiTransport from 'winston-loki';
 import { getCurrentCorrelationId } from '@audibook/correlation';
 
-const isDevelopment = process.env['NODE_ENV'] !== 'production';
 // Use a single SERVICE_NAME environment variable
 const service = process.env['SERVICE_NAME'] || 'unknown';
 

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 
 interface WordFix {
   originalWord: string;
-  fixedWord: string;
+  correctedWord: string;
   fixType: string | null;
   occurrences: number;
 }
@@ -12,7 +12,7 @@ interface WordFix {
 interface BookFix {
   id: string;
   originalWord: string;
-  fixedWord: string;
+  correctedWord: string;
   fixType: string | null;
   createdAt: string;
   paragraph: {
@@ -27,9 +27,9 @@ interface Statistics {
     fixType: string | null;
     _count: { id: number };
   }>;
-  mostFixedWords: Array<{
+  mostCorrectedWords: Array<{
     originalWord: string;
-    fixedWord: string;
+    correctedWord: string;
     _count: { id: number };
   }>;
 }
@@ -41,7 +41,7 @@ export default function TextFixesPage() {
   const [selectedBookId, setSelectedBookId] = useState<string>('');
   const [bookFixes, setBookFixes] = useState<BookFix[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState<string>('all');
+  const [filterType, setFilterType] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -81,9 +81,9 @@ export default function TextFixesPage() {
   const filteredWordFixes = wordFixes.filter(fix => {
     const matchesSearch = 
       fix.originalWord.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      fix.fixedWord.toLowerCase().includes(searchTerm.toLowerCase());
+      fix.correctedWord.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesType = filterType === 'all' || fix.fixType === filterType;
+    const matchesType = filterType === null || fix.fixType === filterType;
     
     return matchesSearch && matchesType;
   });
@@ -216,10 +216,10 @@ export default function TextFixesPage() {
               color: '#374151', 
               marginBottom: '8px' 
             }}>
-              Most Fixed Words
+              Most Corrected Words
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              {statistics.mostFixedWords.slice(0, 3).map((word, index) => (
+              {statistics.mostCorrectedWords.slice(0, 3).map((word, index) => (
                 <div key={index} style={{ fontSize: '14px' }}>
                   <div style={{ 
                     display: 'flex', 
@@ -236,7 +236,7 @@ export default function TextFixesPage() {
                     color: '#16a34a', 
                     fontSize: '12px' 
                   }}>
-                    → {word.fixedWord}
+                    → {word.correctedWord}
                   </div>
                 </div>
               ))}
@@ -278,7 +278,7 @@ export default function TextFixesPage() {
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search original or fixed words..."
+              placeholder="Search original or corrected words..."
               style={{
                 width: '100%',
                 padding: '8px 12px',
@@ -300,18 +300,19 @@ export default function TextFixesPage() {
               Fix Type
             </label>
             <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
+              value={filterType || 'all'}
+              onChange={(e) => setFilterType(e.target.value === 'all' ? null : e.target.value)}
               style={{
                 width: '100%',
                 padding: '8px 12px',
                 border: '1px solid #d1d5db',
                 borderRadius: '6px',
-                fontSize: '14px'
+                fontSize: '14px',
+                backgroundColor: 'white'
               }}
             >
               <option value="all">All Types</option>
-              {uniqueFixTypes.map(type => (
+              {uniqueFixTypes.filter(type => type !== null).map(type => (
                 <option key={type} value={type}>{type}</option>
               ))}
             </select>
@@ -397,7 +398,7 @@ export default function TextFixesPage() {
                   textTransform: 'uppercase', 
                   letterSpacing: '0.05em' 
                 }}>
-                  Fixed Word
+                  Corrected Word
                 </th>
                 <th style={{ 
                   padding: '12px 24px', 
@@ -425,10 +426,13 @@ export default function TextFixesPage() {
             </thead>
             <tbody style={{ backgroundColor: 'white' }}>
               {filteredWordFixes.map((fix, index) => (
-                <tr key={index} style={{ 
-                  borderBottom: '1px solid #e5e7eb',
-                  '&:hover': { backgroundColor: '#f9fafb' }
-                }}>
+                <tr
+                  key={index}
+                  style={{
+                    backgroundColor: '#ffffff',
+                    borderBottom: '1px solid #f3f4f6'
+                  }}
+                >
                   <td style={{ 
                     padding: '16px 24px', 
                     whiteSpace: 'nowrap' 
@@ -450,7 +454,7 @@ export default function TextFixesPage() {
                       fontWeight: '500', 
                       color: '#16a34a' 
                     }}>
-                      {fix.fixedWord}
+                      {fix.correctedWord}
                     </span>
                   </td>
                   <td style={{ 
@@ -571,7 +575,7 @@ export default function TextFixesPage() {
                     textTransform: 'uppercase', 
                     letterSpacing: '0.05em' 
                   }}>
-                    Fixed Word
+                    Corrected Word
                   </th>
                   <th style={{ 
                     padding: '12px 24px', 
@@ -599,9 +603,13 @@ export default function TextFixesPage() {
               </thead>
               <tbody style={{ backgroundColor: 'white' }}>
                 {bookFixes.map((fix) => (
-                  <tr key={fix.id} style={{ 
-                    borderBottom: '1px solid #e5e7eb'
-                  }}>
+                  <tr
+                    key={fix.id}
+                    style={{
+                      backgroundColor: '#ffffff',
+                      borderBottom: '1px solid #f3f4f6'
+                    }}
+                  >
                     <td style={{ 
                       padding: '16px 24px', 
                       whiteSpace: 'nowrap', 
@@ -639,7 +647,7 @@ export default function TextFixesPage() {
                         fontWeight: '500', 
                         color: '#16a34a' 
                       }}>
-                        {fix.fixedWord}
+                        {fix.correctedWord}
                       </span>
                     </td>
                     <td style={{ 

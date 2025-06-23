@@ -4,7 +4,7 @@ import { TextFixesService, WordChange } from './text-fixes.service';
 
 export interface BulkFixSuggestion {
   originalWord: string;
-  fixedWord: string;
+  correctedWord: string;
   paragraphs: Array<{
     id: string;
     chapterNumber: number;
@@ -101,7 +101,7 @@ export class BulkTextFixesService {
         this.logger.debug(`Found ${matchingParagraphs.length} paragraphs containing '${change.originalWord}'`);
         suggestions.push({
           originalWord: change.originalWord,
-          fixedWord: change.fixedWord,
+          correctedWord: change.correctedWord,
           paragraphs: matchingParagraphs,
         });
       } else {
@@ -126,8 +126,8 @@ export class BulkTextFixesService {
       const matches = this.findHebrewWordMatches(paragraph.content, change.originalWord);
       
       if (matches && matches.length > 0) {
-        // Create preview with the fixed word applied
-        const previewAfter = this.createFixedPreviewContent(paragraph.content, change.originalWord, change.fixedWord);
+        // Create preview with the corrected word applied
+        const previewAfter = this.createFixedPreviewContent(paragraph.content, change.originalWord, change.correctedWord);
 
         matchingParagraphs.push({
           id: paragraph.id,
@@ -136,7 +136,7 @@ export class BulkTextFixesService {
           content: paragraph.content,
           occurrences: matches.length,
           previewBefore: this.createPreview(paragraph.content, change.originalWord),
-          previewAfter: this.createPreview(previewAfter, change.fixedWord),
+          previewAfter: this.createPreview(previewAfter, change.correctedWord),
         });
       }
     }
@@ -145,9 +145,9 @@ export class BulkTextFixesService {
   }
 
   /**
-   * Creates a preview of content with the original word replaced by the fixed word
+   * Creates a preview of content with the original word replaced by the corrected word
    */
-  private createFixedPreviewContent(content: string, originalWord: string, fixedWord: string): string {
+  private createFixedPreviewContent(content: string, originalWord: string, correctedWord: string): string {
     // Create a pattern that matches the word with proper boundaries
     const escapedWord = this.escapeRegExp(originalWord);
     const pattern = `(^|\\s|[\\p{P}])(${escapedWord})($|\\s|[\\p{P}])`;
@@ -156,14 +156,14 @@ export class BulkTextFixesService {
       // Replace all occurrences while preserving the surrounding characters
       const regex = new RegExp(pattern, 'gu');
       return content.replace(regex, (match, before, word, after) => {
-        return `${before}${fixedWord}${after}`;
+        return `${before}${correctedWord}${after}`;
       });
     } catch (error) {
       // Fallback to standard regex replacement if Unicode regex fails
       this.logger.error(`Error using Unicode regex for Hebrew word replacement: ${error}`);
       return content.replace(
         new RegExp(`\\b${this.escapeRegExp(originalWord)}\\b`, 'gi'),
-        fixedWord
+        correctedWord
       );
     }
   }
@@ -175,18 +175,18 @@ export class BulkTextFixesService {
     bookId: string,
     fixes: Array<{
       originalWord: string;
-      fixedWord: string;
+      correctedWord: string;
       paragraphIds: string[];
     }>
   ): Promise<BulkFixResult> {
     this.logger.log(`🔧 Starting bulk fixes application for book: ${bookId}`);
-    this.logger.log(`📊 Received ${fixes.length} fixes: ${JSON.stringify(fixes.map(f => `"${f.originalWord}" → "${f.fixedWord}" (${f.paragraphIds.length} paragraphs)`))}`);
+    this.logger.log(`📊 Received ${fixes.length} fixes: ${JSON.stringify(fixes.map(f => `"${f.originalWord}" → "${f.correctedWord}" (${f.paragraphIds.length} paragraphs)`))}`);
     
     // Group fixes by paragraph ID
-    const paragraphFixes = new Map<string, Array<{ originalWord: string; fixedWord: string }>>();
+    const paragraphFixes = new Map<string, Array<{ originalWord: string; correctedWord: string }>>();
     
     fixes.forEach(fix => {
-      this.logger.log(`📝 Processing fix: "${fix.originalWord}" → "${fix.fixedWord}" for paragraphs: ${JSON.stringify(fix.paragraphIds)}`);
+      this.logger.log(`📝 Processing fix: "${fix.originalWord}" → "${fix.correctedWord}" for paragraphs: ${JSON.stringify(fix.paragraphIds)}`);
       fix.paragraphIds.forEach(paragraphId => {
         if (!paragraphFixes.has(paragraphId)) {
           paragraphFixes.set(paragraphId, []);
@@ -195,7 +195,7 @@ export class BulkTextFixesService {
         if (fixesForParagraph) {
           fixesForParagraph.push({
             originalWord: fix.originalWord,
-            fixedWord: fix.fixedWord
+            correctedWord: fix.correctedWord
           });
         }
       });
@@ -233,7 +233,7 @@ export class BulkTextFixesService {
 
           // Apply all fixes for this paragraph
           for (const fix of paragraphFixesList) {
-            this.logger.log(`🔧 Applying fix: "${fix.originalWord}" → "${fix.fixedWord}"`);
+            this.logger.log(`🔧 Applying fix: "${fix.originalWord}" → "${fix.correctedWord}"`);
             this.logger.log(`📄 Paragraph content to search in: "${updatedContent}"`);
             this.logger.log(`🔍 Looking for exact word: "${fix.originalWord}" (length: ${fix.originalWord.length})`);
             
@@ -249,17 +249,17 @@ export class BulkTextFixesService {
               const pattern = `(^|\\s|[\\p{P}])(${escapedWord})(?=\\s|[\\p{P}]|$)`;
               try {
                 const regex = new RegExp(pattern, 'gu');
-                updatedContent = updatedContent.replace(regex, `$1${fix.fixedWord}`);
+                updatedContent = updatedContent.replace(regex, `$1${fix.correctedWord}`);
               } catch (error) {
                 this.logger.error(`Error using Unicode regex for Hebrew word replacement: ${error}`);
                 // Fallback to standard word boundary regex
                 const fallbackRegex = new RegExp(`\\b${escapedWord}\\b`, 'g');
-                updatedContent = updatedContent.replace(fallbackRegex, fix.fixedWord);
+                updatedContent = updatedContent.replace(fallbackRegex, fix.correctedWord);
               }
               
               if (beforeContent !== updatedContent) {
                 wordsFixedInParagraph += matches.length;
-                this.logger.log(`✅ Successfully replaced ${matches.length} occurrences of "${fix.originalWord}" with "${fix.fixedWord}"`);
+                this.logger.log(`✅ Successfully replaced ${matches.length} occurrences of "${fix.originalWord}" with "${fix.correctedWord}"`);
                 this.logger.log(`📝 Content changed from: "${beforeContent.substring(0, 100)}${beforeContent.length > 100 ? '...' : ''}"`);
                 this.logger.log(`📝 Content changed to: "${updatedContent.substring(0, 100)}${updatedContent.length > 100 ? '...' : ''}"`);
               } else {
@@ -439,8 +439,8 @@ export class BulkTextFixesService {
 
     // For each word, check if there are historical fixes
     for (const word of words) {
-      const historicalFixes = await this.prisma.textFix.groupBy({
-        by: ['originalWord', 'fixedWord'],
+      const historicalFixes = await this.prisma.textCorrection.groupBy({
+        by: ['originalWord', 'correctedWord'],
         where: {
           originalWord: {
             equals: word,
@@ -464,7 +464,7 @@ export class BulkTextFixesService {
 
         suggestions.push({
           originalWord: word,
-          suggestedWord: fix.fixedWord,
+          suggestedWord: fix.correctedWord,
           confidence,
           occurrences: fix._count.id,
         });

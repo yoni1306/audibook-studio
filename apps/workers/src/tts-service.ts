@@ -1,8 +1,8 @@
-import { Logger } from '@nestjs/common';
-import * as sdk from 'microsoft-cognitiveservices-speech-sdk';
 import * as fs from 'fs/promises';
+import * as sdk from 'microsoft-cognitiveservices-speech-sdk';
+import { createLogger } from '@audibook/logger';
 
-const logger = new Logger('TTSService');
+const logger = createLogger('TTS');
 
 export interface TTSOptions {
   voice?: string;
@@ -14,7 +14,7 @@ export class AzureTTSService {
   private speechConfig: sdk.SpeechConfig;
   private defaultVoice: string;
 
-  constructor() {
+  constructor(private options: TTSOptions) {
     const speechKey = process.env['AZURE_SPEECH_KEY'];
     const speechRegion = process.env['AZURE_SPEECH_REGION'] || 'westeurope';
 
@@ -35,13 +35,12 @@ export class AzureTTSService {
     this.speechConfig.speechSynthesisOutputFormat =
       sdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3;
 
-    logger.log(`TTS Service initialized with voice: ${this.defaultVoice}`);
+    logger.info(`TTS Service initialized with voice: ${this.defaultVoice}`);
   }
 
   async generateAudio(
     text: string,
-    outputPath: string,
-    _options?: TTSOptions
+    outputPath: string
   ): Promise<{
     duration: number;
     filePath: string;
@@ -63,14 +62,14 @@ export class AzureTTSService {
       );
 
       // Start synthesis
-      logger.log(`Generating audio for text: "${text.substring(0, 50)}..."`);
+      logger.info(`Generating audio for text: "${text.substring(0, 50)}..."`);
 
       // Use simple text synthesis with the configured voice
       synthesizer.speakTextAsync(
         processedText,
         (result) => {
           if (result.reason === sdk.ResultReason.SynthesizingAudioCompleted) {
-            logger.log(`Audio generated successfully: ${outputPath}`);
+            logger.info(`Audio generated successfully: ${outputPath}`);
 
             // Calculate duration from audio data
             const duration = result.audioDuration / 10000000; // Convert from 100-nanosecond units to seconds
@@ -98,7 +97,7 @@ export class AzureTTSService {
       //   ssml,
       //   (result) => {
       //     if (result.reason === sdk.ResultReason.SynthesizingAudioCompleted) {
-      //       logger.log(`Audio generated successfully: ${outputPath}`);
+      //       logger.info(`Audio generated successfully: ${outputPath}`);
 
       //       // Calculate duration from audio data
       //       const duration = result.audioDuration / 10000000; // Convert from 100-nanosecond units to seconds
@@ -201,13 +200,13 @@ export class AzureTTSService {
     const testText = 'שלום, זהו מבחן של מערכת הטקסט לדיבור בעברית.';
 
     for (const voice of voices) {
-      logger.log(`Testing voice: ${voice}`);
+      logger.info(`Testing voice: ${voice}`);
       this.speechConfig.speechSynthesisVoiceName = voice;
 
       try {
         const outputPath = `/tmp/test-${voice}.mp3`;
-        await this.generateAudio(testText, outputPath, { voice });
-        logger.log(`✓ ${voice} works correctly`);
+        await this.generateAudio(testText, outputPath);
+        logger.info(`✓ ${voice} works correctly`);
         await fs.unlink(outputPath).catch((err) => logger.warn(`Failed to delete test file: ${err.message}`));
       } catch (error) {
         logger.error(`✗ ${voice} failed: ${error.message}`);
@@ -224,7 +223,7 @@ let ttsService: AzureTTSService | null = null;
 
 export function getTTSService(): AzureTTSService {
   if (!ttsService) {
-    ttsService = new AzureTTSService();
+    ttsService = new AzureTTSService({});
   }
   return ttsService;
 }

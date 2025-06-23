@@ -1,16 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createLogger } from '../../../../utils/logger';
 
 export interface BulkFixSuggestion {
   originalWord: string;
-  fixedWord: string;
+  correctedWord: string;
   fixType: string;
   paragraphIds: string[];
   count: number;
-  // For backward compatibility with existing UI
-  paragraphs?: Array<{
+  paragraphs: Array<{
     id: string;
     chapterNumber: number;
     orderIndex: number;
@@ -22,20 +20,23 @@ export interface BulkFixSuggestion {
 }
 
 interface BulkFixModalProps {
+  isOpen: boolean;
   onClose: () => void;
   suggestions: BulkFixSuggestion[];
   bookId: string;
-  onApplyFixes: (result: any) => void;
+  onFixesApplied: () => void;
 }
 
-// Create a logger instance for this component
-const logger = createLogger('BulkFixModal');
+const logger = {
+  debug: (message: string, ...args: unknown[]) => console.log(message, ...args)
+};
 
 export default function BulkFixModal({ 
+  isOpen, 
   onClose, 
   suggestions, 
   bookId, 
-  onApplyFixes 
+  onFixesApplied 
 }: BulkFixModalProps) {
   const [selectedFixes, setSelectedFixes] = useState<{[key: string]: string[]}>({});
   const [applying, setApplying] = useState(false);
@@ -50,7 +51,7 @@ export default function BulkFixModal({
       // Initialize with all paragraphs selected by default
       const initialSelection: {[key: string]: string[]} = {};
       suggestions.forEach(suggestion => {
-        const key = `${suggestion.originalWord}:${suggestion.fixedWord}`;
+        const key = `${suggestion.originalWord}:${suggestion.correctedWord}`;
         // Handle both old and new formats
         if (suggestion.paragraphIds) {
           // New format from DTO
@@ -81,7 +82,7 @@ export default function BulkFixModal({
   const handleToggleAll = (wordKey: string, allParagraphIds: string[]) => {
     setSelectedFixes(prev => {
       const current = prev[wordKey] || [];
-      const allSelected = allParagraphIds.every(id => current.includes(id));
+      const allSelected = allParagraphIds.length === current.length;
       
       return {
         ...prev,
@@ -95,20 +96,20 @@ export default function BulkFixModal({
     console.log('📊 Selected fixes:', selectedFixes);
     
     const fixesToApply = Object.entries(selectedFixes).map(([wordKey, paragraphIds]) => {
-      const suggestion = suggestions.find(s => `${s.originalWord}:${s.fixedWord}` === wordKey);
+      const suggestion = suggestions.find(s => `${s.originalWord}:${s.correctedWord}` === wordKey);
       if (!suggestion) {
         console.warn(`⚠️ No suggestion found for wordKey: ${wordKey}`);
-        console.warn(`🔍 Available suggestions:`, suggestions.map(s => `${s.originalWord}:${s.fixedWord}`));
+        console.warn(`🔍 Available suggestions:`, suggestions.map(s => `${s.originalWord}:${s.correctedWord}`));
         return null;
       }
       
       const fix = {
         originalWord: suggestion.originalWord,
-        fixedWord: suggestion.fixedWord,
+        correctedWord: suggestion.correctedWord,
         paragraphIds: paragraphIds
       };
       
-      console.log(`📝 Prepared fix: "${fix.originalWord}" → "${fix.fixedWord}" for ${fix.paragraphIds.length} paragraphs:`, fix.paragraphIds);
+      console.log(`📝 Prepared fix: "${fix.originalWord}" → "${fix.correctedWord}" for ${fix.paragraphIds.length} paragraphs:`, fix.paragraphIds);
       return fix;
     }).filter(Boolean);
 
@@ -148,20 +149,17 @@ export default function BulkFixModal({
       console.log(`📈 Results: ${result.totalParagraphsUpdated} paragraphs updated, ${result.totalWordsFixed} words fixed`);
 
       if (result.totalParagraphsUpdated > 0) {
-        console.log('🎉 Fixes applied successfully! Calling onApplyFixes callback...');
-        onApplyFixes?.(result);
+        console.log('🎉 Fixes applied successfully! Calling onFixesApplied callback...');
+        onFixesApplied?.();
         onClose();
       } else {
         console.warn('⚠️ No paragraphs were updated - this might indicate an issue');
       }
     } catch (error) {
-      console.error('💥 Error applying bulk fixes:', error);
-      console.error('🔍 Error details:', {
-        message: error.message,
-        stack: error.stack,
-        bookId,
-        fixesCount: fixesToApply.length
-      });
+      console.error('💥 [BulkFixModal] Error applying bulk fixes:', error);
+      console.error('💥 [BulkFixModal] Error details:', (error as Error).message);
+      console.error('💥 [BulkFixModal] Error stack:', (error as Error).stack);
+      alert(`Error applying fixes: ${(error as Error).message || 'Unknown error'}`);
     } finally {
       console.log('🏁 Bulk fix application completed');
       setApplying(false);
@@ -173,8 +171,6 @@ export default function BulkFixModal({
   };
 
   if (suggestions.length === 0) return null;
-
-
 
   return (
     <div style={{
@@ -204,20 +200,11 @@ export default function BulkFixModal({
           borderBottom: '1px solid #e5e7eb'
         }}>
           <div>
-            <h2 style={{
-              fontSize: '20px',
-              fontWeight: '600',
-              color: '#111827',
-              margin: 0
-            }}>
-              Preview Fixes in Context
+            <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>
+              Apply Bulk Fixes ({suggestions.length} suggestions)
             </h2>
-            <p style={{ margin: '4px 0 0 0' }}>
-              Found similar words in other paragraphs. Select which ones to fix.
-              <br />
-              <small style={{ color: '#9ca3af' }}>
-                Note: Audio will only be regenerated for the current paragraph you're editing.
-              </small>
+            <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '20px' }}>
+              Select which text corrections you&apos;d like to apply. All paragraphs are selected by default.
             </p>
           </div>
           <button
@@ -240,7 +227,7 @@ export default function BulkFixModal({
           maxHeight: '60vh'
         }}>
           {suggestions.map(suggestion => {
-            const wordKey = `${suggestion.originalWord}:${suggestion.fixedWord}`;
+            const wordKey = `${suggestion.originalWord}:${suggestion.correctedWord}`;
             const selectedParagraphs = selectedFixes[wordKey] || [];
             
             // Handle both old and new formats
@@ -259,11 +246,11 @@ export default function BulkFixModal({
               // New format with paragraph details (preferred)
               allParagraphIds = suggestion.paragraphs.map(p => p.id);
               paragraphsToRender = suggestion.paragraphs;
-              logger.debug(`Using paragraphs for ${suggestion.originalWord}->${suggestion.fixedWord}`);
+              logger.debug(`Using paragraphs for ${suggestion.originalWord}->${suggestion.correctedWord}`);
             } else if (suggestion.paragraphIds) {
               // Fallback to just IDs if no paragraph details
               allParagraphIds = suggestion.paragraphIds;
-              logger.debug(`Using paragraphIds only for ${suggestion.originalWord}->${suggestion.fixedWord}`);
+              logger.debug(`Using paragraphIds only for ${suggestion.originalWord}->${suggestion.correctedWord}`);
             }
             
             const allSelected = allParagraphIds.length === selectedParagraphs.length;
@@ -287,9 +274,9 @@ export default function BulkFixModal({
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ color: '#dc2626', fontWeight: '500', fontSize: '15px' }}>"{suggestion.originalWord}"</span>
+                        <span style={{ color: '#dc2626', fontWeight: '500', fontSize: '15px' }}>&quot;{suggestion.originalWord}&quot;</span>
                         <span style={{ color: '#9ca3af', fontSize: '15px' }}>→</span>
-                        <span style={{ color: '#16a34a', fontWeight: '500', fontSize: '15px' }}>"{suggestion.fixedWord}"</span>
+                        <span style={{ color: '#16a34a', fontWeight: '500', fontSize: '15px' }}>&quot;{suggestion.correctedWord}&quot;</span>
                       </div>
                       <span style={{ fontSize: '15px', color: '#6b7280' }}>
                         Found in {suggestion.paragraphs?.length || suggestion.paragraphIds?.length} paragraphs
@@ -432,31 +419,35 @@ export default function BulkFixModal({
               onClick={onClose}
               disabled={applying}
               style={{
-                padding: '8px 16px',
-                color: '#374151',
+                padding: '10px 20px',
+                color: '#6b7280',
                 backgroundColor: 'white',
                 border: '1px solid #d1d5db',
-                borderRadius: '6px',
+                borderRadius: '8px',
                 cursor: applying ? 'not-allowed' : 'pointer',
-                opacity: applying ? 0.5 : 1
+                opacity: applying ? 0.5 : 1,
+                fontSize: '14px',
+                fontWeight: '500'
               }}
             >
-              Cancel
+              Skip All Suggestions
             </button>
             <button
               onClick={handleApply}
               disabled={applying || getTotalSelected() === 0}
               style={{
-                padding: '8px 16px',
-                backgroundColor: '#2563eb',
+                padding: '10px 20px',
+                backgroundColor: getTotalSelected() === 0 ? '#9ca3af' : '#2563eb',
                 color: 'white',
                 border: 'none',
-                borderRadius: '6px',
+                borderRadius: '8px',
                 cursor: (applying || getTotalSelected() === 0) ? 'not-allowed' : 'pointer',
-                opacity: (applying || getTotalSelected() === 0) ? 0.5 : 1
+                opacity: (applying || getTotalSelected() === 0) ? 0.7 : 1,
+                fontSize: '14px',
+                fontWeight: '500'
               }}
             >
-              {applying ? 'Applying...' : `Apply Selected Fixes (${getTotalSelected()})`}
+              {applying ? 'Applying Fixes...' : `Apply Selected Fixes (${getTotalSelected()})`}
             </button>
           </div>
         </div>
