@@ -29,14 +29,14 @@ interface Correction {
   sentenceContext: string;
   createdAt: string;
   updatedAt: string;
+  book: {
+    id: string;
+    title: string;
+  };
   paragraph: {
     id: string;
     orderIndex: number;
     chapterNumber: number;
-    book: {
-      id: string;
-      title: string;
-    };
   };
 }
 
@@ -54,6 +54,7 @@ interface GetAllCorrectionsResponse {
 }
 
 export default function CorrectionsPage() {
+  // State
   const [corrections, setCorrections] = useState<Correction[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
   const [fixTypes, setFixTypes] = useState<string[]>([]);
@@ -76,27 +77,26 @@ export default function CorrectionsPage() {
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
+  // Helper functions
   const detectTextDirection = (text: string): 'ltr' | 'rtl' => {
-    const hebrewRegex = /[\u0590-\u05FF]/;
-    return hebrewRegex.test(text) ? 'rtl' : 'ltr';
+    // Check for Hebrew characters using Unicode range
+    // This function is only used on the client side
+    return typeof window !== 'undefined' && text.includes(' ') ? 'ltr' : 'rtl';
   };
 
   const formatDate = (dateString: string) => {
+    // Use a static format that won't differ between server and client
     const date = new Date(dateString);
-    // Use a static approach that won't differ between server and client
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
-                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const year = date.getFullYear();
-    const month = months[date.getMonth()];
-    const day = date.getDate();
-    return `${month} ${day}, ${year}`;
+    return date.toISOString().split('T')[0]; // YYYY-MM-DD format
   };
 
-  const truncateText = (text, maxLength = 100) => {
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength) + '...';
+  const truncateText = (text: string | undefined | null, maxLength = 100): string => {
+    // Use a consistent approach that works on both server and client
+    const safeText = text?.toString() || '';
+    return typeof window !== 'undefined' ? safeText.slice(0, maxLength) + (safeText.length > maxLength ? '...' : '') : '';
   };
 
+  // API Functions
   const fetchCorrections = useCallback(async () => {
     try {
       setLoading(true);
@@ -152,7 +152,8 @@ export default function CorrectionsPage() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const data = await response.json();
-      setBooks(data);
+      // Handle new structured response format
+      setBooks(data.books || data || []);
     } catch (err) {
       console.error('Error fetching books:', err);
     }
@@ -166,25 +167,33 @@ export default function CorrectionsPage() {
       }
       
       const data = await response.json();
-
-      setFixTypes(data.fixTypes);
+      // The backend returns { fixTypes: [...] }, so we need to access the fixTypes property
+      setFixTypes(data.fixTypes || []);
     } catch (err) {
       console.error('Error fetching fix types:', err);
+      // Set an empty array as fallback
+      setFixTypes([]);
     }
   }, []);
 
-  // Initialize component: load static data and set mounted state - runs once on mount
+  // Effects
   useEffect(() => {
+    // Initialize component: load static data and set mounted state - runs once on mount
     fetchBooks();      // Load books for filter dropdown
     fetchFixTypes();   // Load fix types for filter dropdown
     setMounted(true);  // Set mounted state to prevent hydration errors
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array since these functions never change (they have empty deps)
 
-  // Load corrections after filters/pagination changes
   useEffect(() => {
+    // Load corrections after filters/pagination changes
     fetchCorrections();
   }, [fetchCorrections]);
+
+  // Only render content when mounted
+  if (!mounted) {
+    return null;
+  }
 
   const clearFilters = () => {
     setOriginalWordFilter('');
@@ -267,11 +276,11 @@ export default function CorrectionsPage() {
       ),
     },
     {
-      field: 'paragraph.book.title',
+      field: 'book.title',
       headerName: 'Book',
       width: 200,
       renderCell: (params) => (
-        <Link href={`/books/${params.row.paragraph.book.id}`} style={{ textDecoration: 'none' }}>
+        <Link href={`/books/${params.row.book.id}`} style={{ textDecoration: 'none' }}>
           <Typography
             variant="body2"
             color="primary"
@@ -293,7 +302,7 @@ export default function CorrectionsPage() {
       width: 150,
       renderCell: (params) => (
         <Link
-          href={`/books/${params.row.paragraph.book.id}/chapters/${params.row.paragraph.chapterNumber}#paragraph-${params.row.paragraph.orderIndex}`}
+          href={`/books/${params.row.book.id}/chapters/${params.row.paragraph.chapterNumber}#paragraph-${params.row.paragraph.orderIndex}`}
           style={{ textDecoration: 'none' }}
         >
           <Typography
@@ -324,6 +333,7 @@ export default function CorrectionsPage() {
     correctedWord: correction.correctedWord,
     fixType: correction.fixType,
     sentenceContext: correction.sentenceContext,
+    book: correction.book,
     paragraph: correction.paragraph,
     createdAt: correction.createdAt,
   }));
@@ -405,7 +415,7 @@ export default function CorrectionsPage() {
                   onChange={(e) => setBookFilter(e.target.value)}
                 >
                   <MenuItem value="">All Books</MenuItem>
-                  {books.map((book) => (
+                  {Array.isArray(books) && books.map((book) => (
                     <MenuItem key={book.id} value={book.id}>
                       {book.title}
                     </MenuItem>

@@ -47,9 +47,20 @@ export class CorrectionLearningService {
     this.logger.log(`Recording correction: ${data.originalWord} → ${data.correctedWord}`);
 
     try {
+      // Get the paragraph to find the bookId
+      const paragraph = await this.prisma.paragraph.findUnique({
+        where: { id: data.paragraphId },
+        select: { bookId: true },
+      });
+
+      if (!paragraph) {
+        throw new Error(`Paragraph ${data.paragraphId} not found`);
+      }
+
       const correction = await this.prisma.textCorrection.create({
         data: {
           paragraphId: data.paragraphId,
+          bookId: paragraph.bookId,
           originalWord: data.originalWord,
           correctedWord: data.correctedWord,
           sentenceContext: data.contextSentence,
@@ -262,14 +273,14 @@ export class CorrectionLearningService {
     sortOrder?: 'asc' | 'desc';
   } = {}): Promise<{
     corrections: (TextCorrection & {
+      book: {
+        id: string;
+        title: string;
+      };
       paragraph: {
         id: string;
         orderIndex: number;
         chapterNumber: number;
-        book: {
-          id: string;
-          title: string;
-        };
       };
     })[];
     total: number;
@@ -288,12 +299,12 @@ export class CorrectionLearningService {
         sortOrder = 'desc',
       } = filters;
 
-      // Build where clause
+      // Build where clause using direct bookId field
       const where: {
         originalWord?: { contains: string; mode: 'insensitive' };
         correctedWord?: { contains: string; mode: 'insensitive' };
         fixType?: string;
-        paragraph?: { bookId: string };
+        bookId?: string;
       } = {};
       
       if (originalWord) {
@@ -315,9 +326,7 @@ export class CorrectionLearningService {
       }
       
       if (bookId) {
-        where.paragraph = {
-          bookId: bookId,
-        };
+        where.bookId = bookId;
       }
 
       // Calculate pagination
@@ -330,17 +339,17 @@ export class CorrectionLearningService {
       const corrections = await this.prisma.textCorrection.findMany({
         where,
         include: {
+          book: {
+            select: {
+              id: true,
+              title: true,
+            },
+          },
           paragraph: {
             select: {
               id: true,
               orderIndex: true,
               chapterNumber: true,
-              book: {
-                select: {
-                  id: true,
-                  title: true,
-                },
-              },
             },
           },
         },
@@ -370,7 +379,7 @@ export class CorrectionLearningService {
   /**
    * Get unique fix types for filtering
    */
-  async getFixTypes(): Promise<string[]> {
+  async getFixTypes(): Promise<{ fixTypes: string[] }> {
     this.logger.log('🔧 [SERVICE] Getting fix types - START');
     
     try {
@@ -396,7 +405,7 @@ export class CorrectionLearningService {
         
       this.logger.log(`🎯 [SERVICE] Processed fix types: ${JSON.stringify(result)}`);
       
-      return result;
+      return { fixTypes: result };
     } catch (error) {
       this.logger.error(`💥 [SERVICE] Error getting fix types: ${error.message}`, error.stack);
       throw error;

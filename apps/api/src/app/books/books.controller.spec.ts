@@ -77,23 +77,25 @@ describe('BooksController', () => {
   describe('getFixTypes', () => {
     it('should return fix types successfully', async () => {
       const mockFixTypes = ['substitution', 'insertion', 'deletion', 'manual'];
-      mockCorrectionLearningService.getFixTypes.mockResolvedValue(mockFixTypes);
+      mockCorrectionLearningService.getFixTypes.mockResolvedValue({ fixTypes: mockFixTypes });
 
       const result = await controller.getFixTypes();
 
       expect(result).toEqual({
         fixTypes: mockFixTypes,
+        timestamp: expect.any(String),
       });
       expect(mockCorrectionLearningService.getFixTypes).toHaveBeenCalledTimes(1);
     });
 
     it('should handle empty fix types', async () => {
-      mockCorrectionLearningService.getFixTypes.mockResolvedValue([]);
+      mockCorrectionLearningService.getFixTypes.mockResolvedValue({ fixTypes: [] });
 
       const result = await controller.getFixTypes();
 
       expect(result).toEqual({
         fixTypes: [],
+        timestamp: expect.any(String),
       });
     });
 
@@ -143,6 +145,7 @@ describe('BooksController', () => {
         originalWord: 'שגיאה',
         correctedWord: 'תיקון',
         message: 'Correction recorded successfully',
+        timestamp: expect.any(String),
       });
     });
 
@@ -173,6 +176,7 @@ describe('BooksController', () => {
 
       expect(result.id).toBe('test-correction-id');
       expect(result.message).toBe('Correction recorded successfully');
+      expect(result.timestamp).toBeDefined();
     });
 
     it('should validate required fields are passed through', async () => {
@@ -214,6 +218,7 @@ describe('BooksController', () => {
       );
 
       expect(result.id).toBe('test-correction-id');
+      expect(result.timestamp).toBeDefined();
     });
 
     it('should handle service errors and rethrow them', async () => {
@@ -221,7 +226,7 @@ describe('BooksController', () => {
       mockCorrectionLearningService.recordCorrection.mockRejectedValue(mockError);
 
       await expect(controller.recordCorrection(mockCorrectionDto)).rejects.toThrow(
-        'Database connection failed'
+        'Failed to record correction'
       );
     });
 
@@ -235,10 +240,12 @@ describe('BooksController', () => {
       expect(result).toHaveProperty('originalWord');
       expect(result).toHaveProperty('correctedWord');
       expect(result).toHaveProperty('message');
+      expect(result).toHaveProperty('timestamp');
       expect(typeof result.id).toBe('string');
       expect(typeof result.originalWord).toBe('string');
       expect(typeof result.correctedWord).toBe('string');
       expect(typeof result.message).toBe('string');
+      expect(typeof result.timestamp).toBe('string');
     });
   });
 
@@ -263,6 +270,10 @@ describe('BooksController', () => {
               title: 'Test Book',
             },
           },
+          book: {
+            id: 'book-1',
+            title: 'Test Book',
+          },
         },
         {
           id: 'correction-2',
@@ -281,6 +292,10 @@ describe('BooksController', () => {
               id: 'book-1',
               title: 'Test Book',
             },
+          },
+          book: {
+            id: 'book-1',
+            title: 'Test Book',
           },
         },
       ],
@@ -302,7 +317,10 @@ describe('BooksController', () => {
       const result = await controller.getAllCorrections(dto);
 
       expect(mockCorrectionLearningService.getAllCorrections).toHaveBeenCalledWith(dto);
-      expect(result).toEqual(mockCorrectionsResponse);
+      expect(result).toEqual({
+        ...mockCorrectionsResponse,
+        timestamp: expect.any(String),
+      });
     });
 
     it('should pass through all filter parameters', async () => {
@@ -333,6 +351,7 @@ describe('BooksController', () => {
       });
 
       expect(result.page).toBe(2);
+      expect(result.timestamp).toBeDefined();
     });
 
     it('should verify complete correction data structure in response', async () => {
@@ -352,6 +371,7 @@ describe('BooksController', () => {
       expect(result).toHaveProperty('total');
       expect(result).toHaveProperty('page');
       expect(result).toHaveProperty('totalPages');
+      expect(result).toHaveProperty('timestamp');
 
       // Verify each correction has complete structure
       result.corrections.forEach(correction => {
@@ -368,8 +388,8 @@ describe('BooksController', () => {
         expect(correction.paragraph).toHaveProperty('id');
         expect(correction.paragraph).toHaveProperty('orderIndex');
         expect(correction.paragraph).toHaveProperty('chapterNumber');
-        expect(correction.paragraph.book).toHaveProperty('id');
-        expect(correction.paragraph.book).toHaveProperty('title');
+        expect(correction.book).toHaveProperty('id');
+        expect(correction.book).toHaveProperty('title');
       });
     });
 
@@ -392,7 +412,10 @@ describe('BooksController', () => {
 
       const result = await controller.getAllCorrections(dto);
 
-      expect(result).toEqual(emptyResponse);
+      expect(result).toEqual({
+        ...emptyResponse,
+        timestamp: expect.any(String),
+      });
       expect(result.corrections).toHaveLength(0);
     });
 
@@ -407,7 +430,9 @@ describe('BooksController', () => {
       const mockError = new Error('Database query failed');
       mockCorrectionLearningService.getAllCorrections.mockRejectedValue(mockError);
 
-      await expect(controller.getAllCorrections(dto)).rejects.toThrow('Database query failed');
+      await expect(controller.getAllCorrections(dto)).rejects.toThrow(
+        'Failed to get corrections'
+      );
     });
 
     it('should validate sentence context is included in response', async () => {

@@ -17,6 +17,7 @@ describe('AppController', () => {
       message: 'Welcome to Audibook Studio API',
       version: '0.1.0',
       docs: '/api/health for health check',
+      timestamp: expect.any(String),
     });
   });
 });

@@ -104,6 +104,10 @@ export class CorrectionSuggestionsResponseDto {
 
   @IsNumber()
   totalSuggestions: number;
+
+  @IsOptional()
+  @IsString()
+  timestamp?: string;
 }
 
 export class RecordCorrectionResponseDto {
@@ -118,6 +122,10 @@ export class RecordCorrectionResponseDto {
 
   @IsString()
   message: string;
+
+  @IsOptional()
+  @IsString()
+  timestamp?: string;
 }
 
 export class CorrectionWithContextDto {
@@ -145,14 +153,15 @@ export class CorrectionWithContextDto {
   @Type(() => Date)
   updatedAt: Date;
 
+  book: {
+    id: string;
+    title: string;
+  };
+
   paragraph: {
     id: string;
     orderIndex: number;
     chapterNumber: number;
-    book: {
-      id: string;
-      title: string;
-    };
   };
 }
 
@@ -170,12 +179,20 @@ export class GetAllCorrectionsResponseDto {
 
   @IsNumber()
   totalPages: number;
+
+  @IsOptional()
+  @IsString()
+  timestamp?: string;
 }
 
 export class GetFixTypesResponseDto {
   @IsArray()
   @IsString({ each: true })
   fixTypes: string[];
+
+  @IsOptional()
+  @IsString()
+  timestamp?: string;
 }
 
 export class TopCorrectionDto {
@@ -224,4 +241,8 @@ export class LearningStatsResponseDto {
   @ValidateNested({ each: true })
   @Type(() => TopCorrectionDto)
   topCorrections: TopCorrectionDto[];
+
+  @IsOptional()
+  @IsString()
+  timestamp?: string;
 }

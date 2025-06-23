@@ -11,8 +11,7 @@ import {
   CorrectionSuggestionsResponseDto,
   LearningStatsResponseDto,
   RecordCorrectionResponseDto,
-  GetAllCorrectionsResponseDto,
-  GetFixTypesResponseDto
+  GetAllCorrectionsResponseDto
 } from './dto/correction-learning.dto';
 import { BulkFixSuggestion as ServiceBulkFixSuggestion } from './bulk-text-fixes.service';
 import { S3Service } from '../s3/s3.service';
@@ -56,12 +55,60 @@ export class BooksController {
 
   @Get()
   async getAllBooks() {
-    return this.booksService.getAllBooks();
+    try {
+      this.logger.log('📚 [API] Getting all books');
+      
+      const books = await this.booksService.getAllBooks();
+      
+      this.logger.log(`📚 [API] Found ${books.length} books`);
+      
+      return {
+        books,
+        total: books.length,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      this.logger.error(`💥 [API] Error getting all books: ${error.message}`, error.stack);
+      throw new InternalServerErrorException({
+        error: 'Internal Server Error',
+        message: 'Failed to retrieve books',
+        statusCode: 500,
+        timestamp: new Date().toISOString(),
+      });
+    }
   }
 
   @Get(':id')
   async getBook(@Param('id') id: string) {
-    return this.booksService.getBook(id);
+    try {
+      this.logger.log(`🔍 [API] Getting book with ID: ${id}`);
+      
+      const book = await this.booksService.getBook(id);
+      
+      if (!book) {
+        this.logger.log(`📚 [API] Book not found with ID: ${id} (valid request, no data)`);
+        return {
+          book: null,
+          found: false,
+          timestamp: new Date().toISOString(),
+        };
+      }
+      
+      this.logger.log(`📚 [API] Successfully retrieved book: ${book.title}`);
+      return {
+        book,
+        found: true,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      this.logger.error(`💥 [API] Error getting book ${id}: ${error.message}`, error.stack);
+      throw new InternalServerErrorException({
+        error: 'Internal Server Error',
+        message: 'Failed to retrieve book',
+        statusCode: 500,
+        timestamp: new Date().toISOString(),
+      });
+    }
   }
 
   @Patch('paragraphs/:paragraphId')
@@ -146,18 +193,49 @@ export class BooksController {
   // Get suggested fixes for a paragraph based on historical data
   @Get('paragraphs/:paragraphId/suggested-fixes')
   async getSuggestedFixes(@Param('paragraphId') paragraphId: string) {
-    const paragraph = await this.booksService.getParagraph(paragraphId);
-    if (!paragraph) {
-      throw new NotFoundException('Paragraph not found');
-    }
+    try {
+      this.logger.log(`🔍 [API] Getting suggested fixes for paragraph: ${paragraphId}`);
+      
+      const paragraph = await this.booksService.getParagraph(paragraphId);
+      
+      if (!paragraph) {
+        this.logger.log(`📝 [API] Paragraph not found with ID: ${paragraphId} (valid request, no data)`);
+        return {
+          paragraph: null,
+          found: false,
+          suggestions: [],
+          timestamp: new Date().toISOString(),
+        };
+      }
 
-    return this.bulkTextFixesService.getSuggestedFixes(
-      paragraph.book?.id || '',
-      paragraph.content
-    );
+      const suggestions = await this.bulkTextFixesService.getSuggestedFixes(
+        paragraph.book?.id || '',
+        paragraph.content
+      );
+      
+      this.logger.log(`💡 [API] Found ${suggestions.length} suggested fixes for paragraph: ${paragraphId}`);
+      
+      return {
+        paragraph: {
+          id: paragraph.id,
+          content: paragraph.content,
+        },
+        found: true,
+        suggestions,
+        totalSuggestions: suggestions.length,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      this.logger.error(`💥 [API] Error getting suggested fixes for paragraph ${paragraphId}: ${error.message}`, error.stack);
+      throw new InternalServerErrorException({
+        error: 'Internal Server Error',
+        message: 'Failed to get suggested fixes',
+        statusCode: 500,
+        timestamp: new Date().toISOString(),
+      });
+    }
   }
 
-  // Find similar fixes in book for a specific word change
   @Post('paragraphs/:paragraphId/find-similar')
   async findSimilarFixes(
     @Param('paragraphId') paragraphId: string,
@@ -215,10 +293,16 @@ export class BooksController {
       return {
         suggestions,
         totalSuggestions: suggestions.length,
+        timestamp: new Date().toISOString(),
       };
     } catch (error) {
       this.logger.error(`Error getting correction suggestions: ${error.message}`, error.stack);
-      throw error;
+      throw new InternalServerErrorException({
+        error: 'Internal Server Error',
+        message: 'Failed to get correction suggestions',
+        statusCode: 500,
+        timestamp: new Date().toISOString(),
+      });
     }
   }
 
@@ -245,10 +329,16 @@ export class BooksController {
         originalWord: correction.originalWord,
         correctedWord: correction.correctedWord,
         message: 'Correction recorded successfully',
+        timestamp: new Date().toISOString(),
       };
     } catch (error) {
       this.logger.error(`Error recording correction: ${error.message}`, error.stack);
-      throw error;
+      throw new InternalServerErrorException({
+        error: 'Internal Server Error',
+        message: 'Failed to record correction',
+        statusCode: 500,
+        timestamp: new Date().toISOString(),
+      });
     }
   }
 
@@ -262,10 +352,19 @@ export class BooksController {
     try {
       const stats = await this.correctionLearningService.getLearningStats();
       this.logger.log(`Learning stats: ${stats.totalCorrections} total corrections, ${stats.uniqueWords} unique words`);
-      return stats;
+      
+      return {
+        ...stats,
+        timestamp: new Date().toISOString(),
+      };
     } catch (error) {
       this.logger.error(`Error getting learning stats: ${error.message}`, error.stack);
-      throw error;
+      throw new InternalServerErrorException({
+        error: 'Internal Server Error',
+        message: 'Failed to get learning statistics',
+        statusCode: 500,
+        timestamp: new Date().toISOString(),
+      });
     }
   }
 
@@ -283,10 +382,16 @@ export class BooksController {
       return {
         suggestions,
         totalSuggestions: suggestions.length,
+        timestamp: new Date().toISOString(),
       };
     } catch (error) {
       this.logger.error(`Error getting word corrections: ${error.message}`, error.stack);
-      throw error;
+      throw new InternalServerErrorException({
+        error: 'Internal Server Error',
+        message: 'Failed to get word corrections',
+        statusCode: 500,
+        timestamp: new Date().toISOString(),
+      });
     }
   }
 
@@ -301,10 +406,18 @@ export class BooksController {
       const result = await this.correctionLearningService.getAllCorrections(dto);
       this.logger.log(`Found ${result.corrections.length} corrections (page ${result.page}/${result.totalPages}, total: ${result.total})`);
       
-      return result;
+      return {
+        ...result,
+        timestamp: new Date().toISOString(),
+      };
     } catch (error) {
       this.logger.error(`Error getting all corrections: ${error.message}`, error.stack);
-      throw error;
+      throw new InternalServerErrorException({
+        error: 'Internal Server Error',
+        message: 'Failed to get corrections',
+        statusCode: 500,
+        timestamp: new Date().toISOString(),
+      });
     }
   }
 
@@ -325,11 +438,12 @@ export class BooksController {
     this.logger.log('🔧 [API] Getting available fix types - START');
     
     try {
-      const fixTypes = await this.correctionLearningService.getFixTypes();
-      this.logger.log(`📊 [API] Found ${fixTypes.length} fix types: ${JSON.stringify(fixTypes)}`);
+      const result = await this.correctionLearningService.getFixTypes();
+      this.logger.log(`📊 [API] Found ${result.fixTypes.length} fix types: ${JSON.stringify(result.fixTypes)}`);
       
       const response = {
-        fixTypes,
+        ...result,
+        timestamp: new Date().toISOString(),
       };
       
       this.logger.log(`🎯 [API] Returning response: ${JSON.stringify(response)}`);
@@ -337,7 +451,12 @@ export class BooksController {
       return response;
     } catch (error) {
       this.logger.error(`💥 [API] Error getting fix types: ${error.message}`, error.stack);
-      throw new InternalServerErrorException('Failed to get fix types');
+      throw new InternalServerErrorException({
+        error: 'Internal Server Error',
+        message: 'Failed to get fix types',
+        statusCode: 500,
+        timestamp: new Date().toISOString(),
+      });
     }
   }
 }

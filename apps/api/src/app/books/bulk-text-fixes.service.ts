@@ -287,6 +287,26 @@ export class BulkTextFixesService {
               updatedContent
             );
 
+            // Record each individual correction in the textCorrection table
+            for (const change of changes) {
+              try {
+                await tx.textCorrection.create({
+                  data: {
+                    bookId,
+                    paragraphId,
+                    originalWord: change.originalWord,
+                    correctedWord: change.correctedWord,
+                    sentenceContext: this.extractSentenceContext(updatedContent, change.originalWord, change.position),
+                    fixType: change.fixType,
+                  },
+                });
+                this.logger.log(`📝 Recorded correction: "${change.originalWord}" → "${change.correctedWord}" in paragraph ${paragraphId}`);
+              } catch (error) {
+                this.logger.error(`❌ Failed to record correction: ${error.message}`);
+                // Don't fail the entire operation if correction recording fails
+              }
+            }
+
             updatedParagraphs.push({
               paragraphId,
               chapterNumber: paragraph.chapterNumber,
@@ -472,5 +492,36 @@ export class BulkTextFixesService {
     }
 
     return suggestions;
+  }
+
+  private extractSentenceContext(content: string, word: string, position: number): string {
+    // Find the sentence containing the word at the given position
+    const sentenceRegex = /[^.!?]+[.!?]+/g;
+    let sentenceMatch;
+    let currentPos = 0;
+    
+    while ((sentenceMatch = sentenceRegex.exec(content)) !== null) {
+      const sentence = sentenceMatch[0];
+      const sentenceStart = currentPos;
+      const sentenceEnd = currentPos + sentence.length;
+      
+      // Check if the position falls within this sentence
+      if (position >= sentenceStart && position < sentenceEnd) {
+        return sentence.trim();
+      }
+      
+      currentPos = sentenceEnd;
+    }
+    
+    // If no sentence found, extract context around the position
+    const contextLength = 50;
+    const start = Math.max(0, position - contextLength);
+    const end = Math.min(content.length, position + word.length + contextLength);
+    
+    let context = content.substring(start, end);
+    if (start > 0) context = '...' + context;
+    if (end < content.length) context = context + '...';
+    
+    return context;
   }
 }
