@@ -153,10 +153,11 @@ export class CorrectionWithContextDto {
   @Type(() => Date)
   updatedAt: Date;
 
-  book: {
-    id: string;
-    title: string;
-  };
+  @IsString()
+  bookTitle: string;
+
+  @IsString()
+  bookId: string;
 
   paragraph: {
     id: string;

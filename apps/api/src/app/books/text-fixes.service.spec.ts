@@ -263,4 +263,179 @@ describe('TextFixesService', () => {
       });
     });
   });
+
+  describe('classifyChange', () => {
+    describe('Niqqud (Hebrew vowel marks) corrections', () => {
+      it('should detect niqqud addition', () => {
+        const result = service['classifyChange']('שלום', 'שָׁלוֹם');
+        expect(result).toBe('niqqud_addition');
+      });
+
+      it('should detect niqqud removal', () => {
+        const result = service['classifyChange']('שָׁלוֹם', 'שלום');
+        expect(result).toBe('niqqud_removal');
+      });
+
+      it('should detect niqqud correction', () => {
+        const result = service['classifyChange']('שָׁלוֹם', 'שְׁלוֹם');
+        expect(result).toBe('niqqud_correction');
+      });
+
+      it('should detect complex niqqud changes', () => {
+        const result = service['classifyChange']('בְּרֵאשִׁית', 'בְּרֵאשִׁיתָה');
+        expect(result).toBe('hebrew_letter_fix'); // Added Hebrew letter ה at the end
+      });
+
+      it('should handle multiple niqqud marks', () => {
+        const result = service['classifyChange']('הַמֶּלֶךְ', 'הַמֶּלֶךְ');
+        expect(result).toBe('niqqud_correction'); // Base letters same, niqqud same -> niqqud_correction
+      });
+    });
+
+    describe('Hebrew letter corrections', () => {
+      it('should detect hebrew spelling correction with same letter count', () => {
+        const result = service['classifyChange']('שלום', 'שלוט');
+        expect(result).toBe('hebrew_spelling');
+      });
+
+      it('should detect hebrew letter addition', () => {
+        const result = service['classifyChange']('שלמ', 'שלום');
+        expect(result).toBe('hebrew_letter_fix');
+      });
+
+      it('should detect hebrew letter removal', () => {
+        const result = service['classifyChange']('שלום', 'שלמ');
+        expect(result).toBe('hebrew_letter_fix');
+      });
+
+      it('should handle complex hebrew word changes', () => {
+        const result = service['classifyChange']('ספר', 'ספרים');
+        expect(result).toBe('expansion_contraction'); // 'ספרים' contains 'ספר'
+      });
+
+      it('should handle mixed Hebrew and non-Hebrew', () => {
+        const result = service['classifyChange']('שלום123', 'שלוט123');
+        expect(result).toBe('hebrew_spelling');
+      });
+    });
+
+    describe('Punctuation corrections', () => {
+      it('should detect punctuation changes', () => {
+        const result = service['classifyChange']('שלום,', 'שלום.');
+        expect(result).toBe('character_substitution'); // Same length, different punctuation
+      });
+
+      it('should detect spacing changes', () => {
+        const result = service['classifyChange']('שלום ', 'שלום');
+        expect(result).toBe('insertion_deletion'); // One character difference
+      });
+
+      it('should handle Hebrew punctuation', () => {
+        const result = service['classifyChange']('שלום׃', 'שלום!');
+        expect(result).toBe('character_substitution'); // Same length
+      });
+    });
+
+    describe('Combined Hebrew corrections', () => {
+      it('should prioritize niqqud over letter changes when base letters are same', () => {
+        const result = service['classifyChange']('שָׁלוֹם', 'שְׁלוֹם');
+        expect(result).toBe('niqqud_correction');
+      });
+
+      it('should detect letter changes when niqqud is also different', () => {
+        const result = service['classifyChange']('שָׁלוֹם', 'שְׁלוֹט');
+        expect(result).toBe('hebrew_spelling');
+      });
+
+      it('should handle word with both niqqud and punctuation changes', () => {
+        const result = service['classifyChange']('שָׁלוֹם,', 'שְׁלוֹם.');
+        expect(result).toBe('character_substitution'); // Same length, multiple changes
+      });
+    });
+
+    describe('Non-Hebrew text corrections', () => {
+      it('should detect character substitution for same length words', () => {
+        const result = service['classifyChange']('hello', 'hallo');
+        expect(result).toBe('character_substitution');
+      });
+
+      it('should detect insertion/deletion for single character difference', () => {
+        const result = service['classifyChange']('hello', 'helo');
+        expect(result).toBe('insertion_deletion');
+      });
+
+      it('should detect expansion/contraction when one word contains another', () => {
+        const result = service['classifyChange']('hello', 'hello world');
+        expect(result).toBe('expansion_contraction');
+      });
+
+      it('should default to substitution for complete word replacement', () => {
+        const result = service['classifyChange']('hello', 'goodbye');
+        expect(result).toBe('substitution');
+      });
+
+      it('should handle English with numbers', () => {
+        const result = service['classifyChange']('test123', 'test124');
+        expect(result).toBe('character_substitution');
+      });
+    });
+
+    describe('Edge cases', () => {
+      it('should handle empty strings', () => {
+        const result = service['classifyChange']('', '');
+        expect(result).toBe('character_substitution'); // Same length (0)
+      });
+
+      it('should handle one empty string', () => {
+        const result = service['classifyChange']('', 'שלום');
+        expect(result).toBe('expansion_contraction'); // Empty string is contained in any string
+      });
+
+      it('should handle identical words', () => {
+        const result = service['classifyChange']('שלום', 'שלום');
+        expect(result).toBe('character_substitution'); // Same length
+      });
+
+      it('should handle mixed scripts', () => {
+        const result = service['classifyChange']('שלום hello', 'שלוט hello');
+        expect(result).toBe('hebrew_spelling');
+      });
+
+      it('should handle only niqqud characters', () => {
+        const result = service['classifyChange']('ָׁ', 'ְׁ');
+        expect(result).toBe('niqqud_correction'); // Base letters are same (empty), niqqud different
+      });
+
+      it('should handle special Hebrew characters', () => {
+        const result = service['classifyChange']('א׳', 'א״');
+        expect(result).toBe('character_substitution'); // Same length
+      });
+    });
+
+    describe('Real-world Hebrew examples', () => {
+      it('should classify common Hebrew corrections', () => {
+        // Common misspelling
+        expect(service['classifyChange']('אמא', 'אימא')).toBe('hebrew_letter_fix');
+        
+        // Niqqud addition for clarity
+        expect(service['classifyChange']('ברא', 'בָּרָא')).toBe('niqqud_addition');
+        
+        // Vowel correction
+        expect(service['classifyChange']('בָּרָא', 'בָּרָה')).toBe('hebrew_spelling');
+        
+        expect(service['classifyChange']('שלום,', 'שלום.')).toBe('character_substitution');
+      });
+
+      it('should handle biblical Hebrew with complex niqqud', () => {
+        const result = service['classifyChange']('בְּרֵאשִׁית', 'בְּרֵאשִׁיתָה');
+        expect(result).toBe('hebrew_letter_fix'); // Added one Hebrew letter (ה)
+      });
+
+      it('should handle modern Hebrew slang corrections', () => {
+        const result = service['classifyChange']('יאללה', 'יאלה');
+        expect(result).toBe('hebrew_letter_fix');
+      });
+    });
+  });
+
 });

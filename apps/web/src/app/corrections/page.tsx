@@ -17,7 +17,6 @@ import {
   Chip,
   Paper,
   Alert,
-  Tooltip,
 } from '@mui/material';
 import { DataGrid, GridColDef, GridRowsProp, GridToolbar } from '@mui/x-data-grid';
 
@@ -29,10 +28,8 @@ interface Correction {
   sentenceContext: string;
   createdAt: string;
   updatedAt: string;
-  book: {
-    id: string;
-    title: string;
-  };
+  bookTitle: string;
+  bookId: string;
   paragraph: {
     id: string;
     orderIndex: number;
@@ -80,8 +77,15 @@ export default function CorrectionsPage() {
   // Helper functions
   const detectTextDirection = (text: string): 'ltr' | 'rtl' => {
     // Check for Hebrew characters using Unicode range
-    // This function is only used on the client side
-    return typeof window !== 'undefined' && text.includes(' ') ? 'ltr' : 'rtl';
+    const hebrewPattern = /[\u0590-\u05FF]/;
+    const arabicPattern = /[\u0600-\u06FF]/;
+    
+    // If text contains Hebrew or Arabic characters, it's RTL
+    if (hebrewPattern.test(text) || arabicPattern.test(text)) {
+      return 'rtl';
+    }
+    
+    return 'ltr';
   };
 
   const formatDate = (dateString: string) => {
@@ -208,35 +212,51 @@ export default function CorrectionsPage() {
       field: 'originalWord',
       headerName: 'Original Word',
       width: 150,
-      renderCell: (params) => (
-        <Chip
-          label={params.value}
-          color="error"
-          variant="outlined"
-          size="small"
-          sx={{
-            direction: detectTextDirection(params.value),
-            fontFamily: 'monospace',
-          }}
-        />
-      ),
+      renderCell: (params) => {
+        const isRTL = detectTextDirection(params.value) === 'rtl';
+        return (
+          <Chip
+            label={params.value}
+            color="error"
+            variant="outlined"
+            size="small"
+            sx={{
+              direction: isRTL ? 'rtl' : 'ltr',
+              fontFamily: 'monospace',
+              '& .MuiChip-label': {
+                direction: isRTL ? 'rtl' : 'ltr',
+                textAlign: isRTL ? 'right' : 'left',
+                unicodeBidi: 'embed',
+              },
+            }}
+          />
+        );
+      },
     },
     {
       field: 'correctedWord',
       headerName: 'Corrected Word',
       width: 150,
-      renderCell: (params) => (
-        <Chip
-          label={params.value}
-          color="success"
-          variant="outlined"
-          size="small"
-          sx={{
-            direction: detectTextDirection(params.value),
-            fontFamily: 'monospace',
-          }}
-        />
-      ),
+      renderCell: (params) => {
+        const isRTL = detectTextDirection(params.value) === 'rtl';
+        return (
+          <Chip
+            label={params.value}
+            color="success"
+            variant="outlined"
+            size="small"
+            sx={{
+              direction: isRTL ? 'rtl' : 'ltr',
+              fontFamily: 'monospace',
+              '& .MuiChip-label': {
+                direction: isRTL ? 'rtl' : 'ltr',
+                textAlign: isRTL ? 'right' : 'left',
+                unicodeBidi: 'embed',
+              },
+            }}
+          />
+        );
+      },
     },
     {
       field: 'fixType',
@@ -258,29 +278,34 @@ export default function CorrectionsPage() {
     {
       field: 'sentenceContext',
       headerName: 'Context',
-      width: 300,
-      renderCell: (params) => (
-        <Tooltip title={params.value} arrow>
+      width: 350,
+      renderCell: (params) => {
+        const isRTL = detectTextDirection(params.value) === 'rtl';
+        return (
           <Typography
             variant="body2"
             sx={{
-              direction: detectTextDirection(params.value),
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
+              direction: isRTL ? 'rtl' : 'ltr',
+              textAlign: isRTL ? 'right' : 'left',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              overflowWrap: 'break-word',
+              lineHeight: '1.4',
+              width: '100%',
+              unicodeBidi: 'embed',
             }}
           >
-            {truncateText(params.value, 50)}
+            {params.value}
           </Typography>
-        </Tooltip>
-      ),
+        );
+      },
     },
     {
-      field: 'book.title',
+      field: 'bookTitle',
       headerName: 'Book',
       width: 200,
       renderCell: (params) => (
-        <Link href={`/books/${params.row.book.id}`} style={{ textDecoration: 'none' }}>
+        <Link href={`/books/${params.row.bookId}`} style={{ textDecoration: 'none' }}>
           <Typography
             variant="body2"
             color="primary"
@@ -302,7 +327,7 @@ export default function CorrectionsPage() {
       width: 150,
       renderCell: (params) => (
         <Link
-          href={`/books/${params.row.book.id}/chapters/${params.row.paragraph.chapterNumber}#paragraph-${params.row.paragraph.orderIndex}`}
+          href={`/books/${params.row.bookId}/chapters/${params.row.paragraph.chapterNumber}#paragraph-${params.row.paragraph.orderIndex}`}
           style={{ textDecoration: 'none' }}
         >
           <Typography
@@ -333,7 +358,8 @@ export default function CorrectionsPage() {
     correctedWord: correction.correctedWord,
     fixType: correction.fixType,
     sentenceContext: correction.sentenceContext,
-    book: correction.book,
+    bookTitle: correction.bookTitle,
+    bookId: correction.bookId,
     paragraph: correction.paragraph,
     createdAt: correction.createdAt,
   }));
@@ -471,9 +497,17 @@ export default function CorrectionsPage() {
                       quickFilterProps: { debounceMs: 500 },
                     },
                   }}
+                  rowHeight={100}
                   sx={{
                     '& .MuiDataGrid-cell': {
                       borderBottom: '1px solid #f0f0f0',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      overflowWrap: 'break-word',
+                      padding: '12px 8px',
+                      lineHeight: '1.4',
                     },
                     '& .MuiDataGrid-row:hover': {
                       backgroundColor: '#f8f9fa',

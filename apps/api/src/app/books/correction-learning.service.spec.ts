@@ -178,6 +178,7 @@ describe('CorrectionLearningService', () => {
       {
         id: 'correction-1',
         paragraphId: 'paragraph-1',
+        bookId: 'book-1',
         originalWord: 'שגיאה1',
         correctedWord: 'תיקון1',
         sentenceContext: 'משפט עם שגיאה1.',
@@ -185,7 +186,6 @@ describe('CorrectionLearningService', () => {
         createdAt: new Date('2025-06-22T10:00:00.000Z'),
         updatedAt: new Date('2025-06-22T10:00:00.000Z'),
         book: {
-          id: 'book-1',
           title: 'Test Book',
         },
         paragraph: {
@@ -197,6 +197,7 @@ describe('CorrectionLearningService', () => {
       {
         id: 'correction-2',
         paragraphId: 'paragraph-2',
+        bookId: 'book-1',
         originalWord: 'שגיאה2',
         correctedWord: 'תיקון2',
         sentenceContext: 'משפט עם שגיאה2.',
@@ -204,13 +205,12 @@ describe('CorrectionLearningService', () => {
         createdAt: new Date('2025-06-22T11:00:00.000Z'),
         updatedAt: new Date('2025-06-22T11:00:00.000Z'),
         book: {
-          id: 'book-1',
           title: 'Test Book',
         },
         paragraph: {
           id: 'paragraph-2',
           orderIndex: 2,
-          chapterNumber: 2,
+          chapterNumber: 1,
         },
       },
     ];
@@ -229,7 +229,19 @@ describe('CorrectionLearningService', () => {
       const result = await service.getAllCorrections(filters);
 
       expect(result).toEqual({
-        corrections: mockCorrections,
+        corrections: mockCorrections.map(correction => ({
+          id: correction.id,
+          paragraphId: correction.paragraphId,
+          bookId: correction.bookId,
+          originalWord: correction.originalWord,
+          correctedWord: correction.correctedWord,
+          sentenceContext: correction.sentenceContext,
+          fixType: correction.fixType,
+          createdAt: correction.createdAt,
+          updatedAt: correction.updatedAt,
+          bookTitle: correction.book.title,
+          paragraph: correction.paragraph,
+        })),
         total: 2,
         page: 1,
         totalPages: 1,
@@ -238,17 +250,16 @@ describe('CorrectionLearningService', () => {
       expect(mockPrismaService.textCorrection.findMany).toHaveBeenCalledWith({
         where: {},
         include: {
-          book: {
-            select: {
-              id: true,
-              title: true,
-            },
-          },
           paragraph: {
             select: {
               id: true,
               orderIndex: true,
               chapterNumber: true,
+            },
+          },
+          book: {
+            select: {
+              title: true,
             },
           },
         },
@@ -281,17 +292,16 @@ describe('CorrectionLearningService', () => {
           fixType: 'substitution',
         },
         include: {
-          book: {
-            select: {
-              id: true,
-              title: true,
-            },
-          },
           paragraph: {
             select: {
               id: true,
               orderIndex: true,
               chapterNumber: true,
+            },
+          },
+          book: {
+            select: {
+              title: true,
             },
           },
         },
@@ -334,27 +344,6 @@ describe('CorrectionLearningService', () => {
       });
     });
 
-    it('should include all required fields in book selection', async () => {
-      const filters = {
-        page: 1,
-        limit: 10,
-        sortBy: 'createdAt' as const,
-        sortOrder: 'desc' as const,
-      };
-
-      mockPrismaService.textCorrection.findMany.mockResolvedValue(mockCorrections);
-      mockPrismaService.textCorrection.count.mockResolvedValue(2);
-
-      await service.getAllCorrections(filters);
-
-      const findManyCall = mockPrismaService.textCorrection.findMany.mock.calls[0][0];
-      
-      expect(findManyCall.include.book.select).toEqual({
-        id: true,
-        title: true,
-      });
-    });
-
     it('should verify correction data structure completeness', async () => {
       const filters = {
         page: 1,
@@ -378,10 +367,8 @@ describe('CorrectionLearningService', () => {
         expect(correction).toHaveProperty('fixType');
         expect(correction).toHaveProperty('createdAt');
         expect(correction).toHaveProperty('updatedAt');
-        
-        // Verify book structure
-        expect(correction.book).toHaveProperty('id');
-        expect(correction.book).toHaveProperty('title');
+        expect(correction).toHaveProperty('bookTitle');
+        expect(typeof correction.bookTitle).toBe('string');
         
         // Verify paragraph structure
         expect(correction.paragraph).toHaveProperty('id');

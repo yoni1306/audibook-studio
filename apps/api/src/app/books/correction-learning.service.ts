@@ -273,10 +273,7 @@ export class CorrectionLearningService {
     sortOrder?: 'asc' | 'desc';
   } = {}): Promise<{
     corrections: (TextCorrection & {
-      book: {
-        id: string;
-        title: string;
-      };
+      bookTitle: string;
       paragraph: {
         id: string;
         orderIndex: number;
@@ -336,12 +333,20 @@ export class CorrectionLearningService {
       const total = await this.prisma.textCorrection.count({ where });
 
       // Get corrections with related data
-      const corrections = await this.prisma.textCorrection.findMany({
+      const rawCorrections: (TextCorrection & {
+        book: {
+          title: string;
+        };
+        paragraph: {
+          id: string;
+          orderIndex: number;
+          chapterNumber: number;
+        };
+      })[] = await this.prisma.textCorrection.findMany({
         where,
         include: {
           book: {
             select: {
-              id: true,
               title: true,
             },
           },
@@ -359,6 +364,21 @@ export class CorrectionLearningService {
         skip,
         take: limit,
       });
+
+      // Map the data to use bookTitle instead of nested book object
+      const corrections = rawCorrections.map(correction => ({
+        id: correction.id,
+        paragraphId: correction.paragraphId,
+        bookId: correction.bookId,
+        originalWord: correction.originalWord,
+        correctedWord: correction.correctedWord,
+        sentenceContext: correction.sentenceContext,
+        fixType: correction.fixType,
+        createdAt: correction.createdAt,
+        updatedAt: correction.updatedAt,
+        bookTitle: correction.book.title,
+        paragraph: correction.paragraph,
+      }));
 
       const totalPages = Math.ceil(total / limit);
 

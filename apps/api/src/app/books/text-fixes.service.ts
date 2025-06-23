@@ -81,17 +81,65 @@ export class TextFixesService {
    * Attempts to classify the type of change made
    */
   private classifyChange(originalWord: string, correctedWord: string): string {
-    // Simple heuristics for change classification
+    // Hebrew niqqud detection - vowel marks (U+05B0-U+05BD, U+05BF, U+05C1-U+05C2, U+05C4-U+05C7)
+    const niqqudPattern = /[\u05B0-\u05BD\u05BF\u05C1\u05C2\u05C4-\u05C7]/g;
+    
+    // Remove niqqud from both words to compare base letters
+    const originalWithoutNiqqud = originalWord.replace(niqqudPattern, '');
+    const correctedWithoutNiqqud = correctedWord.replace(niqqudPattern, '');
+    
+    // If base letters are identical, this is a niqqud correction
+    if (originalWithoutNiqqud === correctedWithoutNiqqud) {
+      const originalNiqqud = originalWord.match(niqqudPattern) || [];
+      const correctedNiqqud = correctedWord.match(niqqudPattern) || [];
+      
+      if (originalNiqqud.length === 0 && correctedNiqqud.length > 0) {
+        return 'niqqud_addition'; // Added vowel marks
+      } else if (originalNiqqud.length > 0 && correctedNiqqud.length === 0) {
+        return 'niqqud_removal'; // Removed vowel marks
+      } else if (originalNiqqud.length > 0 && correctedNiqqud.length > 0) {
+        return 'niqqud_correction'; // Changed vowel marks
+      }
+    }
+    
+    // Hebrew letter corrections (consonants)
+    const hebrewLetterPattern = /[\u05D0-\u05EA]/g;
+    const originalLetters = originalWord.match(hebrewLetterPattern) || [];
+    const correctedLetters = correctedWord.match(hebrewLetterPattern) || [];
+    
+    // If only Hebrew letters changed (not niqqud)
+    if (originalLetters.join('') !== correctedLetters.join('') && 
+        originalWithoutNiqqud !== correctedWithoutNiqqud) {
+      
+      // Check for common Hebrew spelling corrections
+      if (originalLetters.length === correctedLetters.length) {
+        return 'hebrew_spelling'; // Same number of letters, likely spelling correction
+      } else if (Math.abs(originalLetters.length - correctedLetters.length) === 1) {
+        return 'hebrew_letter_fix'; // Added or removed one Hebrew letter
+      }
+    }
+    
+    // Punctuation and spacing corrections
+    const punctuationPattern = /[\u0590-\u05FF\s.,;:!?'"()[\]{}]/g;
+    const originalPunctuation = originalWord.match(punctuationPattern) || [];
+    const correctedPunctuation = correctedWord.match(punctuationPattern) || [];
+    
+    if (originalWithoutNiqqud === correctedWithoutNiqqud && 
+        originalPunctuation.join('') !== correctedPunctuation.join('')) {
+      return 'punctuation'; // Only punctuation changed
+    }
+    
+    // Fallback to original heuristics for non-Hebrew text
     if (originalWord.length === correctedWord.length) {
-      return 'pronunciation'; // Same length, likely pronunciation fix
+      return 'character_substitution'; // Same length, character-level change
     }
     
     if (Math.abs(originalWord.length - correctedWord.length) === 1) {
-      return 'spelling'; // Small change, likely spelling
+      return 'insertion_deletion'; // Single character insertion/deletion
     }
     
     if (correctedWord.includes(originalWord) || originalWord.includes(correctedWord)) {
-      return 'expansion'; // One word contains the other
+      return 'expansion_contraction'; // One word contains the other
     }
     
     return 'substitution'; // Complete word replacement
