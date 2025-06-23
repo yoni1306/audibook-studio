@@ -10,6 +10,7 @@ import AudioStats from './components/AudioStats';
 import BulkFixNotification from './components/BulkFixNotification';
 import ParagraphComponent, { Paragraph } from './components/ParagraphComponent';
 import BulkFixModal, { BulkFixSuggestion } from './components/BulkFixModal';
+import ParagraphDelimiterModal from './components/ParagraphDelimiterModal';
 
 export default function BookDetailPage() {
   const params = useParams();
@@ -27,6 +28,7 @@ export default function BookDetailPage() {
     suggestions: BulkFixSuggestion[];
     audioRequested: boolean;
   } | null>(null);
+  const [showParagraphDelimiterModal, setShowParagraphDelimiterModal] = useState(false);
 
   // Create a logger instance for this component
   const logger = createLogger('BookDetailPage');
@@ -219,6 +221,11 @@ export default function BookDetailPage() {
     setPendingBulkFix(null);
   };
 
+  const handleDelimiterApplied = () => {
+    // Refresh the book data after delimiter is applied
+    fetchBook();
+  };
+
   if (loading) return <div>Loading book...</div>;
   if (error) return <div style={{ color: 'red' }}>{error}</div>;
   if (!book) return <div>Book not found</div>;
@@ -238,7 +245,24 @@ export default function BookDetailPage() {
         />
       )}
 
-      <h2>Content</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h2>Content</h2>
+        <button
+          onClick={() => setShowParagraphDelimiterModal(true)}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: '#1976d2',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '14px',
+          }}
+        >
+          Configure Paragraph Delimiter
+        </button>
+      </div>
+      
       <p style={{ fontSize: '14px', color: '#666' }}>
         Click on any paragraph to edit. Changes will queue audio regeneration and suggest bulk fixes.
       </p>
@@ -269,6 +293,16 @@ export default function BookDetailPage() {
           onFixesApplied={handleBulkFixComplete}
         />
       )}
+
+      {/* Paragraph Delimiter Modal */}
+      <ParagraphDelimiterModal
+        open={showParagraphDelimiterModal}
+        onClose={() => setShowParagraphDelimiterModal(false)}
+        bookId={bookId}
+        bookTitle={book.title}
+        currentParagraphCount={book.paragraphs.length}
+        onDelimiterApplied={handleDelimiterApplied}
+      />
     </div>
   );
 }

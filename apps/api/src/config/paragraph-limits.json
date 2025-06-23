@@ -1,0 +1,8 @@
+{
+  "paragraphLimits": {
+    "minCharacters": 1700,
+    "maxCharacters": 8000,
+    "minWords": 300,
+    "maxWords": 1800
+  }
+}

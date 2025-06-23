@@ -2,6 +2,7 @@ import { Controller, Post, Get, Patch, Param, Body, NotFoundException, Redirect,
 import { BooksService } from './books.service';
 import { BulkTextFixesService } from './bulk-text-fixes.service';
 import { CorrectionLearningService } from './correction-learning.service';
+import { ParagraphDelimiterService } from './paragraph-delimiter.service';
 import { UpdateParagraphRequestDto, UpdateParagraphResponseDto, BulkFixSuggestion as DtoBulkFixSuggestion } from './dto/paragraph-update.dto';
 import { 
   GetCorrectionSuggestionsDto, 
@@ -24,6 +25,7 @@ export class BooksController {
     private booksService: BooksService,
     private bulkTextFixesService: BulkTextFixesService,
     private correctionLearningService: CorrectionLearningService,
+    private paragraphDelimiterService: ParagraphDelimiterService,
     private s3Service: S3Service
   ) {}
   
@@ -428,6 +430,43 @@ export class BooksController {
   async testEndpoint() {
     this.logger.log('🧪 [API] Test endpoint called');
     return { message: 'Test endpoint working', timestamp: new Date().toISOString() };
+  }
+
+  /**
+   * Optimize paragraph lengths for a book (enforce minimum and maximum limits)
+   */
+  @Post(':id/optimize-paragraphs')
+  async optimizeParagraphs(@Param('id') bookId: string): Promise<{
+    bookId: string;
+    originalParagraphCount: number;
+    optimizedParagraphCount: number;
+    splitCount: number;
+    mergedCount: number;
+    optimizedAt: string;
+    timestamp: string;
+  }> {
+    this.logger.log(`🔧 [API] Optimizing paragraphs for book ${bookId}`);
+    
+    try {
+      const result = await this.paragraphDelimiterService.optimizeParagraphLengths(bookId);
+      
+      this.logger.log(`✅ [API] Successfully optimized paragraphs: ${result.originalParagraphCount} → ${result.optimizedParagraphCount} (${result.splitCount} split, ${result.mergedCount} merged)`);
+      
+      return {
+        bookId,
+        ...result,
+        optimizedAt: new Date().toISOString(),
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      this.logger.error(`💥 [API] Error optimizing paragraphs: ${error.message}`, error.stack);
+      throw new InternalServerErrorException({
+        error: 'Internal Server Error',
+        message: 'Failed to optimize paragraphs',
+        statusCode: 500,
+        timestamp: new Date().toISOString(),
+      });
+    }
   }
 
   /**
