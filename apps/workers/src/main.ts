@@ -15,6 +15,7 @@ import {
   getParagraph,
   updateParagraphStatus,
   updateParagraphAudio,
+  getBook,
 } from './database.service';
 import { BookStatus, AudioStatus } from '@prisma/client';
 import * as fs from 'fs/promises';
@@ -89,12 +90,30 @@ const worker = new Worker(
               await updateBookStatus(job.data.bookId, BookStatus.PROCESSING);
               logger.debug('Book status updated to PROCESSING');
 
-              // Parse the EPUB
+              // Get book data including chapter titles
+              const book = await getBook(job.data.bookId);
+              if (!book) {
+                throw new Error(`Book ${job.data.bookId} not found`);
+              }
+
+              logger.info('Retrieved book data', {
+                bookId: book.id,
+                title: book.title,
+                hasChapterTitles: book.chapterTitles.length > 0,
+                chapterTitlesCount: book.chapterTitles.length,
+              });
+
+              // Parse the EPUB with chapter titles if provided
               logger.info('Starting EPUB parsing', {
                 localPath,
+                usingManualChapterTitles: book.chapterTitles.length > 0,
               });
               const parseStart = Date.now();
-              const paragraphs = await parseEpub(localPath);
+              const paragraphs = await parseEpub(localPath, {
+                preset: 'narrative',
+                manualChapterTitles: book.chapterTitles.length > 0 ? book.chapterTitles : undefined,
+                debug: true,
+              });
               logger.info('EPUB parsed successfully', {
                 parseDuration: Date.now() - parseStart,
                 paragraphCount: paragraphs.length,

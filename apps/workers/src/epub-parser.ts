@@ -5,22 +5,31 @@ import { parseStringPromise } from 'xml2js';
 import { JSDOM } from 'jsdom';
 import * as unzipper from 'unzipper';
 import { createLogger } from '@audibook/logger';
+import { processBookText, PresetName } from './text-processing';
+import { getChapterTitles, setChapterTitles, type BookChapterConfig } from './chapter-titles-config';
 
 const logger = createLogger('EpubParser');
 
-export async function parseEpub(epubPath: string): Promise<
-  Array<{
-    chapterNumber: number;
-    orderIndex: number;
-    content: string;
-  }>
-> {
-  const paragraphs: Array<{
-    chapterNumber: number;
-    orderIndex: number;
-    content: string;
-  }> = [];
+export { getChapterTitles, setChapterTitles, type BookChapterConfig } from './chapter-titles-config';
 
+export interface EpubParseOptions {
+  preset?: PresetName;
+  debug?: boolean;
+  manualChapterTitles?: string[];
+}
+
+export interface EpubParagraph {
+  chapterNumber: number;
+  orderIndex: number;
+  content: string;
+  chapterTitle?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export async function parseEpub(
+  epubPath: string, 
+  options: EpubParseOptions = {}
+): Promise<EpubParagraph[]> {
   try {
     logger.info(`Parsing EPUB 3.0 file: ${epubPath}`);
 
@@ -61,9 +70,9 @@ export async function parseEpub(epubPath: string): Promise<
       manifestMap.set(item.$.id, item.$.href);
     });
 
-    let orderIndex = 0;
+    const allChapterTexts: Array<{ chapterNumber: number; content: string; title?: string }> = [];
 
-    // Process each spine item
+    // Process each spine item to extract full chapter content
     for (let chapterIndex = 0; chapterIndex < spine.length; chapterIndex++) {
       const itemId = spine[chapterIndex].$.idref;
       const href = manifestMap.get(itemId);
@@ -84,11 +93,23 @@ export async function parseEpub(epubPath: string): Promise<
         // Remove script and style elements
         document.querySelectorAll('script, style').forEach((el) => el.remove());
 
-        // Extract text from various elements
+        // Extract chapter title from h1, h2, or title elements
+        let chapterTitle = '';
+        if (options.manualChapterTitles && options.manualChapterTitles.length > chapterIndex) {
+          chapterTitle = options.manualChapterTitles[chapterIndex];
+        } else {
+          const titleElement = document.querySelector('h1, h2, title');
+          if (titleElement) {
+            chapterTitle = titleElement.textContent?.trim() || '';
+          }
+        }
+
+        // Extract all text content from the chapter
         const textElements = document.querySelectorAll(
-          'p, h1, h2, h3, h4, h5, h6, div, section'
+          'p, h1, h2, h3, h4, h5, h6, div, section, span'
         );
 
+        let chapterText = '';
         textElements.forEach((element) => {
           // Collect all text nodes
           const walker = document.createTreeWalker(
@@ -106,50 +127,24 @@ export async function parseEpub(epubPath: string): Promise<
           );
 
           let node;
-          let currentText = '';
+          let elementText = '';
           while ((node = walker.nextNode())) {
-            currentText += ' ' + node.textContent?.trim();
+            elementText += ' ' + node.textContent?.trim();
           }
 
-          currentText = currentText.trim();
-
-          // Only add if has substantial content
-          if (currentText.length > 10) {
-            // Split very long texts into smaller paragraphs
-            if (currentText.length > 500) {
-              const sentences = currentText.match(/[^.!?]+[.!?]+/g) || [
-                currentText,
-              ];
-              let paragraph = '';
-
-              sentences.forEach((sentence) => {
-                paragraph += sentence + ' ';
-                if (paragraph.length > 300) {
-                  paragraphs.push({
-                    chapterNumber: chapterIndex + 1,
-                    orderIndex: orderIndex++,
-                    content: paragraph.trim(),
-                  });
-                  paragraph = '';
-                }
-              });
-
-              if (paragraph.trim().length > 10) {
-                paragraphs.push({
-                  chapterNumber: chapterIndex + 1,
-                  orderIndex: orderIndex++,
-                  content: paragraph.trim(),
-                });
-              }
-            } else {
-              paragraphs.push({
-                chapterNumber: chapterIndex + 1,
-                orderIndex: orderIndex++,
-                content: currentText,
-              });
-            }
+          elementText = elementText.trim();
+          if (elementText.length > 0) {
+            chapterText += elementText + '\n';
           }
         });
+
+        if (chapterText.trim().length > 10) {
+          allChapterTexts.push({
+            chapterNumber: chapterIndex + 1,
+            content: chapterText.trim(),
+            title: chapterTitle || `Chapter ${chapterIndex + 1}`
+          });
+        }
       } catch (error) {
         logger.error(
           `Error processing chapter ${chapterIndex} (${href}):`,
@@ -157,6 +152,46 @@ export async function parseEpub(epubPath: string): Promise<
         );
       }
     }
+
+    // Combine all chapter texts for processing
+    const fullBookText = allChapterTexts
+      .map(chapter => `${chapter.title}\n\n${chapter.content}`)
+      .join('\n\n');
+
+    // Use manual chapter titles if provided, otherwise use extracted titles
+    const chapterTitles = options.manualChapterTitles && options.manualChapterTitles.length > 0
+      ? options.manualChapterTitles
+      : allChapterTexts.map(chapter => chapter.title || '');
+
+    // Process with Hebrew TTS Splitter
+    logger.info('Processing book text with Hebrew TTS Splitter...');
+    logger.info(`Using ${options.manualChapterTitles ? 'manual' : 'extracted'} chapter titles: ${chapterTitles.length} titles`);
+    
+    const processingResult = await processBookText(fullBookText, {
+      preset: options.preset || 'narrative',
+      chapterTitles,
+      debug: options.debug || false
+    });
+
+    logger.info(`Hebrew TTS Splitter results:
+      - Total chunks: ${processingResult.totalChunks}
+      - Chapters detected: ${processingResult.chaptersDetected}
+      - Average chunk size: ${processingResult.averageChunkSize} characters
+      - Processing time: ${processingResult.processingTimeMs}ms`);
+
+    // Convert chunks to paragraph format
+    const paragraphs: EpubParagraph[] = processingResult.chunks.map((chunk, index) => ({
+      chapterNumber: chunk.chapter?.index ? chunk.chapter.index + 1 : 1,
+      orderIndex: index,
+      content: chunk.content,
+      chapterTitle: chunk.chapter?.title,
+      metadata: {
+        splitType: chunk.metadata?.splitType,
+        originalPosition: chunk.position,
+        chunkIndex: chunk.chapter?.chunkIndex,
+        ...chunk.metadata
+      }
+    }));
 
     // Clean up temp directory
     await fsPromises
@@ -166,7 +201,7 @@ export async function parseEpub(epubPath: string): Promise<
       });
 
     logger.info(
-      `Extracted ${paragraphs.length} paragraphs from ${spine.length} chapters`
+      `Extracted ${paragraphs.length} optimized paragraphs from ${spine.length} chapters using Hebrew TTS Splitter`
     );
 
     // If no paragraphs found, log a warning

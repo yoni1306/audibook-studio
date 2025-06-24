@@ -93,6 +93,17 @@ export async function getParagraph(paragraphId: string) {
   }
 }
 
+export async function getBook(bookId: string) {
+  try {
+    return await prisma.book.findUnique({
+      where: { id: bookId },
+    });
+  } catch (error) {
+    logger.error(`Failed to get book: ${error}`);
+    throw error;
+  }
+}
+
 export async function updateParagraphAudioError(paragraphId: string) {
   try {
     await prisma.paragraph.update({

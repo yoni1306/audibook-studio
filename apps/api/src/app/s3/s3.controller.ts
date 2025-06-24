@@ -15,21 +15,25 @@ export class S3Controller {
 
   @Post('presigned-upload')
   async getPresignedUploadUrl(
-    @Body() body: { filename: string; contentType: string }
+    @Body() body: { filename: string; contentType: string; chapterTitles?: string[] }
   ) {
     try {
-      const { filename, contentType } = body;
+      const { filename, contentType, chapterTitles } = body;
       const key = `raw/${Date.now()}-${filename}`;
 
       this.logger.log(`📤 [API] Generating presigned URL for ${filename}`);
+      if (chapterTitles && chapterTitles.length > 0) {
+        this.logger.log(`📚 [API] User provided ${chapterTitles.length} chapter titles`);
+      }
 
       // Get presigned URL
       const result = await this.s3Service.getPresignedUploadUrl(key, contentType);
 
-      // Create book record
+      // Create book record with chapter titles
       const book = await this.booksService.createBook({
         title: filename.replace('.epub', ''),
         s3Key: key,
+        chapterTitles: chapterTitles || [],
       });
 
       this.logger.log(`📚 [API] Created book ${book.id} for file ${key}`);

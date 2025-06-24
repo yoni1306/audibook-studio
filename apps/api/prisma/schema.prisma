@@ -15,6 +15,7 @@ model Book {
   uploadedAt      DateTime          @default(now())
   s3Key           String            @unique // S3 key for the original EPUB
   status          BookStatus        @default(PROCESSING)
+  chapterTitles   String[]          @default([]) // User-provided chapter titles
   paragraphs      Paragraph[]
   textCorrections TextCorrection[]  // All text corrections for this book
   createdAt       DateTime          @default(now())

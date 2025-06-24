@@ -15,13 +15,14 @@ export class BooksService {
     private textFixesService: TextFixesService
   ) {}
 
-  async createBook(data: { title: string; author?: string; s3Key: string }) {
+  async createBook(data: { title: string; author?: string; s3Key: string; chapterTitles?: string[] }) {
     return this.prisma.book.create({
       data: {
         title: data.title,
         author: data.author,
         s3Key: data.s3Key,
         status: BookStatus.UPLOADING,
+        chapterTitles: data.chapterTitles || [],
       },
     });
   }
