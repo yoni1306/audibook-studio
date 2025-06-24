@@ -1,7 +1,7 @@
 {
   "scripts": {
     "dev:api": "nx serve api",
-    "dev:web": "nx serve web",
+    "dev:web": "nx dev web",
     "dev:workers": "nx serve workers",
     "dev": "nx run-many --target=serve --all --parallel=3",
     "build:api": "nx build api",
