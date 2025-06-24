@@ -40,69 +40,54 @@ export class EPUBPageDetector extends BasePlugin implements ISplitDetector {
   }
 
   findSplitPoints(text: string): SplitPoint[] {
-    const points: SplitPoint[] = [];
-    
     // If we have pre-processed EPUB pages, use them
-    if (this.epubPages.length > 0) {
-      return this.findPageBasedSplitPoints();
-    }
-    
-    // Otherwise, try to detect page-like structures in the text
-    return this.findStructuralSplitPoints(text);
-  }
-
-  private findPageBasedSplitPoints(): SplitPoint[] {
-    const points: SplitPoint[] = [];
-    const priority = this.config.priority as number;
-    
-    for (let i = 0; i < this.epubPages.length - 1; i++) {
-      const page = this.epubPages[i];
-      const nextPage = this.epubPages[i + 1];
-      
-      points.push({
-        position: page.endOffset,
-        priority: priority,
-        marker: '[EPUB_PAGE_BREAK]',
+    if (this.epubPages && this.epubPages.length > 0) {
+      return this.epubPages.map(page => ({
+        position: page.startOffset,
+        priority: this.config.priority as number,
+        marker: `Page ${page.pageNumber}`,
         context: {
-          before: page.content.slice(-50),
-          after: nextPage.content.slice(0, 50)
+          before: text.slice(Math.max(0, page.startOffset - 50), page.startOffset),
+          after: text.slice(page.startOffset, page.startOffset + 50)
         },
         metadata: {
           type: 'epub_page',
           pageNumber: page.pageNumber,
           sourceFile: page.sourceFile
         }
-      });
+      }));
     }
     
-    return points;
+    return this.findStructuralSplitPoints(text);
   }
 
   private findStructuralSplitPoints(text: string): SplitPoint[] {
     // Fallback: detect HTML-like structure in text
-    const points: SplitPoint[] = [];
-    const htmlPattern = /<\/?(p|div|section|article|h[1-6])[^>]*>/gi;
-    let match: RegExpExecArray | null;
+    const $ = cheerio.load(text);
+    const blockElements = this.config.blockElements as string[];
     
-    while ((match = htmlPattern.exec(text)) !== null) {
-      if (this.isPageBreakElement(match[0])) {
-        points.push({
-          position: match.index + match[0].length,
+    return $(blockElements.join(',')).map((index, element) => {
+      const tagName = (element as any).name || (element as any).tagName;
+      const isPageBreakElement = this.isPageBreakElement(tagName);
+      
+      if (isPageBreakElement) {
+        const position = $(element).index() * 100; // Rough position estimate
+        
+        return {
+          position: position,
           priority: this.config.priority as number,
-          marker: match[0],
+          marker: tagName,
           context: {
-            before: text.slice(Math.max(0, match.index - 50), match.index),
-            after: text.slice(match.index + match[0].length, match.index + match[0].length + 50)
+            before: text.slice(Math.max(0, position - 50), position),
+            after: text.slice(position, position + 50)
           },
           metadata: {
             type: 'structural_break',
-            element: match[1]
+            element: tagName
           }
-        });
+        };
       }
-    }
-    
-    return points;
+    }).get();
   }
 
   private isPageBreakElement(element: string): boolean {

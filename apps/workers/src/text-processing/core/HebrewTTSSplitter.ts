@@ -1,6 +1,6 @@
 import { createLogger } from '@audibook/logger';
 import { ISplitDetector, IChunkProcessor, ITextSplitter } from '../interfaces';
-import { SplitPoint, TextChunk, Chapter } from '../types';
+import { SplitPoint, TextChunk } from '../types';
 
 const logger = createLogger('HebrewTTSSplitter');
 

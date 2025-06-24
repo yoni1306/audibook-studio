@@ -15,12 +15,37 @@ model Book {
   uploadedAt      DateTime          @default(now())
   s3Key           String            @unique // S3 key for the original EPUB
   status          BookStatus        @default(PROCESSING)
+  
+  // Original EPUB investigation fields
+  epubMetadata    Json?             // Store original EPUB metadata (manifest, spine, etc.)
+  processingLog   String?           @db.Text // Log of processing steps for debugging
+  
   paragraphs      Paragraph[]
+  rawChapters     RawChapter[]      // Store original chapter content for investigation
   textCorrections TextCorrection[]  // All text corrections for this book
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
   @@map("books")
+}
+
+// New model to store original EPUB chapter content for investigation
+model RawChapter {
+  id            String   @id @default(uuid())
+  bookId        String
+  book          Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  chapterNumber Int
+  title         String?  // Chapter title if available
+  href          String   // Original href from EPUB
+  rawHtml       String   @db.Text // Original HTML content from EPUB
+  extractedText String   @db.Text // Text extracted by our processor
+  pageBlocks    Json?    // Store the page blocks as JSON for analysis
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([bookId, chapterNumber])
+  @@index([bookId])
+  @@map("raw_chapters")
 }
 
 model Paragraph {
@@ -30,6 +55,11 @@ model Paragraph {
   chapterNumber Int
   orderIndex    Int         // Order within the book
   content       String      @db.Text
+  
+  // Investigation fields to track processing
+  sourceChapter String?     // Reference to which raw chapter this came from
+  sourceBlocks  Json?       // Store which page blocks contributed to this paragraph
+  
   audioS3Key    String?     // S3 key for generated audio
   audioStatus   AudioStatus @default(PENDING)
   audioDuration Float?      // Duration in seconds

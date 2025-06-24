@@ -60,7 +60,7 @@ export class ChunkSizeOptimizer extends BasePlugin implements IChunkProcessor {
       // Try to merge with next chunks
       let mergedContent = currentChunk.content;
       let mergedEnd = currentChunk.position.end;
-      let mergedMetadata = { ...currentChunk.metadata };
+      const mergedMetadata = { ...currentChunk.metadata };
       let j = i + 1;
 
       while (j < chunks.length && mergedContent.length < targetSize) {

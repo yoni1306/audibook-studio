@@ -7,25 +7,23 @@ const envFile =
 dotenv.config({ path: path.resolve(process.cwd(), envFile) });
 
 import { Worker, Job } from 'bullmq';
-import { downloadFromS3 } from './s3-client';
-import { parseEpub } from './epub-parser';
-import { parseEpubAdvanced, parseEpubWithChapterTitles } from './advanced-epub-parser';
+import { createLogger } from '@audibook/logger';
+import { parseEpubAdvanced } from './epub-parser';
+import { downloadFromS3, uploadToS3 } from './s3-client';
+import { EPUBProcessor } from './text-processing';
 import {
   saveParagraphs,
   updateBookStatus,
   getParagraph,
   updateParagraphStatus,
   updateParagraphAudio,
+  saveRawChapters,
+  updateBookMetadata,
 } from './database.service';
 import { BookStatus, AudioStatus } from '@prisma/client';
 import * as fs from 'fs/promises';
 import { getTTSService } from './tts-service';
-import { uploadToS3 } from './s3-client';
-import { createLogger } from '@audibook/logger';
-import {
-  withCorrelationId,
-  generateCorrelationId,
-} from '@audibook/correlation';
+import { withCorrelationId, generateCorrelationId } from '@audibook/correlation';
 
 // Set service name for logging
 process.env['SERVICE_NAME'] = 'audibook-worker';
@@ -95,12 +93,8 @@ const worker = new Worker(
                 localPath,
               });
               const parseStart = Date.now();
-              let paragraphs;
-              if (job.data.useAdvancedParser) {
-                paragraphs = await parseEpubAdvanced(localPath);
-              } else {
-                paragraphs = await parseEpub(localPath);
-              }
+              // Always use advanced parser for proper paragraph grouping
+              const paragraphs = await parseEpubAdvanced(localPath);
               logger.info('EPUB parsed successfully', {
                 parseDuration: Date.now() - parseStart,
                 paragraphCount: paragraphs.length,
@@ -110,6 +104,22 @@ const worker = new Worker(
 
               if (paragraphs.length === 0) {
                 throw new Error('No paragraphs extracted from EPUB');
+              }
+
+              // Store investigation data for debugging
+              try {
+                logger.info('Storing EPUB investigation data', {
+                  bookId: job.data.bookId,
+                });
+                const processor = new EPUBProcessor(localPath);
+                await processor.extractChapters(); // Process the EPUB
+                await processor.storeInvestigationData(job.data.bookId);
+                logger.info('Investigation data stored successfully');
+              } catch (error) {
+                logger.warn('Failed to store investigation data', {
+                  error: error.message,
+                });
+                // Don't fail the job if investigation data storage fails
               }
 
               // Save directly to database

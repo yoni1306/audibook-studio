@@ -5,6 +5,7 @@ import { parseStringPromise } from 'xml2js';
 import * as unzipper from 'unzipper';
 import { createLogger } from '@audibook/logger';
 import { EPUBPage, EPUBChapter, EPUBMetadata } from '../types';
+import { saveRawChapters, updateBookMetadata } from '../../database.service';
 
 const logger = createLogger('EPUBProcessor');
 
@@ -132,7 +133,7 @@ export class EPUBProcessor {
     }
   }
 
-  private async paginateChapter(
+  async paginateChapter(
     chapter: EPUBChapter,
     startOffset: number,
     startPageNumber: number
@@ -148,12 +149,18 @@ export class EPUBProcessor {
     let pageNumber = startPageNumber;
     let currentPageContent = '';
 
-    for (const block of pageBlocks) {
+    for (let i = 0; i < pageBlocks.length; i++) {
+      const block = pageBlocks[i];
       const blockText = this.extractText(block);
       
-      // Check if this block should start a new page
-      if (this.hasPageBreak(block) && currentPageContent.length > 0) {
-        // Save current page
+      // ISSUE 1 FIX: Never break on headings - always group them with following content
+      // Check if this block should start a new page (but NOT for headings)
+      const shouldBreak = this.hasPageBreak(block) && 
+                         currentPageContent.length > 200 && 
+                         !this.isHeading(block);
+
+      if (shouldBreak && currentPageContent.length > 0) {
+        // Save current page for non-heading breaks only
         pages.push({
           content: currentPageContent.trim(),
           sourceFile: chapter.href,
@@ -164,19 +171,63 @@ export class EPUBProcessor {
         currentPageContent = '';
       }
 
-      // Check if adding this block would exceed target size
-      if (currentPageContent.length + blockText.length > targetSize && currentPageContent.length > 0) {
-        // Save current page
-        pages.push({
-          content: currentPageContent.trim(),
-          sourceFile: chapter.href,
-          pageNumber: pageNumber++,
-          startOffset: currentOffset - currentPageContent.length,
-          endOffset: currentOffset,
-        });
-        currentPageContent = blockText;
+      // ISSUE 2 FIX: Handle large content blocks that exceed target size
+      if (blockText.length > targetSize) {
+        // If we have existing content, save it first
+        if (currentPageContent.length > 0) {
+          pages.push({
+            content: currentPageContent.trim(),
+            sourceFile: chapter.href,
+            pageNumber: pageNumber++,
+            startOffset: currentOffset - currentPageContent.length,
+            endOffset: currentOffset,
+          });
+          currentPageContent = '';
+        }
+
+        // Split the large block into smaller chunks at sentence boundaries
+        const chunks = this.splitLargeContent(blockText, targetSize);
+        for (let j = 0; j < chunks.length; j++) {
+          if (j === 0) {
+            // First chunk goes into current page content
+            currentPageContent = chunks[j];
+          } else {
+            // Additional chunks become separate pages
+            pages.push({
+              content: chunks[j].trim(),
+              sourceFile: chapter.href,
+              pageNumber: pageNumber++,
+              startOffset: currentOffset,
+              endOffset: currentOffset + chunks[j].length,
+            });
+          }
+        }
       } else {
-        currentPageContent += (currentPageContent ? '\n\n' : '') + blockText;
+        // Check if adding this block would exceed target size
+        if (currentPageContent.length + blockText.length > targetSize && currentPageContent.length > 0) {
+          // Save current page
+          pages.push({
+            content: currentPageContent.trim(),
+            sourceFile: chapter.href,
+            pageNumber: pageNumber++,
+            startOffset: currentOffset - currentPageContent.length,
+            endOffset: currentOffset,
+          });
+          currentPageContent = blockText;
+        } else {
+          // ISSUE 1 FIX: For headings, combine with following content without paragraph break
+          // For other content, use paragraph breaks
+          if (this.isHeading(block) && currentPageContent.length === 0) {
+            // First block is a heading - start the content
+            currentPageContent = blockText;
+          } else if (currentPageContent.length > 0 && this.isHeading(pageBlocks[i - 1])) {
+            // Previous block was a heading, combine without paragraph break
+            currentPageContent += ' ' + blockText;
+          } else {
+            // Regular content - use paragraph breaks
+            currentPageContent += (currentPageContent ? '\n\n' : '') + blockText;
+          }
+        }
       }
 
       currentOffset += blockText.length + 2; // +2 for \n\n
@@ -196,8 +247,8 @@ export class EPUBProcessor {
     return pages;
   }
 
-  private extractPageBlocks($: cheerio.CheerioAPI): cheerio.Cheerio<cheerio.Element>[] {
-    const blocks: cheerio.Cheerio<cheerio.Element>[] = [];
+  private extractPageBlocks($: cheerio.CheerioAPI): any[] {
+    const blocks: any[] = [];
     
     // Remove script and style elements
     $('script, style').remove();
@@ -213,8 +264,10 @@ export class EPUBProcessor {
         const $elem = $(element);
         const text = this.extractText($elem);
         
-        // Only include blocks with substantial text content
-        if (text.trim().length > 10) {
+        // Include headings regardless of length (they're structurally important)
+        // For other elements, only include blocks with substantial text content
+        const isHeading = this.isHeading($elem);
+        if (isHeading || text.trim().length > 10) {
           blocks.push($elem);
         }
       });
@@ -230,7 +283,7 @@ export class EPUBProcessor {
     return blocks;
   }
 
-  private hasPageBreak($elem: cheerio.Cheerio<cheerio.Element>): boolean {
+  private hasPageBreak($elem: any): boolean {
     // Check for explicit page break styles
     const style = $elem.attr('style') || '';
     if (style.includes('page-break') || style.includes('break-before') || style.includes('break-after')) {
@@ -243,19 +296,38 @@ export class EPUBProcessor {
       return true;
     }
     
-    // Check if it's a heading (often indicates new page/section)
+    // FIXED: Be much more conservative about breaking on headings
+    // Only break on major headings (h1, h2) when they are clearly major section breaks
     const tagName = $elem.prop('tagName')?.toLowerCase();
-    if (['h1', 'h2', 'h3'].includes(tagName || '')) {
-      return true;
+    if (['h1', 'h2'].includes(tagName || '')) {
+      const text = this.extractText($elem).trim();
+      // Only break if it's a very clear chapter/section heading with specific patterns
+      // AND it's substantial enough to warrant a break
+      if ((text.includes('פרק ') || text.includes('שער ') || text.includes('Chapter ') || text.includes('Part ')) && 
+          text.length > 10) {
+        return true;
+      }
     }
     
     return false;
   }
 
-  private extractText(elem: cheerio.Cheerio<cheerio.Element>): string {
-    // Remove nested block elements to avoid duplication
+  private isHeading($elem: any): boolean {
+    const tagName = $elem.prop('tagName')?.toLowerCase();
+    return ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tagName || '');
+  }
+
+  private extractText(elem: any, removeNestedBlocks = true): string {
+    // Clone the element to avoid modifying the original
     const clone = elem.clone();
-    clone.find('p, div, section, article, h1, h2, h3, h4, h5, h6').remove();
+    
+    // Convert br tags to spaces before processing
+    clone.find('br').replaceWith(' ');
+    
+    // Remove nested block elements to avoid duplication only if requested
+    if (removeNestedBlocks) {
+      clone.find('p, div, section, article, h1, h2, h3, h4, h5, h6').remove();
+    }
     
     let text = clone.text().trim();
     
@@ -270,7 +342,83 @@ export class EPUBProcessor {
     return content;
   }
 
+  async storeInvestigationData(bookId: string): Promise<void> {
+    if (!this.metadata || !this.metadata.chapters) {
+      throw new Error('EPUB must be processed first before storing investigation data');
+    }
+
+    logger.info('Storing EPUB investigation data', { bookId, chapters: this.metadata.chapters.length });
+
+    // Prepare raw chapters data
+    const rawChaptersData = [];
+    for (let i = 0; i < this.metadata.chapters.length; i++) {
+      const chapter = this.metadata.chapters[i];
+      if (!chapter.content) continue;
+
+      // Extract page blocks for this chapter
+      const $ = cheerio.load(chapter.content);
+      const pageBlocks = this.extractPageBlocks($);
+      
+      // Convert page blocks to serializable format
+      const pageBlocksData = pageBlocks.map((block, index) => ({
+        index,
+        tagName: block.prop('tagName')?.toLowerCase(),
+        text: this.extractText(block),
+        isHeading: this.isHeading(block),
+        hasPageBreak: this.hasPageBreak(block),
+        attributes: {
+          class: block.attr('class'),
+          style: block.attr('style'),
+          id: block.attr('id'),
+        },
+      }));
+
+      rawChaptersData.push({
+        chapterNumber: i + 1,
+        title: chapter.title,
+        href: chapter.href,
+        rawHtml: chapter.content,
+        extractedText: this.extractText(cheerio.load(chapter.content)('body')),
+        pageBlocks: pageBlocksData,
+      });
+    }
+
+    // Store raw chapters
+    await saveRawChapters(bookId, rawChaptersData);
+
+    // Store EPUB metadata
+    const processingLog = `EPUB processed at ${new Date().toISOString()}\n` +
+      `Total chapters: ${this.metadata.chapters.length}\n` +
+      `Target page size: ${this.config.targetPageSize}\n` +
+      `Preserve formatting: ${this.config.preserveFormatting}`;
+
+    await updateBookMetadata(bookId, this.metadata, processingLog);
+
+    logger.info('Successfully stored EPUB investigation data', { bookId });
+  }
+
   getMetadata(): EPUBMetadata | null {
     return this.metadata;
+  }
+
+  private splitLargeContent(content: string, targetSize: number): string[] {
+    const chunks: string[] = [];
+    const sentences = content.split('. ');
+
+    let currentChunk = '';
+    for (const sentence of sentences) {
+      if (currentChunk.length + sentence.length > targetSize) {
+        chunks.push(currentChunk.trim());
+        currentChunk = sentence + '. ';
+      } else {
+        currentChunk += sentence + '. ';
+      }
+    }
+
+    if (currentChunk.trim().length > 0) {
+      chunks.push(currentChunk.trim());
+    }
+
+    return chunks;
   }
 }

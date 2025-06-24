@@ -34,7 +34,7 @@ export class EPUBPageOptimizer extends BasePlugin implements IChunkProcessor {
 
     // Second pass: split large pages
     if (this.config.splitLargePages) {
-      optimizedChunks = await this.splitLargeEPUBPages(optimizedChunks, text);
+      optimizedChunks = await this.splitLargeEPUBPages(optimizedChunks);
     }
 
     logger.debug('EPUB page optimization completed', {
@@ -66,7 +66,7 @@ export class EPUBPageOptimizer extends BasePlugin implements IChunkProcessor {
       // Try to merge with next pages
       let mergedContent = currentPage.content;
       let mergedEnd = currentPage.position.end;
-      let mergedMetadata = { ...currentPage.metadata };
+      const mergedMetadata = { ...currentPage.metadata };
       let j = i + 1;
 
       while (j < pages.length && mergedContent.length < targetSize) {
@@ -121,10 +121,7 @@ export class EPUBPageOptimizer extends BasePlugin implements IChunkProcessor {
     return merged;
   }
 
-  private async splitLargeEPUBPages(
-    pages: TextChunk[],
-    fullText: string
-  ): Promise<TextChunk[]> {
+  private async splitLargeEPUBPages(pages: TextChunk[]): Promise<TextChunk[]> {
     const maxSize = this.config.maxPageSize as number;
     const targetSize = this.config.targetPageSize as number;
     const split: TextChunk[] = [];
@@ -149,16 +146,13 @@ export class EPUBPageOptimizer extends BasePlugin implements IChunkProcessor {
     return split;
   }
 
-  private splitAtNaturalBoundaries(
-    page: TextChunk,
-    targetSize: number
-  ): TextChunk[] {
+  private splitAtNaturalBoundaries(page: TextChunk, targetSize: number): TextChunk[] {
     const chunks: TextChunk[] = [];
     const content = page.content;
 
     // Split by paragraphs first
     const paragraphs = content.split(/\n\s*\n/).filter(p => p.trim().length > 0);
-    
+
     let currentChunk = '';
     let currentStart = page.position.start;
 
@@ -178,14 +172,14 @@ export class EPUBPageOptimizer extends BasePlugin implements IChunkProcessor {
             type: 'epub_page_split'
           }
         });
-        
+
         currentChunk = paragraph;
         currentStart += currentChunk.length + 2; // +2 for \n\n
       } else {
         currentChunk += (currentChunk ? '\n\n' : '') + paragraph;
       }
     }
-    
+
     // Add remaining content
     if (currentChunk) {
       chunks.push({
@@ -201,14 +195,14 @@ export class EPUBPageOptimizer extends BasePlugin implements IChunkProcessor {
         }
       });
     }
-    
+
     return chunks;
   }
 
   private isDifferentChapter(page1: TextChunk, page2: TextChunk): boolean {
     const chapter1 = page1.metadata?.chapterNumber;
     const chapter2 = page2.metadata?.chapterNumber;
-    
+
     return chapter1 !== undefined && chapter2 !== undefined && chapter1 !== chapter2;
   }
 }

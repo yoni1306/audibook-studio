@@ -122,6 +122,107 @@ export async function updateParagraphStatus(
   }
 }
 
+// New functions for EPUB investigation
+export async function saveRawChapters(
+  bookId: string,
+  chapters: Array<{
+    chapterNumber: number;
+    title?: string;
+    href: string;
+    rawHtml: string;
+    extractedText: string;
+    pageBlocks?: any;
+  }>
+) {
+  try {
+    logger.log(`Saving ${chapters.length} raw chapters for book ${bookId}`);
+
+    // Delete existing raw chapters for this book first
+    await prisma.rawChapter.deleteMany({
+      where: { bookId },
+    });
+
+    // Save new raw chapters
+    await prisma.rawChapter.createMany({
+      data: chapters.map((chapter) => ({
+        bookId,
+        chapterNumber: chapter.chapterNumber,
+        title: chapter.title,
+        href: chapter.href,
+        rawHtml: chapter.rawHtml,
+        extractedText: chapter.extractedText,
+        pageBlocks: chapter.pageBlocks,
+      })),
+    });
+
+    logger.log(`Successfully saved raw chapters for book ${bookId}`);
+  } catch (error) {
+    logger.error(`Failed to save raw chapters: ${error}`);
+    throw error;
+  }
+}
+
+export async function updateBookMetadata(
+  bookId: string,
+  epubMetadata: any,
+  processingLog?: string
+) {
+  try {
+    await prisma.book.update({
+      where: { id: bookId },
+      data: {
+        epubMetadata,
+        processingLog,
+      },
+    });
+    logger.log(`Updated book ${bookId} metadata`);
+  } catch (error) {
+    logger.error(`Failed to update book metadata: ${error}`);
+    throw error;
+  }
+}
+
+export async function updateParagraphsWithSourceInfo(
+  paragraphs: Array<{
+    id: string;
+    sourceChapter?: string;
+    sourceBlocks?: any;
+  }>
+) {
+  try {
+    logger.log(`Updating ${paragraphs.length} paragraphs with source info`);
+
+    // Update paragraphs in batches
+    const batchSize = 50;
+    for (let i = 0; i < paragraphs.length; i += batchSize) {
+      const batch = paragraphs.slice(i, i + batchSize);
+      
+      await Promise.all(
+        batch.map((p) =>
+          prisma.paragraph.update({
+            where: { id: p.id },
+            data: {
+              sourceChapter: p.sourceChapter,
+              sourceBlocks: p.sourceBlocks,
+            },
+          })
+        )
+      );
+
+      logger.log(
+        `Updated batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(
+          paragraphs.length / batchSize
+        )}`
+      );
+    }
+
+    logger.log(`Successfully updated paragraphs with source info`);
+  } catch (error) {
+    logger.error(`Failed to update paragraphs with source info: ${error}`);
+    throw error;
+  }
+}
+
 // Initialize connection
 prisma
   .$connect()
