@@ -9,6 +9,7 @@ dotenv.config({ path: path.resolve(process.cwd(), envFile) });
 import { Worker, Job } from 'bullmq';
 import { downloadFromS3 } from './s3-client';
 import { parseEpub } from './epub-parser';
+import { parseEpubAdvanced, parseEpubWithChapterTitles } from './advanced-epub-parser';
 import {
   saveParagraphs,
   updateBookStatus,
@@ -94,7 +95,12 @@ const worker = new Worker(
                 localPath,
               });
               const parseStart = Date.now();
-              const paragraphs = await parseEpub(localPath);
+              let paragraphs;
+              if (job.data.useAdvancedParser) {
+                paragraphs = await parseEpubAdvanced(localPath);
+              } else {
+                paragraphs = await parseEpub(localPath);
+              }
               logger.info('EPUB parsed successfully', {
                 parseDuration: Date.now() - parseStart,
                 paragraphCount: paragraphs.length,
