@@ -1,5 +1,6 @@
 import './global.css';
 import Link from 'next/link';
+import Navigation from './components/Navigation';
 
 export const metadata = {
   title: 'Audibook Studio',
@@ -54,20 +55,7 @@ export default function RootLayout({
             >
               🏠 Audibook Studio
             </Link>
-            <nav style={{ display: 'flex', gap: '15px' }}>
-              <Link href="/books" className="nav-link">
-                📚 Books
-              </Link>
-              <Link href="/corrections" className="nav-link">
-                📝 Corrections
-              </Link>
-              <Link href="/upload" className="nav-link">
-                📤 Upload
-              </Link>
-              <Link href="/queue" className="nav-link">
-                ⏳ Queue
-              </Link>
-            </nav>
+            <Navigation />
           </div>
         </header>
         <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 20px' }}>

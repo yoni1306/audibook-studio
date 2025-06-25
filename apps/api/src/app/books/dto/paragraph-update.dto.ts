@@ -16,7 +16,8 @@ export interface BulkFixSuggestion {
   // Include full paragraph details for the UI
   paragraphs: Array<{
     id: string;
-    chapterNumber: number;
+    pageId: string;
+    pageNumber: number;
     orderIndex: number;
     content: string;
     occurrences: number;

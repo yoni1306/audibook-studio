@@ -20,27 +20,33 @@ export default function BooksPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('http://localhost:3333/api/books')
-      .then(async (res) => {
+    const fetchBooks = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const res = await fetch('http://localhost:3333/api/books');
+        
         if (!res.ok) {
           // This is an actual server error
           const errorData = await res.json();
           throw new Error(errorData.message || 'Server error occurred');
         }
-        return res.json();
-      })
-      .then((data) => {
+        
+        const data = await res.json();
         // Handle new API response structure
         const booksArray = data.books || data; // Support both old and new format
         setBooks(Array.isArray(booksArray) ? booksArray : []);
         setError(null);
-        setLoading(false);
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error('Error:', err);
-        setError(err.message || 'Failed to load books');
+        setError(err instanceof Error ? err.message : 'Failed to load books');
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+
+    fetchBooks();
   }, []);
 
   if (loading) return <div style={{ padding: '20px' }}>Loading books...</div>;

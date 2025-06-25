@@ -15,29 +15,53 @@ model Book {
   uploadedAt      DateTime          @default(now())
   s3Key           String            @unique // S3 key for the original EPUB
   status          BookStatus        @default(PROCESSING)
-  paragraphs      Paragraph[]
+  pages           Page[]            // Pages detected from EPUB
   textCorrections TextCorrection[]  // All text corrections for this book
+  // Enhanced metadata fields
+  totalPages      Int?              // Total number of pages detected
+  totalParagraphs Int?              // Total number of paragraphs
+  processingMetadata Json?          // Additional processing metadata
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
   @@map("books")
 }
 
-model Paragraph {
+model Page {
   id            String      @id @default(uuid())
   bookId        String
   book          Book        @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  chapterNumber Int
-  orderIndex    Int         // Order within the book
-  content       String      @db.Text
-  audioS3Key    String?     // S3 key for generated audio
+  pageNumber    Int         // Sequential page number in the book
+  sourceChapter Int         // Original chapter number from EPUB (for reference)
+  startPosition Int         // Start position in original chapter content
+  endPosition   Int         // End position in original chapter content
+  pageBreakInfo Json?       // Information about how this page was detected
+  paragraphs    Paragraph[] // Paragraphs within this page
+  audioS3Key    String?     // S3 key for generated audio of entire page
   audioStatus   AudioStatus @default(PENDING)
-  audioDuration Float?      // Duration in seconds
+  audioDuration Float?      // Duration in seconds for the entire page
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([bookId, pageNumber])
+  @@index([bookId])
+  @@index([audioStatus])
+  @@map("pages")
+}
+
+model Paragraph {
+  id            String      @id @default(uuid())
+  pageId        String
+  page          Page        @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  bookId        String      // Direct reference for easier querying
+  orderIndex    Int         // Order within the page
+  content       String      @db.Text
   textCorrections TextCorrection[]   // Track all text corrections for this paragraph
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
-  @@unique([bookId, orderIndex])
+  @@unique([pageId, orderIndex])
+  @@index([pageId])
   @@index([bookId])
   @@map("paragraphs")
 }
@@ -52,6 +76,8 @@ model TextCorrection {
   correctedWord   String    // What the word was changed to (e.g., "שָׁלוֹם")
   sentenceContext String    @db.Text // The full sentence context for better matching
   fixType         String?   // Optional categorization like 'niqqud', 'pronunciation', etc.
+  ttsModel        String?   // TTS model used (e.g., "openai", "elevenlabs", "azure")
+  ttsVoice        String?   // Voice used for TTS (e.g., "alloy", "echo", "fable")
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 

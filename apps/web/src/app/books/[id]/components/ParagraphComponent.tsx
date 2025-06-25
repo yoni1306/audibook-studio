@@ -2,13 +2,23 @@
 
 export interface Paragraph {
   id: string;
-  chapterNumber: number;
+  pageNumber: number;
+  pageId: string;
   orderIndex: number;
   content: string;
   audioStatus: string;
   audioS3Key: string | null;
   audioDuration: number | null;
 }
+
+// Utility functions for text statistics
+const countWords = (text: string): number => {
+  return text.trim().split(/\s+/).filter(word => word.length > 0).length;
+};
+
+const countCharacters = (text: string): number => {
+  return text.length;
+};
 
 interface ParagraphComponentProps {
   paragraph: Paragraph;
@@ -74,7 +84,10 @@ export default function ParagraphComponent({
       >
         <span>{getAudioStatusIcon(paragraph.audioStatus)}</span>
         <span>
-          Chapter {paragraph.chapterNumber} | #{paragraph.orderIndex + 1}
+          Page {paragraph.pageNumber} | Paragraph #{paragraph.orderIndex + 1}
+        </span>
+        <span style={{ color: '#888', fontSize: '11px' }}>
+          {countWords(paragraph.content)} words | {countCharacters(paragraph.content)} chars
         </span>
       </div>
 

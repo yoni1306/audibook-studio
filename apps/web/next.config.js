@@ -12,6 +12,45 @@ const nextConfig = {
     // See: https://github.com/gregberge/svgr
     svgr: false,
   },
+  // Performance optimizations
+  experimental: {
+    // Enable faster builds in development
+    turbo: {
+      rules: {
+        '*.tsx': {
+          loaders: ['@nx/next/plugin/with-nx'],
+        },
+      },
+    },
+  },
+  // Optimize bundle splitting
+  webpack: (config, { dev, isServer }) => {
+    if (dev && !isServer) {
+      // Optimize MUI imports for faster compilation
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        '@mui/material': '@mui/material',
+        '@mui/x-data-grid': '@mui/x-data-grid',
+      };
+      
+      // Enable faster refresh
+      config.optimization = {
+        ...config.optimization,
+        splitChunks: {
+          chunks: 'all',
+          cacheGroups: {
+            mui: {
+              test: /[\\/]node_modules[\\/]@mui[\\/]/,
+              name: 'mui',
+              chunks: 'all',
+              priority: 10,
+            },
+          },
+        },
+      };
+    }
+    return config;
+  },
 };
 
 const plugins = [

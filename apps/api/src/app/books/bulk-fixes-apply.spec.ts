@@ -15,10 +15,11 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
   const mockParagraph = {
     id: mockParagraphId,
     content: 'זה טקסט עברי וגם יש כאן מילים נוספות וגם עוד טקסט.',
-    chapterNumber: 1,
+    pageId: 'page-1',
     orderIndex: 0,
     audioStatus: 'PENDING',
     audioS3Key: null,
+    page: { pageNumber: 1 }
   };
 
   const mockTransaction = {
@@ -27,6 +28,9 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       update: jest.fn(),
     },
     textFix: {
+      create: jest.fn(),
+    },
+    textCorrection: {
       create: jest.fn(),
     },
   };
@@ -100,6 +104,13 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       // Assert
       expect(mockTransaction.paragraph.findUnique).toHaveBeenCalledWith({
         where: { id: mockParagraphId },
+        include: {
+          page: {
+            select: {
+              pageNumber: true
+            }
+          }
+        }
       });
 
       expect(mockTransaction.paragraph.update).toHaveBeenCalledWith({
@@ -131,6 +142,17 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       const result = await service.applyBulkFixes(mockBookId, fixes);
 
       // Assert
+      expect(mockTransaction.paragraph.findUnique).toHaveBeenCalledWith({
+        where: { id: mockParagraphId },
+        include: {
+          page: {
+            select: {
+              pageNumber: true
+            }
+          }
+        }
+      });
+
       expect(mockTransaction.paragraph.update).not.toHaveBeenCalled();
       expect(result.totalParagraphsUpdated).toBe(0);
       expect(result.totalWordsFixed).toBe(0);
@@ -168,6 +190,17 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       const result = await service.applyBulkFixes(mockBookId, fixes);
 
       // Assert
+      expect(mockTransaction.paragraph.findUnique).toHaveBeenCalledWith({
+        where: { id: mockParagraphId },
+        include: {
+          page: {
+            select: {
+              pageNumber: true
+            }
+          }
+        }
+      });
+
       expect(mockTransaction.paragraph.update).toHaveBeenCalledWith({
         where: { id: mockParagraphId },
         data: {
@@ -204,6 +237,17 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       const result = await service.applyBulkFixes(mockBookId, fixes);
 
       // Assert
+      expect(mockTransaction.paragraph.findUnique).toHaveBeenCalledWith({
+        where: { id: mockParagraphId },
+        include: {
+          page: {
+            select: {
+              pageNumber: true
+            }
+          }
+        }
+      });
+
       expect(mockTransaction.paragraph.update).toHaveBeenCalledWith({
         where: { id: mockParagraphId },
         data: {
@@ -239,6 +283,17 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       const result = await service.applyBulkFixes(mockBookId, fixes);
 
       // Assert
+      expect(mockTransaction.paragraph.findUnique).toHaveBeenCalledWith({
+        where: { id: mockParagraphId },
+        include: {
+          page: {
+            select: {
+              pageNumber: true
+            }
+          }
+        }
+      });
+
       expect(mockTransaction.paragraph.update).toHaveBeenCalledWith({
         where: { id: mockParagraphId },
         data: {
@@ -275,6 +330,17 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       const result = await service.applyBulkFixes(mockBookId, fixes);
 
       // Assert
+      expect(mockTransaction.paragraph.findUnique).toHaveBeenCalledWith({
+        where: { id: mockParagraphId },
+        include: {
+          page: {
+            select: {
+              pageNumber: true
+            }
+          }
+        }
+      });
+
       expect(mockTransaction.paragraph.update).toHaveBeenCalledWith({
         where: { id: mockParagraphId },
         data: {
@@ -306,6 +372,17 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       const result = await service.applyBulkFixes(mockBookId, fixes);
 
       // Assert
+      expect(mockTransaction.paragraph.findUnique).toHaveBeenCalledWith({
+        where: { id: mockParagraphId },
+        include: {
+          page: {
+            select: {
+              pageNumber: true
+            }
+          }
+        }
+      });
+
       expect(mockTransaction.paragraph.update).not.toHaveBeenCalled();
       expect(result.totalWordsFixed).toBe(0);
     });
@@ -326,6 +403,17 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       const result = await service.applyBulkFixes(mockBookId, fixes);
 
       // Assert
+      expect(mockTransaction.paragraph.findUnique).toHaveBeenCalledWith({
+        where: { id: 'non-existent-id' },
+        include: {
+          page: {
+            select: {
+              pageNumber: true
+            }
+          }
+        }
+      });
+
       expect(mockTransaction.paragraph.update).not.toHaveBeenCalled();
       expect(result.totalParagraphsUpdated).toBe(0);
       expect(result.totalWordsFixed).toBe(0);
@@ -371,6 +459,17 @@ describe('BulkTextFixesService - applyBulkFixes', () => {
       const result = await service.applyBulkFixes(mockBookId, fixes);
 
       // Assert
+      expect(mockTransaction.paragraph.findUnique).toHaveBeenCalledWith({
+        where: { id: mockParagraphId },
+        include: {
+          page: {
+            select: {
+              pageNumber: true
+            }
+          }
+        }
+      });
+
       expect(mockTransaction.paragraph.update).toHaveBeenCalledWith({
         where: { id: mockParagraphId },
         data: {

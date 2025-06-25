@@ -8,7 +8,6 @@ import {
   CardContent,
   Typography,
   TextField,
-  Grid,
   FormControl,
   InputLabel,
   Select,
@@ -17,62 +16,46 @@ import {
   Chip,
   Paper,
   Alert,
+  Grid,
 } from '@mui/material';
-import { DataGrid, GridColDef, GridRowsProp, GridToolbar } from '@mui/x-data-grid';
+import { DataGrid, GridColDef, GridToolbar } from '@mui/x-data-grid';
 
 interface Correction {
   id: string;
+  paragraphId: string;
+  bookId: string;
   originalWord: string;
   correctedWord: string;
-  fixType: string | null;
   sentenceContext: string;
+  fixType: string;
+  ttsModel: string | null;
+  ttsVoice: string | null;
   createdAt: string;
   updatedAt: string;
   bookTitle: string;
-  bookId: string;
-  paragraph: {
-    id: string;
-    orderIndex: number;
-    chapterNumber: number;
+  location: {
+    pageId: string;
+    pageNumber: number;
+    paragraphId: string;
+    paragraphIndex: number;
   };
-}
-
-interface Book {
-  id: string;
-  title: string;
-}
-
-interface GetAllCorrectionsResponse {
-  corrections: Correction[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
 }
 
 export default function CorrectionsPage() {
   // State
   const [corrections, setCorrections] = useState<Correction[]>([]);
-  const [books, setBooks] = useState<Book[]>([]);
   const [fixTypes, setFixTypes] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [totalCorrections, setTotalCorrections] = useState(0);
-  const [mounted, setMounted] = useState(false);
+  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 25 });
+  const [sortModel, setSortModel] = useState([{ field: 'createdAt', sort: 'desc' as const }]);
 
-  // Filters
+  // Filter states
   const [originalWordFilter, setOriginalWordFilter] = useState('');
   const [correctedWordFilter, setCorrectedWordFilter] = useState('');
   const [fixTypeFilter, setFixTypeFilter] = useState('');
-  const [bookFilter, setBookFilter] = useState('');
-
-  // Pagination
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(25);
-
-  // Sorting
-  const [sortBy, setSortBy] = useState('createdAt');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [bookTitleFilter, setBookTitleFilter] = useState('');
 
   // Helper functions
   const detectTextDirection = (text: string): 'ltr' | 'rtl' => {
@@ -102,35 +85,26 @@ export default function CorrectionsPage() {
 
   // API Functions
   const fetchCorrections = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    
     try {
-      setLoading(true);
-      setError(null);
-
-      const params = new URLSearchParams({
-        page: (page + 1).toString(),
-        pageSize: pageSize.toString(),
-        sortBy,
-        sortOrder,
-        ...(originalWordFilter && { originalWord: originalWordFilter }),
-        ...(correctedWordFilter && { correctedWord: correctedWordFilter }),
-        ...(fixTypeFilter && { fixType: fixTypeFilter }),
-        ...(bookFilter && { bookId: bookFilter }),
-      });
-
-      const response = await fetch(`http://localhost:3333/api/books/all-corrections?${params}`, {
+      const response = await fetch('http://localhost:3333/api/books/all-corrections', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          page: page + 1,
-          pageSize,
-          sortBy,
-          sortOrder,
-          ...(originalWordFilter && { originalWord: originalWordFilter }),
-          ...(correctedWordFilter && { correctedWord: correctedWordFilter }),
-          ...(fixTypeFilter && { fixType: fixTypeFilter }),
-          ...(bookFilter && { bookId: bookFilter }),
+          page: paginationModel.page + 1, // API expects 1-based page numbers
+          pageSize: paginationModel.pageSize,
+          sortBy: sortModel[0]?.field || 'createdAt',
+          sortOrder: sortModel[0]?.sort || 'desc',
+          filters: {
+            originalWord: originalWordFilter || undefined,
+            correctedWord: correctedWordFilter || undefined,
+            fixType: fixTypeFilter || undefined,
+            bookTitle: bookTitleFilter || undefined,
+          },
         }),
       });
 
@@ -138,30 +112,24 @@ export default function CorrectionsPage() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data: GetAllCorrectionsResponse = await response.json();
-      setCorrections(data.corrections);
-      setTotalCorrections(data.total);
+      const data = await response.json();
+      
+      if (data && Array.isArray(data.corrections)) {
+        setCorrections(data.corrections);
+        setTotalCorrections(data.total || 0);
+      } else {
+        setCorrections([]);
+        setTotalCorrections(0);
+      }
     } catch (err) {
       console.error('Error fetching corrections:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch corrections');
+      setError('Failed to load corrections. Please try again.');
+      setCorrections([]);
+      setTotalCorrections(0);
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, sortBy, sortOrder, originalWordFilter, correctedWordFilter, fixTypeFilter, bookFilter]);
-
-  const fetchBooks = useCallback(async () => {
-    try {
-      const response = await fetch('http://localhost:3333/api/books');
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data = await response.json();
-      // Handle new structured response format
-      setBooks(data.books || data || []);
-    } catch (err) {
-      console.error('Error fetching books:', err);
-    }
-  }, []);
+  }, [paginationModel, sortModel, originalWordFilter, correctedWordFilter, fixTypeFilter, bookTitleFilter]);
 
   const fetchFixTypes = useCallback(async () => {
     try {
@@ -183,9 +151,7 @@ export default function CorrectionsPage() {
   // Effects
   useEffect(() => {
     // Initialize component: load static data and set mounted state - runs once on mount
-    fetchBooks();      // Load books for filter dropdown
     fetchFixTypes();   // Load fix types for filter dropdown
-    setMounted(true);  // Set mounted state to prevent hydration errors
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array since these functions never change (they have empty deps)
 
@@ -194,17 +160,12 @@ export default function CorrectionsPage() {
     fetchCorrections();
   }, [fetchCorrections]);
 
-  // Only render content when mounted
-  if (!mounted) {
-    return null;
-  }
-
   const clearFilters = () => {
     setOriginalWordFilter('');
     setCorrectedWordFilter('');
     setFixTypeFilter('');
-    setBookFilter('');
-    setPage(0);
+    setBookTitleFilter('');
+    setPaginationModel({ page: 0, pageSize: 25 });
   };
 
   const columns: GridColDef[] = [
@@ -215,21 +176,23 @@ export default function CorrectionsPage() {
       renderCell: (params) => {
         const isRTL = detectTextDirection(params.value) === 'rtl';
         return (
-          <Chip
-            label={params.value}
-            color="error"
-            variant="outlined"
-            size="small"
-            sx={{
-              direction: isRTL ? 'rtl' : 'ltr',
-              fontFamily: 'monospace',
-              '& .MuiChip-label': {
+          <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
+            <Chip
+              label={params.value}
+              color="error"
+              variant="outlined"
+              size="small"
+              sx={{
                 direction: isRTL ? 'rtl' : 'ltr',
-                textAlign: isRTL ? 'right' : 'left',
-                unicodeBidi: 'embed',
-              },
-            }}
-          />
+                fontFamily: 'monospace',
+                '& .MuiChip-label': {
+                  direction: isRTL ? 'rtl' : 'ltr',
+                  textAlign: isRTL ? 'right' : 'left',
+                  unicodeBidi: 'embed',
+                },
+              }}
+            />
+          </Box>
         );
       },
     },
@@ -240,21 +203,23 @@ export default function CorrectionsPage() {
       renderCell: (params) => {
         const isRTL = detectTextDirection(params.value) === 'rtl';
         return (
-          <Chip
-            label={params.value}
-            color="success"
-            variant="outlined"
-            size="small"
-            sx={{
-              direction: isRTL ? 'rtl' : 'ltr',
-              fontFamily: 'monospace',
-              '& .MuiChip-label': {
+          <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
+            <Chip
+              label={params.value}
+              color="success"
+              variant="outlined"
+              size="small"
+              sx={{
                 direction: isRTL ? 'rtl' : 'ltr',
-                textAlign: isRTL ? 'right' : 'left',
-                unicodeBidi: 'embed',
-              },
-            }}
-          />
+                fontFamily: 'monospace',
+                '& .MuiChip-label': {
+                  direction: isRTL ? 'rtl' : 'ltr',
+                  textAlign: isRTL ? 'right' : 'left',
+                  unicodeBidi: 'embed',
+                },
+              }}
+            />
+          </Box>
         );
       },
     },
@@ -263,81 +228,140 @@ export default function CorrectionsPage() {
       headerName: 'Fix Type',
       width: 120,
       renderCell: (params) => (
-        params.value ? (
-          <Chip
-            label={params.value}
-            color="primary"
-            variant="outlined"
-            size="small"
-          />
-        ) : (
-          <Typography variant="body2" color="text.secondary">—</Typography>
-        )
+        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
+          {params.value ? (
+            <Chip
+              label={params.value}
+              color="primary"
+              variant="outlined"
+              size="small"
+            />
+          ) : (
+            <Typography variant="body2" color="text.secondary">—</Typography>
+          )}
+        </Box>
       ),
     },
     {
       field: 'sentenceContext',
       headerName: 'Context',
-      width: 350,
+      width: 300,
       renderCell: (params) => {
         const isRTL = detectTextDirection(params.value) === 'rtl';
         return (
-          <Typography
-            variant="body2"
+          <Box
             sx={{
+              width: '100%',
+              maxHeight: '80px',
+              overflowY: 'auto',
+              padding: '8px',
               direction: isRTL ? 'rtl' : 'ltr',
               textAlign: isRTL ? 'right' : 'left',
+              fontSize: '0.875rem',
+              lineHeight: 1.4,
+              backgroundColor: '#f8f9fa',
+              borderRadius: '4px',
+              border: '1px solid #e0e0e0',
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-word',
-              overflowWrap: 'break-word',
-              lineHeight: '1.4',
-              width: '100%',
-              unicodeBidi: 'embed',
+              '&::-webkit-scrollbar': {
+                width: '4px',
+              },
+              '&::-webkit-scrollbar-track': {
+                background: '#f1f1f1',
+                borderRadius: '2px',
+              },
+              '&::-webkit-scrollbar-thumb': {
+                background: '#c1c1c1',
+                borderRadius: '2px',
+              },
+              '&::-webkit-scrollbar-thumb:hover': {
+                background: '#a8a8a8',
+              },
             }}
           >
-            {params.value}
-          </Typography>
+            {params.value || 'No context available'}
+          </Box>
         );
       },
+    },
+    {
+      field: 'location',
+      headerName: 'Location',
+      width: 120,
+      renderCell: (params) => {
+        const { pageId, pageNumber, paragraphId, paragraphIndex } = params.row.location;
+        
+        if (!pageId || !paragraphId || pageNumber === undefined || paragraphIndex === undefined) {
+          return (
+            <Typography variant="body2" color="text.secondary">
+              N/A
+            </Typography>
+          );
+        }
+        
+        return (
+          <Link
+            href={`/books/${params.row.bookId}/pages/${pageId}#paragraph-${paragraphIndex}`}
+            style={{ 
+              color: '#1976d2', 
+              textDecoration: 'none',
+            }}
+            onMouseEnter={(e) => (e.target as HTMLElement).style.textDecoration = 'underline'}
+            onMouseLeave={(e) => (e.target as HTMLElement).style.textDecoration = 'none'}
+          >
+            P.{pageNumber}¶{paragraphIndex}
+          </Link>
+        );
+      },
+    },
+    {
+      field: 'ttsModel',
+      headerName: 'TTS Model',
+      width: 120,
+      renderCell: (params) => (
+        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
+          <Typography variant="body2" color={params.value ? 'text.primary' : 'text.secondary'}>
+            {params.value || 'N/A'}
+          </Typography>
+        </Box>
+      ),
+    },
+    {
+      field: 'ttsVoice',
+      headerName: 'TTS Voice',
+      width: 120,
+      renderCell: (params) => (
+        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
+          <Typography variant="body2" color={params.value ? 'text.primary' : 'text.secondary'}>
+            {params.value || 'N/A'}
+          </Typography>
+        </Box>
+      ),
     },
     {
       field: 'bookTitle',
       headerName: 'Book',
       width: 200,
       renderCell: (params) => (
-        <Link href={`/books/${params.row.bookId}`} style={{ textDecoration: 'none' }}>
-          <Typography
-            variant="body2"
-            color="primary"
-            sx={{
-              '&:hover': { textDecoration: 'underline' },
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {truncateText(params.value, 25)}
-          </Typography>
-        </Link>
-      ),
-    },
-    {
-      field: 'location',
-      headerName: 'Location',
-      width: 150,
-      renderCell: (params) => (
-        <Link
-          href={`/books/${params.row.bookId}/chapters/${params.row.paragraph.chapterNumber}#paragraph-${params.row.paragraph.orderIndex}`}
-          style={{ textDecoration: 'none' }}
-        >
-          <Typography
-            variant="body2"
-            color="primary"
-            sx={{ '&:hover': { textDecoration: 'underline' } }}
-          >
-            Ch.{params.row.paragraph.chapterNumber}, P.{params.row.paragraph.orderIndex}
-          </Typography>
-        </Link>
+        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
+          <Link href={`/books/${params.row.bookId}`} style={{ textDecoration: 'none', width: '100%' }}>
+            <Typography
+              variant="body2"
+              color="primary"
+              sx={{
+                '&:hover': { textDecoration: 'underline' },
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                width: '100%',
+              }}
+              title={params.value}
+            >
+              {params.value}
+            </Typography>
+          </Link>
+        </Box>
       ),
     },
     {
@@ -345,47 +369,39 @@ export default function CorrectionsPage() {
       headerName: 'Date',
       width: 120,
       renderCell: (params) => (
-        <Typography variant="body2">
-          {formatDate(params.value)}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
+          <Typography variant="body2">
+            {formatDate(params.value)}
+          </Typography>
+        </Box>
       ),
     },
   ];
 
-  const rows: GridRowsProp = corrections.map((correction) => ({
+  const transformedCorrections = corrections.map((correction) => ({
+    ...correction,
     id: correction.id,
-    originalWord: correction.originalWord,
-    correctedWord: correction.correctedWord,
-    fixType: correction.fixType,
-    sentenceContext: correction.sentenceContext,
-    bookTitle: correction.bookTitle,
-    bookId: correction.bookId,
-    paragraph: correction.paragraph,
-    createdAt: correction.createdAt,
   }));
 
   return (
     <Box sx={{ maxWidth: '1400px', mx: 'auto', p: 3 }}>
       {/* Header */}
-      <Box sx={{ mb: 4 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-          <Box>
-            <Typography variant="h3" component="h1" gutterBottom sx={{ fontWeight: 'bold' }}>
-              📝 Text Corrections
-            </Typography>
-            <Typography variant="h6" color="text.secondary">
-              Manage and review all text corrections made during audiobook processing
-            </Typography>
-          </Box>
-          <Paper sx={{ p: 2, textAlign: 'center', minWidth: 150 }}>
-            <Typography variant="body2" color="text.secondary">
+      <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
+        Text Corrections
+      </Typography>
+
+      {/* Stats */}
+      <Box sx={{ mb: 3 }}>
+        <Grid container spacing={2}>
+          <Paper elevation={1} sx={{ p: 2, textAlign: 'center', minWidth: 200 }}>
+            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               Total Corrections
             </Typography>
             <Typography variant="h4" color="primary" sx={{ fontWeight: 'bold' }}>
               {totalCorrections.toLocaleString()}
             </Typography>
           </Paper>
-        </Box>
+        </Grid>
       </Box>
 
       {/* Filters */}
@@ -394,28 +410,26 @@ export default function CorrectionsPage() {
           <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             🔍 Filters & Search
           </Typography>
-          <Grid container spacing={2} sx={{ mb: 2 }}>
-            <Grid item xs={12} sm={6} md={3}>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 2 }}>
+            <Box sx={{ minWidth: 200, flex: '1 1 auto' }}>
               <TextField
                 fullWidth
                 label="Original Word"
                 value={originalWordFilter}
                 onChange={(e) => setOriginalWordFilter(e.target.value)}
-                placeholder="Search original word..."
                 size="small"
               />
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            </Box>
+            <Box sx={{ minWidth: 200, flex: '1 1 auto' }}>
               <TextField
                 fullWidth
                 label="Corrected Word"
                 value={correctedWordFilter}
                 onChange={(e) => setCorrectedWordFilter(e.target.value)}
-                placeholder="Search corrected word..."
                 size="small"
               />
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            </Box>
+            <Box sx={{ minWidth: 200, flex: '1 1 auto' }}>
               <FormControl fullWidth size="small">
                 <InputLabel>Fix Type</InputLabel>
                 <Select
@@ -423,33 +437,23 @@ export default function CorrectionsPage() {
                   label="Fix Type"
                   onChange={(e) => setFixTypeFilter(e.target.value)}
                 >
-                  <MenuItem value="">All Types</MenuItem>
+                  <MenuItem value="">All</MenuItem>
                   {fixTypes.map((type) => (
-                    <MenuItem key={type} value={type}>
-                      {type}
-                    </MenuItem>
+                    <MenuItem key={type} value={type}>{type}</MenuItem>
                   ))}
                 </Select>
               </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Book</InputLabel>
-                <Select
-                  value={bookFilter}
-                  label="Book"
-                  onChange={(e) => setBookFilter(e.target.value)}
-                >
-                  <MenuItem value="">All Books</MenuItem>
-                  {Array.isArray(books) && books.map((book) => (
-                    <MenuItem key={book.id} value={book.id}>
-                      {book.title}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-          </Grid>
+            </Box>
+            <Box sx={{ minWidth: 200, flex: '1 1 auto' }}>
+              <TextField
+                fullWidth
+                label="Book Title"
+                value={bookTitleFilter}
+                onChange={(e) => setBookTitleFilter(e.target.value)}
+                size="small"
+              />
+            </Box>
+          </Box>
           <Button
             variant="outlined"
             onClick={clearFilters}
@@ -469,54 +473,69 @@ export default function CorrectionsPage() {
         <Card>
           <CardContent sx={{ p: 0 }}>
             <Box sx={{ height: 600, width: '100%' }}>
-              {mounted && (
-                <DataGrid
-                  rows={rows}
-                  columns={columns}
-                  loading={loading}
-                  pagination
-                  paginationMode="server"
-                  rowCount={totalCorrections}
-                  page={page}
-                  pageSize={pageSize}
-                  onPageChange={(newPage) => setPage(newPage)}
-                  onPageSizeChange={(newPageSize) => setPageSize(newPageSize)}
-                  pageSizeOptions={[10, 25, 50, 100]}
-                  sortingMode="server"
-                  onSortModelChange={(model) => {
-                    if (model.length > 0) {
-                      setSortBy(model[0].field);
-                      setSortOrder(model[0].sort || 'desc');
-                    }
-                  }}
-                  sortModel={[{ field: sortBy, sort: sortOrder }]}
-                  slots={{ toolbar: GridToolbar }}
-                  slotProps={{
-                    toolbar: {
-                      showQuickFilter: true,
-                      quickFilterProps: { debounceMs: 500 },
+              <DataGrid
+                rows={transformedCorrections}
+                columns={columns}
+                loading={loading}
+                paginationModel={paginationModel}
+                onPaginationModelChange={setPaginationModel}
+                rowCount={totalCorrections}
+                paginationMode="server"
+                sortingMode="server"
+                sortModel={sortModel}
+                onSortModelChange={setSortModel}
+                pageSizeOptions={[10, 25, 50, 100]}
+                slots={{ toolbar: GridToolbar }}
+                slotProps={{
+                  toolbar: {
+                    showQuickFilter: true,
+                    quickFilterProps: { debounceMs: 500 },
+                  },
+                }}
+                getRowHeight={() => 100}
+                sx={{
+                  '& .MuiDataGrid-cell': {
+                    padding: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    minHeight: '52px',
+                    borderBottom: '1px solid rgba(224, 224, 224, 1)',
+                  },
+                  '& .MuiDataGrid-row': {
+                    '&:hover': {
+                      backgroundColor: 'rgba(25, 118, 210, 0.04)',
                     },
-                  }}
-                  rowHeight={100}
-                  sx={{
-                    '& .MuiDataGrid-cell': {
-                      borderBottom: '1px solid #f0f0f0',
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word',
-                      overflowWrap: 'break-word',
-                      padding: '12px 8px',
-                      lineHeight: '1.4',
+                    '&.Mui-selected': {
+                      backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                      '&:hover': {
+                        backgroundColor: 'rgba(25, 118, 210, 0.12)',
+                      },
                     },
-                    '& .MuiDataGrid-row:hover': {
-                      backgroundColor: '#f8f9fa',
-                    },
-                  }}
-                  disableRowSelectionOnClick
-                  autoHeight={false}
-                />
-              )}
+                  },
+                  '& .MuiDataGrid-columnHeaders': {
+                    backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                    borderBottom: '2px solid rgba(224, 224, 224, 1)',
+                  },
+                  '& .MuiDataGrid-columnHeader': {
+                    fontWeight: 600,
+                  },
+                  '& .MuiDataGrid-virtualScroller': {
+                    backgroundColor: 'white',
+                  },
+                  '& .MuiDataGrid-footerContainer': {
+                    borderTop: '2px solid rgba(224, 224, 224, 1)',
+                    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+                  },
+                  '& .MuiDataGrid-cell--withRenderer': {
+                    padding: 0,
+                  },
+                  '& .MuiDataGrid-cell--withRenderer > div': {
+                    width: '100%',
+                    height: '100%',
+                    padding: '12px',
+                  },
+                }}
+              />
             </Box>
           </CardContent>
         </Card>

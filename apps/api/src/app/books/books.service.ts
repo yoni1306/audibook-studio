@@ -66,11 +66,13 @@ export class BooksService {
       where: { id: paragraphId },
       data: {
         content,
-        audioStatus: 'PENDING',
-        audioS3Key: null,
       },
       include: {
-        book: true,
+        page: {
+          include: {
+            book: true,
+          },
+        },
         textCorrections: {
           orderBy: { createdAt: 'desc' },
           take: 10, // Include recent fixes
@@ -82,7 +84,7 @@ export class BooksService {
     if (generateAudio) {
       await this.queueService.addAudioGenerationJob({
         paragraphId: paragraph.id,
-        bookId: paragraph.bookId,
+        bookId: paragraph.page.bookId,
         content: paragraph.content,
       });
       
@@ -101,37 +103,44 @@ export class BooksService {
     } as UpdateParagraphResponseDto;
   }
 
-  async createParagraphs(
-    bookId: string,
-    paragraphs: Array<{
-      chapterNumber: number;
-      orderIndex: number;
-      content: string;
-    }>
-  ) {
-    return this.prisma.paragraph.createMany({
-      data: paragraphs.map((p) => ({
-        ...p,
-        bookId,
-      })),
-    });
-  }
-
   async getBook(id: string) {
-    return this.prisma.book.findUnique({
+    const book = await this.prisma.book.findUnique({
       where: { id },
       include: {
-        paragraphs: {
-          orderBy: { orderIndex: 'asc' },
+        pages: {
+          orderBy: { pageNumber: 'asc' },
           include: {
-            textCorrections: {
-              orderBy: { createdAt: 'desc' },
-              take: 5, // Include recent fixes for each paragraph
+            paragraphs: {
+              orderBy: { orderIndex: 'asc' },
+              include: {
+                textCorrections: {
+                  orderBy: { createdAt: 'desc' },
+                  take: 5, // Include recent fixes for each paragraph
+                },
+              },
             },
           },
         },
       },
     });
+
+    if (!book) {
+      return null;
+    }
+
+    // Flatten paragraphs from all pages for frontend compatibility
+    const paragraphs = book.pages.flatMap(page => 
+      page.paragraphs.map(paragraph => ({
+        ...paragraph,
+        pageNumber: page.pageNumber,
+        pageId: page.id,
+      }))
+    );
+
+    return {
+      ...book,
+      paragraphs, // Add flattened paragraphs array
+    };
   }
 
   async getAllBooks() {
@@ -140,7 +149,7 @@ export class BooksService {
       include: {
         _count: {
           select: { 
-            paragraphs: true,
+            pages: true,
           },
         },
       },
@@ -151,7 +160,11 @@ export class BooksService {
     return this.prisma.paragraph.findUnique({
       where: { id: paragraphId },
       include: {
-        book: true,
+        page: {
+          include: {
+            book: true,
+          },
+        },
         textCorrections: {
           orderBy: { createdAt: 'desc' },
         },
@@ -181,14 +194,16 @@ export class BooksService {
   async getAllWordFixes() {
     const fixes = await this.prisma.textCorrection.findMany({
       include: {
+        book: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
         paragraph: {
-          include: {
-            book: {
-              select: {
-                id: true,
-                title: true,
-              },
-            },
+          select: {
+            id: true,
+            content: true,
           },
         },
       },
@@ -206,7 +221,7 @@ export class BooksService {
       paragraph: {
         id: fix.paragraph.id,
         content: fix.paragraph.content,
-        book: fix.paragraph.book,
+        book: fix.book,
       },
     }));
   }

@@ -1,135 +1,163 @@
-import { PrismaClient, BookStatus, AudioStatus } from '@prisma/client';
-import { Logger } from '@nestjs/common';
+import { PrismaClient, BookStatus } from '@prisma/client';
+import { createLogger } from '@audibook/logger';
 
-const logger = new Logger('DatabaseService');
+const logger = createLogger('DatabaseService');
 
 const prisma = new PrismaClient({
   log: ['error', 'warn'],
 });
 
+export interface ParagraphData {
+  pageId: string;
+  orderIndex: number;
+  content: string;
+}
+
+/**
+ * Save paragraphs in batches to avoid overwhelming the database
+ */
 export async function saveParagraphs(
   bookId: string,
-  paragraphs: Array<{
-    chapterNumber: number;
-    orderIndex: number;
-    content: string;
-  }>
-) {
+  paragraphs: ParagraphData[]
+): Promise<void> {
+  if (paragraphs.length === 0) {
+    logger.warn(`No paragraphs to save for book ${bookId}`);
+    return;
+  }
+
   try {
-    logger.log(`Saving ${paragraphs.length} paragraphs for book ${bookId}`);
+    logger.info(`Saving ${paragraphs.length} paragraphs for book ${bookId}`);
 
     // Save in batches to avoid overwhelming the database
     const batchSize = 100;
+    const totalBatches = Math.ceil(paragraphs.length / batchSize);
+
     for (let i = 0; i < paragraphs.length; i += batchSize) {
       const batch = paragraphs.slice(i, i + batchSize);
+      const currentBatch = Math.floor(i / batchSize) + 1;
+
+      logger.debug(`Processing batch ${currentBatch}/${totalBatches} (${batch.length} paragraphs)`);
 
       await prisma.paragraph.createMany({
         data: batch.map((p) => ({
           bookId,
-          chapterNumber: p.chapterNumber,
+          pageId: p.pageId,
           orderIndex: p.orderIndex,
           content: p.content,
-          audioStatus: AudioStatus.PENDING,
         })),
+        skipDuplicates: true, // Skip duplicates to handle retries
       });
 
-      logger.log(
-        `Saved batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(
-          paragraphs.length / batchSize
-        )}`
-      );
+      logger.debug(`Completed batch ${currentBatch}/${totalBatches}`);
     }
 
-    logger.log(`Successfully saved all paragraphs for book ${bookId}`);
+    logger.info(`Successfully saved all paragraphs for book ${bookId}`);
   } catch (error) {
-    logger.error(`Failed to save paragraphs: ${error}`);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Failed to save paragraphs for book ${bookId}: ${errorMessage}`, {
+      bookId,
+      paragraphCount: paragraphs.length,
+      error: errorMessage
+    });
     throw error;
   }
 }
 
-export async function updateBookStatus(bookId: string, status: BookStatus) {
+/**
+ * Update book status with proper error handling
+ */
+export async function updateBookStatus(
+  bookId: string, 
+  status: BookStatus
+): Promise<void> {
   try {
+    logger.debug(`Updating book ${bookId} status to ${status}`);
+
     await prisma.book.update({
       where: { id: bookId },
       data: { status },
     });
-    logger.log(`Updated book ${bookId} status to ${status}`);
-  } catch (error) {
-    logger.error(`Failed to update book status: ${error}`);
-    throw error;
-  }
-}
 
-export async function updateParagraphAudio(
-  paragraphId: string,
-  audioS3Key: string,
-  audioDuration: number
-) {
-  try {
-    await prisma.paragraph.update({
-      where: { id: paragraphId },
-      data: {
-        audioS3Key,
-        audioDuration,
-        audioStatus: AudioStatus.READY,
-      },
+    logger.info(`Updated book ${bookId} status to ${status}`);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Failed to update book status for ${bookId}: ${errorMessage}`, {
+      bookId,
+      targetStatus: status,
+      error: errorMessage
     });
-    logger.log(`Updated paragraph ${paragraphId} with audio`);
-  } catch (error) {
-    logger.error(`Failed to update paragraph audio: ${error}`);
     throw error;
   }
 }
 
+/**
+ * Get paragraph with related page and book data
+ */
 export async function getParagraph(paragraphId: string) {
   try {
-    return await prisma.paragraph.findUnique({
+    logger.debug(`Fetching paragraph ${paragraphId}`);
+
+    const paragraph = await prisma.paragraph.findUnique({
       where: { id: paragraphId },
-      include: { book: true },
+      include: { 
+        page: {
+          include: {
+            book: true
+          }
+        }
+      },
     });
+
+    if (!paragraph) {
+      logger.warn(`Paragraph ${paragraphId} not found`);
+      return null;
+    }
+
+    logger.debug(`Successfully fetched paragraph ${paragraphId}`);
+    return paragraph;
   } catch (error) {
-    logger.error(`Failed to get paragraph: ${error}`);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Failed to get paragraph ${paragraphId}: ${errorMessage}`, {
+      paragraphId,
+      error: errorMessage
+    });
     throw error;
   }
 }
 
-export async function updateParagraphAudioError(paragraphId: string) {
+/**
+ * Initialize database connection with proper error handling
+ */
+async function initializeDatabase(): Promise<void> {
   try {
-    await prisma.paragraph.update({
-      where: { id: paragraphId },
-      data: {
-        audioStatus: AudioStatus.ERROR,
-      },
-    });
+    await prisma.$connect();
+    logger.info('Successfully connected to database');
   } catch (error) {
-    logger.error(`Failed to update paragraph audio error: ${error}`);
-  }
-}
-
-export async function updateParagraphStatus(
-  paragraphId: string,
-  status: AudioStatus
-) {
-  try {
-    await prisma.paragraph.update({
-      where: { id: paragraphId },
-      data: { audioStatus: status },
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Failed to connect to database: ${errorMessage}`, {
+      error: errorMessage
     });
-    logger.log(`Updated paragraph ${paragraphId} audio status to ${status}`);
-  } catch (error) {
-    logger.error(`Failed to update paragraph status: ${error}`);
     throw error;
   }
 }
 
 // Initialize connection
-prisma
-  .$connect()
-  .then(() => {
-    logger.log('Connected to database');
-  })
-  .catch((error) => {
-    logger.error('Failed to connect to database:', error);
-  });
+initializeDatabase().catch((error) => {
+  logger.error('Database initialization failed:', error);
+  process.exit(1);
+});
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  logger.info('Received SIGINT, closing database connection...');
+  await prisma.$disconnect();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  logger.info('Received SIGTERM, closing database connection...');
+  await prisma.$disconnect();
+  process.exit(0);
+});
 
 export { prisma };
