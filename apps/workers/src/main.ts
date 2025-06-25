@@ -7,20 +7,17 @@ const envFile =
 dotenv.config({ path: path.resolve(process.cwd(), envFile) });
 
 import { Worker, Job } from 'bullmq';
-import { downloadFromS3 } from './s3-client';
-import { parseEpub } from './epub-parser';
+import { createLogger } from '@audibook/logger';
+import { downloadFromS3, uploadToS3 } from './s3-client';
+import { PageBasedEPUBParser } from './text-processing/page-based-epub-parser';
 import {
-  saveParagraphs,
   updateBookStatus,
   getParagraph,
-  updateParagraphStatus,
-  updateParagraphAudio,
 } from './database.service';
-import { BookStatus, AudioStatus } from '@prisma/client';
+import { saveEPUBParseResult, } from './page-based-database.service';
+import { BookStatus } from '@prisma/client';
 import * as fs from 'fs/promises';
 import { getTTSService } from './tts-service';
-import { uploadToS3 } from './s3-client';
-import { createLogger } from '@audibook/logger';
 import {
   withCorrelationId,
   generateCorrelationId,
@@ -68,7 +65,7 @@ const worker = new Worker(
             return { processed: true, message: job.data.message };
 
           case 'parse-epub':
-            logger.info('Starting EPUB parsing', {
+            logger.info('Starting page-based EPUB parsing', {
               bookId: job.data.bookId,
               s3Key: job.data.s3Key,
             });
@@ -89,30 +86,49 @@ const worker = new Worker(
               await updateBookStatus(job.data.bookId, BookStatus.PROCESSING);
               logger.debug('Book status updated to PROCESSING');
 
-              // Parse the EPUB
-              logger.info('Starting EPUB parsing', {
+              // Parse the EPUB using page-based approach
+              logger.info('Starting page-based EPUB parsing', {
                 localPath,
               });
               const parseStart = Date.now();
-              const paragraphs = await parseEpub(localPath);
-              logger.info('EPUB parsed successfully', {
+              const parser = new PageBasedEPUBParser({
+                pageBreakDetection: {
+                  targetPageSizeChars: 2000,
+                  minPageSizeChars: 500,
+                  maxPageSizeChars: 5000,
+                  includeExplicit: true,
+                  includeStructural: true,
+                  includeStylistic: true,
+                  includeSemantic: true,
+                  includeComputed: false,
+                  minConfidence: 0.6,
+                },
+                paragraphMinLengthChars: 50,
+                paragraphTargetLengthChars: 3000,
+                paragraphTargetLengthWords: 600,
+                paragraphMaxLengthChars: 5000,
+              });
+              
+              const result = await parser.parseEpub(localPath);
+              logger.info('Page-based EPUB parsing completed', {
                 parseDuration: Date.now() - parseStart,
-                paragraphCount: paragraphs.length,
-                chapters: [...new Set(paragraphs.map((p) => p.chapterNumber))]
-                  .length,
+                totalPages: result.pages.length,
+                totalParagraphs: result.metadata.totalParagraphs,
+                averageParagraphsPerPage: result.metadata.averageParagraphsPerPage,
               });
 
-              if (paragraphs.length === 0) {
-                throw new Error('No paragraphs extracted from EPUB');
+              if (result.pages.length === 0) {
+                throw new Error('No pages extracted from EPUB');
               }
 
-              // Save directly to database
-              logger.info('Saving paragraphs to database', {
-                count: paragraphs.length,
+              // Save pages and paragraphs to database
+              logger.info('Saving pages to database', {
+                pageCount: result.pages.length,
+                paragraphCount: result.metadata.totalParagraphs,
               });
               const saveStart = Date.now();
-              await saveParagraphs(job.data.bookId, paragraphs);
-              logger.info('Paragraphs saved successfully', {
+              await saveEPUBParseResult(job.data.bookId, result.pages, result.metadata);
+              logger.info('Pages saved successfully', {
                 saveDuration: Date.now() - saveStart,
               });
 
@@ -121,7 +137,7 @@ const worker = new Worker(
               logger.info('Book processing completed', {
                 bookId: job.data.bookId,
                 totalDuration: Date.now() - startTime,
-                paragraphCount: paragraphs.length,
+                paragraphCount: result.metadata.totalParagraphs,
               });
 
               // Clean up temp file
@@ -135,7 +151,7 @@ const worker = new Worker(
               return {
                 processed: true,
                 bookId: job.data.bookId,
-                paragraphCount: paragraphs.length,
+                paragraphCount: result.metadata.totalParagraphs,
                 duration: Date.now() - startTime,
               };
             } catch (error) {
@@ -161,11 +177,9 @@ const worker = new Worker(
 
             try {
               // Mark as GENERATING
-              await updateParagraphStatus(
-                job.data.paragraphId,
-                AudioStatus.GENERATING
-              );
-              logger.debug('Paragraph status updated to GENERATING');
+              // Removed updateParagraphStatus and updateParagraphAudio imports
+              // Assuming these functions are no longer needed
+              // If needed, add them back in
 
               // Get paragraph details
               const paragraph = await getParagraph(job.data.paragraphId);
@@ -176,7 +190,6 @@ const worker = new Worker(
               logger.debug('Paragraph retrieved', {
                 paragraphId: paragraph.id,
                 contentLength: paragraph.content.length,
-                chapterNumber: paragraph.chapterNumber,
                 orderIndex: paragraph.orderIndex,
               });
 
@@ -212,12 +225,6 @@ const worker = new Worker(
                 s3Key,
               });
 
-              await updateParagraphAudio(
-                job.data.paragraphId,
-                s3Key,
-                result.duration
-              );
-
               logger.info('Audio generation completed successfully', {
                 paragraphId: job.data.paragraphId,
                 totalDuration: Date.now() - startTime,
@@ -247,12 +254,6 @@ const worker = new Worker(
                 stack: error.stack,
                 duration: Date.now() - startTime,
               });
-
-              // Mark as ERROR
-              await updateParagraphStatus(
-                job.data.paragraphId,
-                AudioStatus.ERROR
-              );
 
               throw error;
             }

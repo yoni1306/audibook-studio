@@ -209,7 +209,7 @@ export class BooksController {
       }
 
       const suggestions = await this.bulkTextFixesService.getSuggestedFixes(
-        paragraph.book?.id || '',
+        paragraph.page?.book?.id || '',
         paragraph.content
       );
       
@@ -254,7 +254,7 @@ export class BooksController {
     }
 
     return this.bulkTextFixesService.findSimilarFixesInBook(
-      paragraph.book?.id || '',
+      paragraph.page?.book?.id || '',
       paragraphId,
       body.wordChanges
     );
@@ -265,11 +265,11 @@ export class BooksController {
   async streamAudio(@Param('paragraphId') paragraphId: string) {
     const paragraph = await this.booksService.getParagraph(paragraphId);
     
-    if (!paragraph || !paragraph.audioS3Key) {
+    if (!paragraph || !paragraph.page?.audioS3Key) {
       throw new NotFoundException('Audio not found');
     }
     
-    const url = await this.s3Service.getSignedUrl(paragraph.audioS3Key);
+    const url = await this.s3Service.getSignedUrl(paragraph.page.audioS3Key);
     
     return { url };
   }

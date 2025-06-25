@@ -19,11 +19,15 @@ async function testSentenceContext() {
       select: {
         id: true,
         content: true,
-        chapterNumber: true,
         orderIndex: true,
-        book: {
+        page: {
           select: {
-            title: true,
+            pageNumber: true,
+            book: {
+              select: {
+                title: true,
+              },
+            },
           },
         },
       },
@@ -34,7 +38,7 @@ async function testSentenceContext() {
       return;
     }
 
-    console.log(`📖 Testing with paragraph from "${paragraph.book.title}" (Chapter ${paragraph.chapterNumber}, Order ${paragraph.orderIndex})`);
+    console.log(`📖 Testing with paragraph from "${paragraph.page.book.title}" (Page ${paragraph.page.pageNumber}, Order ${paragraph.orderIndex})`);
     console.log(`📝 Content preview: "${paragraph.content.substring(0, 100)}..."`);
 
     // Extract a word from the content to test with

@@ -2,8 +2,44 @@ import winston from 'winston';
 import LokiTransport from 'winston-loki';
 import { getCurrentCorrelationId } from '@audibook/correlation';
 
-// Use a single SERVICE_NAME environment variable
-const service = process.env['SERVICE_NAME'] || 'unknown';
+// Detect service name from environment or process context
+function getServiceName(): string {
+  // First try explicit SERVICE_NAME (set in workers main.ts)
+  if (process.env['SERVICE_NAME']) {
+    return process.env['SERVICE_NAME'];
+  }
+  
+  // For workers, check WORKER_SERVICE_NAME
+  if (process.env['WORKER_SERVICE_NAME']) {
+    return process.env['WORKER_SERVICE_NAME'];
+  }
+  
+  // Check if we're in the workers context by checking the process title or cwd
+  const processTitle = process.title || '';
+  const cwd = process.cwd();
+  
+  // If running from workers directory or process mentions workers
+  if (cwd.includes('/workers') || processTitle.includes('workers') || 
+      process.argv.some(arg => arg.includes('workers'))) {
+    return 'audibook-worker';
+  }
+  
+  // Check for API context
+  if (cwd.includes('/api') || processTitle.includes('api') ||
+      process.argv.some(arg => arg.includes('api'))) {
+    return process.env['API_SERVICE_NAME'] || 'audibook-api';
+  }
+  
+  // Check for web context  
+  if (cwd.includes('/web') || processTitle.includes('web') ||
+      process.argv.some(arg => arg.includes('web'))) {
+    return process.env['WEB_SERVICE_NAME'] || 'audibook-web';
+  }
+  
+  return 'unknown';
+}
+
+const service = getServiceName();
 
 // Debug: Check environment variables
 console.log('Logger initialization:', {

@@ -145,6 +145,14 @@ export class CorrectionWithContextDto {
   @IsString()
   fixType?: string;
 
+  @IsOptional()
+  @IsString()
+  ttsModel?: string;
+
+  @IsOptional()
+  @IsString()
+  ttsVoice?: string;
+
   @IsDate()
   @Type(() => Date)
   createdAt: Date;
@@ -159,10 +167,11 @@ export class CorrectionWithContextDto {
   @IsString()
   bookId: string;
 
-  paragraph: {
-    id: string;
-    orderIndex: number;
-    chapterNumber: number;
+  location: {
+    pageId: string;
+    pageNumber: number;
+    paragraphId: string;
+    paragraphIndex: number;
   };
 }
 

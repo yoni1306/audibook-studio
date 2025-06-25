@@ -18,16 +18,12 @@ export class TextFixesService {
    * Analyzes differences between original and fixed text to identify word changes
    */
   analyzeTextChanges(originalText: string, correctedText: string): WordChange[] {
-    const changes: WordChange[] = [];
-    
     // Split texts into words while preserving position information
     const originalWords = this.tokenizeText(originalText);
     const correctedWords = this.tokenizeText(correctedText);
     
     // Use a simple diff algorithm to find changes
-    const diffResult = this.computeWordDiff(originalWords, correctedWords);
-    
-    return diffResult;
+    return this.computeWordDiff(originalWords, correctedWords);
   }
 
   /**
@@ -35,7 +31,9 @@ export class TextFixesService {
    */
   private tokenizeText(text: string): Array<{ word: string; position: number }> {
     const words: Array<{ word: string; position: number }> = [];
-    const wordRegex = /\S+/g;
+    // Match words by excluding common punctuation marks
+    // This approach is more reliable and avoids Unicode range issues
+    const wordRegex = /[^\s.,;:!?()[\]{}""''`~@#$%^&*+=|\\/<>]+/g;
     let match;
     let position = 0;
 
@@ -189,7 +187,9 @@ export class TextFixesService {
     paragraphId: string,
     originalText: string,
     correctedText: string,
-    changes: WordChange[]
+    changes: WordChange[],
+    ttsModel?: string,
+    ttsVoice?: string
   ): Promise<void> {
     if (changes.length === 0) {
       this.logger.log(`No text changes detected for paragraph ${paragraphId}`);
@@ -216,6 +216,8 @@ export class TextFixesService {
           correctedWord: change.correctedWord,
           sentenceContext: this.extractSentenceContext(originalText, change.originalWord),
           fixType: change.fixType || 'manual',
+          ttsModel,
+          ttsVoice,
         }));
 
         await tx.textCorrection.createMany({
@@ -258,13 +260,17 @@ export class TextFixesService {
       include: {
         paragraph: {
           select: {
-            chapterNumber: true,
             orderIndex: true,
+            page: {
+              select: {
+                pageNumber: true,
+              },
+            },
           },
         },
       },
       orderBy: [
-        { paragraph: { chapterNumber: 'asc' } },
+        { paragraph: { page: { pageNumber: 'asc' } } },
         { paragraph: { orderIndex: 'asc' } },
         { createdAt: 'desc' },
       ],

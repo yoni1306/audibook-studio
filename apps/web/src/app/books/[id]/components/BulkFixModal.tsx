@@ -10,7 +10,8 @@ export interface BulkFixSuggestion {
   count: number;
   paragraphs: Array<{
     id: string;
-    chapterNumber: number;
+    pageId: string;
+    pageNumber: number;
     orderIndex: number;
     content: string;
     occurrences: number;
@@ -232,7 +233,8 @@ export default function BulkFixModal({
             let allParagraphIds: string[] = [];
             let paragraphsToRender: Array<{
               id: string;
-              chapterNumber: number;
+              pageId: string;
+              pageNumber: number;
               orderIndex: number;
               content: string;
               occurrences: number;
@@ -326,8 +328,8 @@ export default function BulkFixModal({
                               color: '#6b7280',
                               marginBottom: '4px'
                             }}>
-                              <span>Ch. {paragraph.chapterNumber}</span>
-                              <span>Para. {paragraph.orderIndex + 1}</span>
+                              <span>Page {paragraph.pageNumber}</span>
+                              <span>Paragraph #{paragraph.orderIndex + 1}</span>
                               <span style={{
                                 backgroundColor: '#fef3c7',
                                 color: '#d97706',

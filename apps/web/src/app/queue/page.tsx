@@ -62,9 +62,19 @@ export default function QueuePage() {
         `http://localhost:3333/api/queue/jobs/${status}`
       );
       const data = await response.json();
-      setJobs(data);
+      
+      // Handle different response structures
+      if (Array.isArray(data)) {
+        setJobs(data);
+      } else if (data && Array.isArray(data.jobs)) {
+        setJobs(data.jobs);
+      } else {
+        console.warn('Unexpected API response structure:', data);
+        setJobs([]);
+      }
     } catch (error) {
       console.error('Error fetching jobs:', error);
+      setJobs([]);
     }
   };
 
@@ -194,7 +204,7 @@ export default function QueuePage() {
       </div>
 
       <div>
-        {jobs.length === 0 ? (
+        {!Array.isArray(jobs) || jobs.length === 0 ? (
           <p>No {selectedStatus} jobs</p>
         ) : (
           jobs.map((job) => (

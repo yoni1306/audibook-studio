@@ -27,84 +27,90 @@ describe('BulkTextFixesService', () => {
     {
       id: 'paragraph-1',
       bookId: mockBookId,
-      chapterNumber: 1,
+      pageId: 'page-1',
       orderIndex: 0,
       content: 'זוהי פסקה עם המילה וגם בתוכה.',
       audioS3Key: null,
       audioStatus: AudioStatus.PENDING,
       audioDuration: null,
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
+      page: { pageNumber: 1 }
     },
     
     // Case 2: Original word is a substring of another word - should NOT be matched
     {
       id: 'paragraph-2',
       bookId: mockBookId,
-      chapterNumber: 1,
+      pageId: 'page-1',
       orderIndex: 1,
       content: 'המילה אותיות היא חלק ממילה אחרת ולא אמורה להיות מוחלפת.',
       audioS3Key: null,
       audioStatus: AudioStatus.PENDING,
       audioDuration: null,
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
+      page: { pageNumber: 1 }
     },
     
     // Case 3: Word with hyphen - should be treated as a separate word
     {
       id: 'paragraph-3',
       bookId: mockBookId,
-      chapterNumber: 1,
+      pageId: 'page-1',
       orderIndex: 2,
       content: 'המילה אות-יד מחוברת עם מקף ולא אמורה להיות מוחלפת.',
       audioS3Key: null,
       audioStatus: AudioStatus.PENDING,
       audioDuration: null,
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
+      page: { pageNumber: 1 }
     },
     
     // Case 4: Paragraph with all three words to be fixed
     {
       id: 'paragraph-4',
       bookId: mockBookId,
-      chapterNumber: 1,
-      orderIndex: 3,
+      pageId: 'page-2',
+      orderIndex: 0,
       content: 'הנשיא של ארה״ב אמר כי כל אות וגם כל מילה חשובים.',
       audioS3Key: null,
       audioStatus: AudioStatus.PENDING,
       audioDuration: null,
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
+      page: { pageNumber: 2 }
     },
     
     // Case 5: Paragraph with the word אות by itself
     {
       id: 'paragraph-5',
       bookId: mockBookId,
-      chapterNumber: 2,
-      orderIndex: 0,
+      pageId: 'page-2',
+      orderIndex: 1,
       content: 'כל אות במילה הזו חשובה מאוד.',
       audioS3Key: null,
       audioStatus: AudioStatus.PENDING,
       audioDuration: null,
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
+      page: { pageNumber: 2 }
     },
     
     // Case 6: Paragraph with the abbreviation ארה״ב
     {
       id: 'paragraph-6',
       bookId: mockBookId,
-      chapterNumber: 2,
-      orderIndex: 1,
+      pageId: 'page-3',
+      orderIndex: 0,
       content: 'נשיא ארה״ב ביקר בישראל החודש.',
       audioS3Key: null,
       audioStatus: AudioStatus.PENDING,
       audioDuration: null,
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
+      page: { pageNumber: 3 }
     }
   ];
 
@@ -168,8 +174,15 @@ describe('BulkTextFixesService', () => {
           bookId: mockBookId,
           id: { not: mockParagraphId }
         },
+        include: {
+          page: {
+            select: {
+              pageNumber: true
+            }
+          }
+        },
         orderBy: [
-          { chapterNumber: 'asc' },
+          { page: { pageNumber: 'asc' } },
           { orderIndex: 'asc' }
         ]
       });
@@ -228,14 +241,15 @@ describe('BulkTextFixesService', () => {
         {
           id: 'paragraph-special',
           bookId: mockBookId,
-          chapterNumber: 1,
+          pageId: 'page-1',
           orderIndex: 0,
           content: 'זוהי פסקה עם המילה שלום! עם סימן קריאה.',
           audioS3Key: null,
           audioStatus: AudioStatus.PENDING,
           audioDuration: null,
           createdAt: new Date(),
-          updatedAt: new Date()
+          updatedAt: new Date(),
+          page: { pageNumber: 1 }
         }
       ];
 
@@ -279,14 +293,15 @@ describe('BulkTextFixesService', () => {
         {
           id: 'paragraph-niqqud-1',
           bookId: mockBookId,
-          chapterNumber: 1,
+          pageId: 'page-1',
           orderIndex: 0,
           content: 'זוהי אות מיוחדת.',
           audioS3Key: null,
           audioStatus: AudioStatus.PENDING,
           audioDuration: null,
           createdAt: new Date(),
-          updatedAt: new Date()
+          updatedAt: new Date(),
+          page: { pageNumber: 1 }
         }
       ];
 
@@ -322,26 +337,28 @@ describe('BulkTextFixesService', () => {
         {
           id: 'paragraph-boundary-1',
           bookId: mockBookId,
-          chapterNumber: 1,
+          pageId: 'page-1',
           orderIndex: 0,
           content: 'זהו ספר טוב מאוד.',
           audioS3Key: null,
           audioStatus: AudioStatus.PENDING,
           audioDuration: null,
           createdAt: new Date(),
-          updatedAt: new Date()
+          updatedAt: new Date(),
+          page: { pageNumber: 1 }
         },
         {
           id: 'paragraph-boundary-2',
           bookId: mockBookId,
-          chapterNumber: 1,
+          pageId: 'page-1',
           orderIndex: 1,
           content: 'זהו ספריה גדולה מאוד.',
           audioS3Key: null,
           audioStatus: AudioStatus.PENDING,
           audioDuration: null,
           createdAt: new Date(),
-          updatedAt: new Date()
+          updatedAt: new Date(),
+          page: { pageNumber: 1 }
         }
       ];
 
@@ -496,26 +513,28 @@ describe('BulkTextFixesService', () => {
       {
         id: 'p1',
         bookId: mockBookId,
-        chapterNumber: 1,
+        pageId: 'page-1',
         orderIndex: 0,
         content: 'זהו ספר טוב מאוד.',
         audioS3Key: null,
         audioStatus: AudioStatus.PENDING,
         audioDuration: null,
         createdAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        page: { pageNumber: 1 }
       },
       {
         id: 'p2',
         bookId: mockBookId,
-        chapterNumber: 1,
+        pageId: 'page-1',
         orderIndex: 1,
         content: 'זהו ספריה גדולה מאוד.',
         audioS3Key: null,
         audioStatus: AudioStatus.PENDING,
         audioDuration: null,
         createdAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        page: { pageNumber: 1 }
       }
     ];
     

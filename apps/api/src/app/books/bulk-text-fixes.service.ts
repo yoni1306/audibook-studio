@@ -7,7 +7,8 @@ export interface BulkFixSuggestion {
   correctedWord: string;
   paragraphs: Array<{
     id: string;
-    chapterNumber: number;
+    pageId: string;
+    pageNumber: number;
     orderIndex: number;
     content: string;
     occurrences: number;
@@ -21,7 +22,8 @@ export interface BulkFixResult {
   totalWordsFixed: number;
   updatedParagraphs: Array<{
     paragraphId: string;
-    chapterNumber: number;
+    pageId: string;
+    pageNumber: number;
     orderIndex: number;
     wordsFixed: number;
     changes: WordChange[];
@@ -72,8 +74,15 @@ export class BulkTextFixesService {
         bookId,
         id: { not: excludeParagraphId },
       },
+      include: {
+        page: {
+          select: {
+            pageNumber: true,
+          },
+        },
+      },
       orderBy: [
-        { chapterNumber: 'asc' },
+        { page: { pageNumber: 'asc' } },
         { orderIndex: 'asc' },
       ],
     });
@@ -86,9 +95,10 @@ export class BulkTextFixesService {
     wordChanges: WordChange[], 
     bookParagraphs: Array<{ 
       id: string; 
-      chapterNumber: number; 
+      pageId: string; 
       orderIndex: number; 
-      content: string 
+      content: string; 
+      page: { pageNumber: number }
     }>
   ): Promise<BulkFixSuggestion[]> {
     const suggestions: BulkFixSuggestion[] = [];
@@ -117,7 +127,7 @@ export class BulkTextFixesService {
    */
   private findMatchingParagraphs(
     change: WordChange,
-    bookParagraphs: Array<{ id: string; chapterNumber: number; orderIndex: number; content: string }>
+    bookParagraphs: Array<{ id: string; pageId: string; orderIndex: number; content: string; page: { pageNumber: number } }>
   ) {
     const matchingParagraphs = [];
 
@@ -131,7 +141,8 @@ export class BulkTextFixesService {
 
         matchingParagraphs.push({
           id: paragraph.id,
-          chapterNumber: paragraph.chapterNumber,
+          pageId: paragraph.pageId,
+          pageNumber: paragraph.page.pageNumber,
           orderIndex: paragraph.orderIndex,
           content: paragraph.content,
           occurrences: matches.length,
@@ -177,7 +188,9 @@ export class BulkTextFixesService {
       originalWord: string;
       correctedWord: string;
       paragraphIds: string[];
-    }>
+    }>,
+    ttsModel?: string,
+    ttsVoice?: string
   ): Promise<BulkFixResult> {
     this.logger.log(`🔧 Starting bulk fixes application for book: ${bookId}`);
     this.logger.log(`📊 Received ${fixes.length} fixes: ${JSON.stringify(fixes.map(f => `"${f.originalWord}" → "${f.correctedWord}" (${f.paragraphIds.length} paragraphs)`))}`);
@@ -219,6 +232,13 @@ export class BulkTextFixesService {
           // Find the paragraph
           const paragraph = await tx.paragraph.findUnique({
             where: { id: paragraphId },
+            include: {
+              page: {
+                select: {
+                  pageNumber: true,
+                },
+              },
+            },
           });
 
           if (!paragraph) {
@@ -298,6 +318,8 @@ export class BulkTextFixesService {
                     correctedWord: change.correctedWord,
                     sentenceContext: this.extractSentenceContext(updatedContent, change.originalWord, change.position),
                     fixType: change.fixType,
+                    ttsModel,
+                    ttsVoice,
                   },
                 });
                 this.logger.log(`📝 Recorded correction: "${change.originalWord}" → "${change.correctedWord}" in paragraph ${paragraphId}`);
@@ -309,7 +331,8 @@ export class BulkTextFixesService {
 
             updatedParagraphs.push({
               paragraphId,
-              chapterNumber: paragraph.chapterNumber,
+              pageId: paragraph.pageId,
+              pageNumber: paragraph.page.pageNumber,
               orderIndex: paragraph.orderIndex,
               wordsFixed: wordsFixedInParagraph,
               changes,

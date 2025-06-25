@@ -274,10 +274,11 @@ export class CorrectionLearningService {
   } = {}): Promise<{
     corrections: (TextCorrection & {
       bookTitle: string;
-      paragraph: {
-        id: string;
-        orderIndex: number;
-        chapterNumber: number;
+      location: {
+        pageId: string;
+        pageNumber: number;
+        paragraphId: string;
+        paragraphIndex: number;
       };
     })[];
     total: number;
@@ -340,7 +341,10 @@ export class CorrectionLearningService {
         paragraph: {
           id: string;
           orderIndex: number;
-          chapterNumber: number;
+          pageId: string;
+          page: {
+            pageNumber: number;
+          };
         };
       })[] = await this.prisma.textCorrection.findMany({
         where,
@@ -351,10 +355,12 @@ export class CorrectionLearningService {
             },
           },
           paragraph: {
-            select: {
-              id: true,
-              orderIndex: true,
-              chapterNumber: true,
+            include: {
+              page: {
+                select: {
+                  pageNumber: true,
+                },
+              },
             },
           },
         },
@@ -374,10 +380,17 @@ export class CorrectionLearningService {
         correctedWord: correction.correctedWord,
         sentenceContext: correction.sentenceContext,
         fixType: correction.fixType,
+        ttsModel: correction.ttsModel,
+        ttsVoice: correction.ttsVoice,
         createdAt: correction.createdAt,
         updatedAt: correction.updatedAt,
         bookTitle: correction.book.title,
-        paragraph: correction.paragraph,
+        location: {
+          pageId: correction.paragraph.pageId,
+          pageNumber: correction.paragraph.page.pageNumber,
+          paragraphId: correction.paragraph.id,
+          paragraphIndex: correction.paragraph.orderIndex,
+        },
       }));
 
       const totalPages = Math.ceil(total / limit);
