@@ -8,7 +8,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
 import { 
   RecordCorrectionDto, 
-  GetAllCorrectionsDto
+  GetAllCorrectionsDto,
+  CorrectionWithContextDto
 } from './dto/correction-learning.dto';
 
 describe('BooksController', () => {
@@ -108,7 +109,7 @@ describe('BooksController', () => {
   });
 
   describe('recordCorrection', () => {
-    const mockCorrectionDto: RecordCorrectionDto = {
+    const mockCorrectionRequest: RecordCorrectionDto = {
       originalWord: 'שגיאה',
       correctedWord: 'תיקון',
       contextSentence: 'זה המשפט עם שגיאה בתוכו.',
@@ -116,29 +117,30 @@ describe('BooksController', () => {
       fixType: 'substitution',
     };
 
-    const mockCreatedCorrection = {
+    const mockCreatedCorrection: CorrectionWithContextDto = {
       id: 'test-correction-id',
-      paragraphId: 'test-paragraph-id',
       originalWord: 'שגיאה',
       correctedWord: 'תיקון',
       sentenceContext: 'זה המשפט עם שגיאה בתוכו.',
+      location: {
+        paragraphId: 'test-paragraph-id',
+        paragraphIndex: 1,
+        pageNumber: 1,
+        pageId: 'test-page-id',
+      },
       fixType: 'substitution',
       createdAt: new Date('2025-06-22T10:00:00.000Z'),
       updatedAt: new Date('2025-06-22T10:00:00.000Z'),
+      bookTitle: 'Test Book',
+      bookId: 'test-book-id',
     };
 
     it('should record correction with complete input data', async () => {
       mockCorrectionLearningService.recordCorrection.mockResolvedValue(mockCreatedCorrection);
 
-      const result = await controller.recordCorrection(mockCorrectionDto);
+      const result = await controller.recordCorrection(mockCorrectionRequest);
 
-      expect(mockCorrectionLearningService.recordCorrection).toHaveBeenCalledWith({
-        originalWord: 'שגיאה',
-        correctedWord: 'תיקון',
-        contextSentence: 'זה המשפט עם שגיאה בתוכו.',
-        paragraphId: 'test-paragraph-id',
-        fixType: 'substitution',
-      });
+      expect(mockCorrectionLearningService.recordCorrection).toHaveBeenCalledWith(mockCorrectionRequest);
 
       expect(result).toEqual({
         id: 'test-correction-id',
@@ -150,14 +152,14 @@ describe('BooksController', () => {
     });
 
     it('should handle correction without fixType', async () => {
-      const dtoWithoutFixType = {
+      const dtoWithoutFixType: RecordCorrectionDto = {
         originalWord: 'שגיאה',
         correctedWord: 'תיקון',
         contextSentence: 'זה המשפט עם שגיאה בתוכו.',
         paragraphId: 'test-paragraph-id',
       };
 
-      const correctionWithoutFixType = {
+      const correctionWithoutFixType: CorrectionWithContextDto = {
         ...mockCreatedCorrection,
         fixType: undefined,
       };
@@ -166,13 +168,7 @@ describe('BooksController', () => {
 
       const result = await controller.recordCorrection(dtoWithoutFixType);
 
-      expect(mockCorrectionLearningService.recordCorrection).toHaveBeenCalledWith({
-        originalWord: 'שגיאה',
-        correctedWord: 'תיקון',
-        contextSentence: 'זה המשפט עם שגיאה בתוכו.',
-        paragraphId: 'test-paragraph-id',
-        fixType: undefined,
-      });
+      expect(mockCorrectionLearningService.recordCorrection).toHaveBeenCalledWith(dtoWithoutFixType);
 
       expect(result.id).toBe('test-correction-id');
       expect(result.message).toBe('Correction recorded successfully');
@@ -182,7 +178,7 @@ describe('BooksController', () => {
     it('should validate required fields are passed through', async () => {
       mockCorrectionLearningService.recordCorrection.mockResolvedValue(mockCreatedCorrection);
 
-      await controller.recordCorrection(mockCorrectionDto);
+      await controller.recordCorrection(mockCorrectionRequest);
 
       const serviceCall = mockCorrectionLearningService.recordCorrection.mock.calls[0][0];
       
@@ -197,12 +193,12 @@ describe('BooksController', () => {
     });
 
     it('should handle empty context sentence', async () => {
-      const dtoWithEmptyContext = {
-        ...mockCorrectionDto,
+      const dtoWithEmptyContext: RecordCorrectionDto = {
+        ...mockCorrectionRequest,
         contextSentence: '',
       };
 
-      const correctionWithEmptyContext = {
+      const correctionWithEmptyContext: CorrectionWithContextDto = {
         ...mockCreatedCorrection,
         sentenceContext: '',
       };
@@ -211,11 +207,7 @@ describe('BooksController', () => {
 
       const result = await controller.recordCorrection(dtoWithEmptyContext);
 
-      expect(mockCorrectionLearningService.recordCorrection).toHaveBeenCalledWith(
-        expect.objectContaining({
-          contextSentence: '',
-        })
-      );
+      expect(mockCorrectionLearningService.recordCorrection).toHaveBeenCalledWith(dtoWithEmptyContext);
 
       expect(result.id).toBe('test-correction-id');
       expect(result.timestamp).toBeDefined();
@@ -225,7 +217,7 @@ describe('BooksController', () => {
       const mockError = new Error('Database connection failed');
       mockCorrectionLearningService.recordCorrection.mockRejectedValue(mockError);
 
-      await expect(controller.recordCorrection(mockCorrectionDto)).rejects.toThrow(
+      await expect(controller.recordCorrection(mockCorrectionRequest)).rejects.toThrow(
         'Failed to record correction'
       );
     });
@@ -233,7 +225,7 @@ describe('BooksController', () => {
     it('should return proper response structure', async () => {
       mockCorrectionLearningService.recordCorrection.mockResolvedValue(mockCreatedCorrection);
 
-      const result = await controller.recordCorrection(mockCorrectionDto);
+      const result = await controller.recordCorrection(mockCorrectionRequest);
 
       // Verify response structure matches RecordCorrectionResponseDto
       expect(result).toHaveProperty('id');
@@ -254,41 +246,33 @@ describe('BooksController', () => {
       corrections: [
         {
           id: 'correction-1',
-          paragraphId: 'paragraph-1',
           originalWord: 'שגיאה1',
           correctedWord: 'תיקון1',
           sentenceContext: 'משפט עם שגיאה1.',
           fixType: 'substitution',
           createdAt: new Date('2025-06-22T10:00:00.000Z'),
           updatedAt: new Date('2025-06-22T10:00:00.000Z'),
-          paragraph: {
-            id: 'paragraph-1',
-            orderIndex: 1,
-            chapterNumber: 1,
-            book: {
-              id: 'book-1',
-              title: 'Test Book',
-            },
+          location: {
+            paragraphId: 'paragraph-1',
+            paragraphIndex: 1,
+            pageNumber: 1,
+            pageId: 'page-1',
           },
           bookTitle: 'Test Book',
         },
         {
           id: 'correction-2',
-          paragraphId: 'paragraph-2',
           originalWord: 'שגיאה2',
           correctedWord: 'תיקון2',
           sentenceContext: 'משפט עם שגיאה2.',
           fixType: 'insertion',
           createdAt: new Date('2025-06-22T11:00:00.000Z'),
           updatedAt: new Date('2025-06-22T11:00:00.000Z'),
-          paragraph: {
-            id: 'paragraph-2',
-            orderIndex: 2,
-            chapterNumber: 2,
-            book: {
-              id: 'book-1',
-              title: 'Test Book',
-            },
+          location: {
+            paragraphId: 'paragraph-2',
+            paragraphIndex: 2,
+            pageNumber: 2,
+            pageId: 'page-2',
           },
           bookTitle: 'Test Book',
         },
@@ -370,7 +354,6 @@ describe('BooksController', () => {
       // Verify each correction has complete structure
       result.corrections.forEach(correction => {
         expect(correction).toHaveProperty('id');
-        expect(correction).toHaveProperty('paragraphId');
         expect(correction).toHaveProperty('originalWord');
         expect(correction).toHaveProperty('correctedWord');
         expect(correction).toHaveProperty('sentenceContext');
@@ -378,10 +361,11 @@ describe('BooksController', () => {
         expect(correction).toHaveProperty('createdAt');
         expect(correction).toHaveProperty('updatedAt');
         
-        // Verify paragraph structure includes chapterNumber
-        expect(correction.paragraph).toHaveProperty('id');
-        expect(correction.paragraph).toHaveProperty('orderIndex');
-        expect(correction.paragraph).toHaveProperty('chapterNumber');
+        // Verify location structure includes paragraphIndex
+        expect(correction.location).toHaveProperty('paragraphId');
+        expect(correction.location).toHaveProperty('paragraphIndex');
+        expect(correction.location).toHaveProperty('pageNumber');
+        expect(correction.location).toHaveProperty('pageId');
         expect(correction).toHaveProperty('bookTitle');
         expect(typeof correction.bookTitle).toBe('string');
       });
@@ -455,7 +439,6 @@ describe('BooksController', () => {
           corrections: [
             {
               id: 'correction-1',
-              paragraphId: 'paragraph-1',
               bookId: 'book-1',
               originalWord: 'שגיאה',
               correctedWord: 'תיקון',
@@ -464,11 +447,11 @@ describe('BooksController', () => {
               createdAt: new Date('2025-06-22T10:00:00.000Z'),
               updatedAt: new Date('2025-06-22T10:00:00.000Z'),
               bookTitle: 'ספר בדיקה',
-              paragraph: {
-                id: 'paragraph-1',
-                orderIndex: 5,
-                pageId: 'page-1',
+              location: {
+                paragraphId: 'paragraph-1',
+                paragraphIndex: 5,
                 pageNumber: 3,
+                pageId: 'page-1',
               },
             },
           ],
@@ -493,7 +476,6 @@ describe('BooksController', () => {
         const correction = result.corrections[0];
         expect(correction).toEqual({
           id: 'correction-1',
-          paragraphId: 'paragraph-1',
           bookId: 'book-1',
           originalWord: 'שגיאה',
           correctedWord: 'תיקון',
@@ -502,17 +484,17 @@ describe('BooksController', () => {
           createdAt: new Date('2025-06-22T10:00:00.000Z'),
           updatedAt: new Date('2025-06-22T10:00:00.000Z'),
           bookTitle: 'ספר בדיקה', // Direct property, not nested
-          paragraph: {
-            id: 'paragraph-1',
-            orderIndex: 5,
-            pageId: 'page-1',
+          location: {
+            paragraphId: 'paragraph-1',
+            paragraphIndex: 5,
             pageNumber: 3, // Flattened from nested structure
+            pageId: 'page-1',
           },
         });
 
         // Ensure no nested book object exists
         expect(correction).not.toHaveProperty('book');
-        expect(correction.paragraph).not.toHaveProperty('page');
+        expect(correction.location).not.toHaveProperty('page');
       });
 
       it('should preserve all required fields for frontend table display', async () => {
@@ -520,7 +502,6 @@ describe('BooksController', () => {
           corrections: [
             {
               id: 'correction-1',
-              paragraphId: 'paragraph-1',
               bookId: 'book-1',
               originalWord: 'שגיאה',
               correctedWord: 'תיקון',
@@ -529,11 +510,11 @@ describe('BooksController', () => {
               createdAt: new Date('2025-06-22T10:00:00.000Z'),
               updatedAt: new Date('2025-06-22T10:00:00.000Z'),
               bookTitle: 'ספר בדיקה',
-              paragraph: {
-                id: 'paragraph-1',
-                orderIndex: 5,
-                pageId: 'page-1',
+              location: {
+                paragraphId: 'paragraph-1',
+                paragraphIndex: 5,
                 pageNumber: 3,
+                pageId: 'page-1',
               },
             },
           ],
@@ -556,15 +537,15 @@ describe('BooksController', () => {
         expect(correction).toHaveProperty('createdAt');
 
         // Fields required for location column and navigation
-        expect(correction.paragraph).toHaveProperty('pageId'); // For page navigation
-        expect(correction.paragraph).toHaveProperty('pageNumber'); // For display
-        expect(correction.paragraph).toHaveProperty('orderIndex'); // For paragraph navigation
+        expect(correction.location).toHaveProperty('pageId'); // For page navigation
+        expect(correction.location).toHaveProperty('pageNumber'); // For display
+        expect(correction.location).toHaveProperty('paragraphIndex'); // For paragraph navigation
 
         // Verify data types match frontend expectations
         expect(typeof correction.bookTitle).toBe('string');
         expect(typeof correction.bookId).toBe('string');
-        expect(typeof correction.paragraph.pageNumber).toBe('number');
-        expect(typeof correction.paragraph.orderIndex).toBe('number');
+        expect(typeof correction.location.pageNumber).toBe('number');
+        expect(typeof correction.location.paragraphIndex).toBe('number');
       });
 
       it('should handle null fixType correctly for frontend display', async () => {
@@ -572,7 +553,6 @@ describe('BooksController', () => {
           corrections: [
             {
               id: 'correction-1',
-              paragraphId: 'paragraph-1',
               bookId: 'book-1',
               originalWord: 'שגיאה',
               correctedWord: 'תיקון',
@@ -581,11 +561,11 @@ describe('BooksController', () => {
               createdAt: new Date('2025-06-22T10:00:00.000Z'),
               updatedAt: new Date('2025-06-22T10:00:00.000Z'),
               bookTitle: 'ספר בדיקה',
-              paragraph: {
-                id: 'paragraph-1',
-                orderIndex: 5,
-                pageId: 'page-1',
+              location: {
+                paragraphId: 'paragraph-1',
+                paragraphIndex: 5,
                 pageNumber: 3,
+                pageId: 'page-1',
               },
             },
           ],
@@ -608,7 +588,6 @@ describe('BooksController', () => {
           corrections: [
             {
               id: 'correction-1',
-              paragraphId: 'paragraph-1',
               bookId: 'book-1',
               originalWord: 'שגיאה',
               correctedWord: 'תיקון',
@@ -617,11 +596,15 @@ describe('BooksController', () => {
               createdAt: new Date('2025-06-22T10:00:00.000Z'),
               updatedAt: new Date('2025-06-22T10:00:00.000Z'),
               bookTitle: 'ספר ראשון',
-              paragraph: { id: 'paragraph-1', orderIndex: 1, pageId: 'page-1', pageNumber: 1 },
+              location: {
+                paragraphId: 'paragraph-1',
+                paragraphIndex: 1,
+                pageNumber: 1,
+                pageId: 'page-1',
+              },
             },
             {
               id: 'correction-2',
-              paragraphId: 'paragraph-2',
               bookId: 'book-2',
               originalWord: 'טעות',
               correctedWord: 'נכון',
@@ -630,7 +613,12 @@ describe('BooksController', () => {
               createdAt: new Date('2025-06-22T11:00:00.000Z'),
               updatedAt: new Date('2025-06-22T11:00:00.000Z'),
               bookTitle: 'ספר שני',
-              paragraph: { id: 'paragraph-2', orderIndex: 3, pageId: 'page-2', pageNumber: 2 },
+              location: {
+                paragraphId: 'paragraph-2',
+                paragraphIndex: 3,
+                pageNumber: 2,
+                pageId: 'page-2',
+              },
             },
           ],
           total: 2,
@@ -650,20 +638,20 @@ describe('BooksController', () => {
           const expectedPageNumbers = [1, 2];
 
           expect(correction.bookTitle).toBe(expectedBookTitles[index]);
-          expect(correction.paragraph.pageNumber).toBe(expectedPageNumbers[index]);
+          expect(correction.location.pageNumber).toBe(expectedPageNumbers[index]);
 
           // Verify structure consistency
           expect(correction).toHaveProperty('id');
           expect(correction).toHaveProperty('bookId');
           expect(correction).toHaveProperty('bookTitle');
-          expect(correction.paragraph).toHaveProperty('id');
-          expect(correction.paragraph).toHaveProperty('orderIndex');
-          expect(correction.paragraph).toHaveProperty('pageId');
-          expect(correction.paragraph).toHaveProperty('pageNumber');
+          expect(correction.location).toHaveProperty('paragraphId');
+          expect(correction.location).toHaveProperty('paragraphIndex');
+          expect(correction.location).toHaveProperty('pageNumber');
+          expect(correction.location).toHaveProperty('pageId');
 
           // Ensure no nested objects
           expect(correction).not.toHaveProperty('book');
-          expect(correction.paragraph).not.toHaveProperty('page');
+          expect(correction.location).not.toHaveProperty('page');
         });
       });
 

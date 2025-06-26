@@ -14,8 +14,11 @@ import {
   updateBookStatus,
   getParagraph,
 } from './database.service';
-import { saveEPUBParseResult, } from './page-based-database.service';
-import { BookStatus } from '@prisma/client';
+import { 
+  saveEPUBParseResult, 
+  updateParagraphAudioStatus 
+} from './page-based-database.service';
+import { BookStatus, AudioStatus } from '@prisma/client';
 import * as fs from 'fs/promises';
 import { getTTSService } from './tts-service';
 import {
@@ -103,10 +106,8 @@ const worker = new Worker(
                   includeComputed: false,
                   minConfidence: 0.6,
                 },
-                paragraphMinLengthChars: 50,
-                paragraphTargetLengthChars: 3000,
-                paragraphTargetLengthWords: 600,
-                paragraphMaxLengthChars: 5000,
+                paragraphTargetLengthChars: 750,
+                paragraphTargetLengthWords: 150,
               });
               
               const result = await parser.parseEpub(localPath);
@@ -177,9 +178,10 @@ const worker = new Worker(
 
             try {
               // Mark as GENERATING
-              // Removed updateParagraphStatus and updateParagraphAudio imports
-              // Assuming these functions are no longer needed
-              // If needed, add them back in
+              await updateParagraphAudioStatus(
+                job.data.paragraphId,
+                AudioStatus.GENERATING
+              );
 
               // Get paragraph details
               const paragraph = await getParagraph(job.data.paragraphId);
@@ -225,6 +227,23 @@ const worker = new Worker(
                 s3Key,
               });
 
+              // Update database with audio information
+              logger.debug('Updating paragraph audio status in database', {
+                paragraphId: job.data.paragraphId,
+                s3Key,
+                duration: result.duration,
+              });
+              await updateParagraphAudioStatus(
+                job.data.paragraphId,
+                AudioStatus.READY,
+                s3Key,
+                result.duration
+              );
+              logger.info('Database updated with audio information', {
+                paragraphId: job.data.paragraphId,
+                audioStatus: AudioStatus.READY,
+              });
+
               logger.info('Audio generation completed successfully', {
                 paragraphId: job.data.paragraphId,
                 totalDuration: Date.now() - startTime,
@@ -254,6 +273,12 @@ const worker = new Worker(
                 stack: error.stack,
                 duration: Date.now() - startTime,
               });
+
+              // Mark as ERROR
+              await updateParagraphAudioStatus(
+                job.data.paragraphId,
+                AudioStatus.ERROR
+              );
 
               throw error;
             }

@@ -27,6 +27,7 @@ describe('BooksService', () => {
     bookId: 'book-1',
     audioS3Key: null,
     audioStatus: 'PENDING',
+    audioDuration: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -36,6 +37,9 @@ describe('BooksService', () => {
     content: 'Test paragraph content',
     orderIndex: 1,
     pageId: 'page-1',
+    audioS3Key: 'audio/book-1/page-1.mp3',
+    audioStatus: 'READY',
+    audioDuration: 3.5,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -346,6 +350,14 @@ describe('BooksService', () => {
           },
         ],
       });
+      
+      // Verify pages are also included
+      expect(result?.pages).toHaveLength(1);
+      expect(result?.pages[0]).toMatchObject({
+        audioS3Key: null,
+        audioStatus: 'PENDING',
+        audioDuration: null,
+      });
     });
 
     it('should return null when book not found', async () => {
@@ -401,6 +413,136 @@ describe('BooksService', () => {
         pageId: 'page-2',
         textCorrections: [],
       });
+    });
+
+    it('should return book with audio metadata in flattened paragraphs', async () => {
+      const bookWithPages = {
+        ...mockBook,
+        pages: [
+          {
+            ...mockPage,
+            paragraphs: [
+              {
+                ...mockParagraph,
+                textCorrections: [mockTextCorrection],
+              },
+            ],
+          },
+        ],
+      };
+
+      (prismaService.book.findUnique as jest.Mock).mockResolvedValue(bookWithPages);
+
+      const result = await service.getBook('book-1');
+
+      expect(result).toMatchObject({
+        ...mockBook,
+        paragraphs: [
+          {
+            ...mockParagraph,
+            pageNumber: mockPage.pageNumber,
+            pageId: mockPage.id,
+            audioStatus: 'READY',
+            audioS3Key: 'audio/book-1/page-1.mp3',
+            audioDuration: 3.5,
+            textCorrections: [mockTextCorrection],
+          },
+        ],
+      });
+      
+      // Verify pages are also included
+      expect(result?.pages).toHaveLength(1);
+      expect(result?.pages[0]).toMatchObject({
+        audioS3Key: null,
+        audioStatus: 'PENDING',
+        audioDuration: null,
+      });
+    });
+
+    it('should return book with pending audio status when no audio generated', async () => {
+      const paragraphWithoutAudio = {
+        ...mockParagraph,
+        audioStatus: 'PENDING',
+        audioS3Key: null,
+        audioDuration: null,
+      };
+
+      const bookWithPages = {
+        ...mockBook,
+        pages: [
+          {
+            ...mockPage,
+            paragraphs: [paragraphWithoutAudio],
+          },
+        ],
+      };
+
+      (prismaService.book.findUnique as jest.Mock).mockResolvedValue(bookWithPages);
+
+      const result = await service.getBook('book-1');
+
+      expect(result).toMatchObject({
+        ...mockBook,
+        paragraphs: [
+          {
+            ...paragraphWithoutAudio,
+            pageNumber: mockPage.pageNumber,
+            pageId: mockPage.id,
+            audioDuration: null,
+            audioS3Key: null,
+            audioStatus: "PENDING",
+          },
+        ],
+      });
+      
+      // Verify pages are also included
+      expect(result?.pages).toHaveLength(1);
+      expect(result?.pages[0]).toMatchObject({
+        audioS3Key: null,
+        audioStatus: 'PENDING',
+        audioDuration: null,
+      });
+    });
+
+    it('should handle mixed audio statuses across paragraphs', async () => {
+      const paragraphWithAudio = {
+        ...mockParagraph,
+        id: 'paragraph-1',
+        audioStatus: 'READY',
+        audioS3Key: 'audio/book-1/page-1.mp3',
+        audioDuration: 3.5,
+      };
+
+      const paragraphWithoutAudio = {
+        ...mockParagraph,
+        id: 'paragraph-2',
+        orderIndex: 2,
+        audioStatus: 'PENDING',
+        audioS3Key: null,
+        audioDuration: null,
+      };
+
+      const bookWithPages = {
+        ...mockBook,
+        pages: [
+          {
+            ...mockPage,
+            paragraphs: [paragraphWithAudio, paragraphWithoutAudio],
+          },
+        ],
+      };
+
+      (prismaService.book.findUnique as jest.Mock).mockResolvedValue(bookWithPages);
+
+      const result = await service.getBook('book-1');
+
+      expect(result?.paragraphs).toHaveLength(2);
+      expect(result?.paragraphs[0].audioStatus).toBe('READY');
+      expect(result?.paragraphs[0].audioS3Key).toBe('audio/book-1/page-1.mp3');
+      expect(result?.paragraphs[0].audioDuration).toBe(3.5);
+      expect(result?.paragraphs[1].audioStatus).toBe('PENDING');
+      expect(result?.paragraphs[1].audioS3Key).toBeNull();
+      expect(result?.paragraphs[1].audioDuration).toBeNull();
     });
   });
 

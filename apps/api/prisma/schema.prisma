@@ -57,12 +57,17 @@ model Paragraph {
   orderIndex    Int         // Order within the page
   content       String      @db.Text
   textCorrections TextCorrection[]   // Track all text corrections for this paragraph
+  // Audio metadata for this specific paragraph
+  audioS3Key    String?     // S3 key for generated audio of this paragraph
+  audioStatus   AudioStatus @default(PENDING)
+  audioDuration Float?      // Duration in seconds for this paragraph
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
   @@unique([pageId, orderIndex])
   @@index([pageId])
   @@index([bookId])
+  @@index([audioStatus])
   @@map("paragraphs")
 }
 
