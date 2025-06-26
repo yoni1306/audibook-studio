@@ -217,6 +217,44 @@ export async function updatePageAudioStatus(
 }
 
 /**
+ * Update paragraph audio status and metadata
+ */
+export async function updateParagraphAudioStatus(
+  paragraphId: string,
+  status: AudioStatus,
+  audioS3Key?: string,
+  audioDuration?: number
+): Promise<void> {
+  try {
+    logger.debug(`Updating paragraph ${paragraphId} audio status to ${status}`);
+
+    await prisma.paragraph.update({
+      where: { id: paragraphId },
+      data: {
+        audioStatus: status,
+        audioS3Key,
+        audioDuration,
+      },
+    });
+
+    logger.info(`Updated paragraph ${paragraphId} audio status to ${status}`, {
+      paragraphId,
+      status,
+      audioS3Key,
+      audioDuration
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Failed to update paragraph audio status for ${paragraphId}: ${errorMessage}`, {
+      paragraphId,
+      targetStatus: status,
+      error: errorMessage
+    });
+    throw error;
+  }
+}
+
+/**
  * Get pages that need audio generation
  */
 export async function getPagesForAudioGeneration(bookId: string) {

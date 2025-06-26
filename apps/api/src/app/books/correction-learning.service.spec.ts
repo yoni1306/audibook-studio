@@ -247,11 +247,11 @@ describe('CorrectionLearningService', () => {
           createdAt: correction.createdAt,
           updatedAt: correction.updatedAt,
           bookTitle: correction.book.title,
-          paragraph: {
-            id: correction.paragraph.id,
-            orderIndex: correction.paragraph.orderIndex,
+          location: {
             pageId: correction.paragraph.pageId,
             pageNumber: correction.paragraph.page.pageNumber,
+            paragraphId: correction.paragraph.id,
+            paragraphIndex: correction.paragraph.orderIndex,
           },
         })),
         total: 2,
@@ -386,11 +386,11 @@ describe('CorrectionLearningService', () => {
         expect(correction).toHaveProperty('bookTitle');
         expect(typeof correction.bookTitle).toBe('string');
         
-        // Verify paragraph structure
-        expect(correction.paragraph).toHaveProperty('id');
-        expect(correction.paragraph).toHaveProperty('orderIndex');
-        expect(correction.paragraph).toHaveProperty('pageId');
-        expect(correction.paragraph).toHaveProperty('pageNumber');
+        // Verify location structure
+        expect(correction.location).toHaveProperty('pageId');
+        expect(correction.location).toHaveProperty('pageNumber');
+        expect(correction.location).toHaveProperty('paragraphId');
+        expect(correction.location).toHaveProperty('paragraphIndex');
       });
     });
 
@@ -470,17 +470,17 @@ describe('CorrectionLearningService', () => {
           createdAt: new Date('2025-06-22T10:00:00.000Z'),
           updatedAt: new Date('2025-06-22T10:00:00.000Z'),
           bookTitle: 'ספר בדיקה', // Flattened from book.title
-          paragraph: {
-            id: 'paragraph-1',
-            orderIndex: 5,
+          location: {
             pageId: 'page-1',
             pageNumber: 3, // Flattened from paragraph.page.pageNumber
+            paragraphId: 'paragraph-1',
+            paragraphIndex: 5, // Flattened from paragraph.orderIndex
           },
         });
 
         // Ensure nested structures are removed
         expect(correction).not.toHaveProperty('book');
-        expect(correction.paragraph).not.toHaveProperty('page');
+        expect(correction).not.toHaveProperty('paragraph');
       });
 
       it('should handle multiple corrections with consistent data structure', async () => {
@@ -537,20 +537,20 @@ describe('CorrectionLearningService', () => {
           const expectedOrderIndexes = [1, 3];
 
           expect(correction.bookTitle).toBe(expectedBookTitles[index]);
-          expect(correction.paragraph.pageNumber).toBe(expectedPageNumbers[index]);
-          expect(correction.paragraph.orderIndex).toBe(expectedOrderIndexes[index]);
+          expect(correction.location.pageNumber).toBe(expectedPageNumbers[index]);
+          expect(correction.location.paragraphIndex).toBe(expectedOrderIndexes[index]);
           
           // Verify structure consistency
           expect(correction).toHaveProperty('bookId');
           expect(correction).toHaveProperty('bookTitle');
-          expect(correction.paragraph).toHaveProperty('id');
-          expect(correction.paragraph).toHaveProperty('orderIndex');
-          expect(correction.paragraph).toHaveProperty('pageId');
-          expect(correction.paragraph).toHaveProperty('pageNumber');
+          expect(correction.location).toHaveProperty('paragraphId');
+          expect(correction.location).toHaveProperty('paragraphIndex');
+          expect(correction.location).toHaveProperty('pageId');
+          expect(correction.location).toHaveProperty('pageNumber');
           
           // Ensure nested structures are removed
           expect(correction).not.toHaveProperty('book');
-          expect(correction.paragraph).not.toHaveProperty('page');
+          expect(correction).not.toHaveProperty('paragraph');
         });
       });
 
@@ -608,8 +608,8 @@ describe('CorrectionLearningService', () => {
         // Verify data types are preserved
         expect(typeof correction.id).toBe('string');
         expect(typeof correction.bookTitle).toBe('string');
-        expect(typeof correction.paragraph.orderIndex).toBe('number');
-        expect(typeof correction.paragraph.pageNumber).toBe('number');
+        expect(typeof correction.location.paragraphIndex).toBe('number');
+        expect(typeof correction.location.pageNumber).toBe('number');
         expect(correction.createdAt).toBeInstanceOf(Date);
         expect(correction.updatedAt).toBeInstanceOf(Date);
       });

@@ -43,10 +43,8 @@ export interface EPUBParseResult {
 
 export interface PageBasedParserOptions {
   pageBreakDetection?: PageBreakOptions;
-  paragraphMinLengthChars?: number;
   paragraphTargetLengthChars?: number;
   paragraphTargetLengthWords?: number;
-  paragraphMaxLengthChars?: number;
 }
 
 export class PageBasedEPUBParser {
@@ -62,10 +60,8 @@ export class PageBasedEPUBParser {
       includeComputed: false,
       minConfidence: 0.6,
     },
-    paragraphMinLengthChars: 50,
     paragraphTargetLengthChars: 750,
     paragraphTargetLengthWords: 150,
-    paragraphMaxLengthChars: 5000,
   };
 
   constructor(private options: PageBasedParserOptions = {}) {
@@ -461,9 +457,7 @@ export class PageBasedEPUBParser {
     let fullText = '';
     textElements.forEach((element) => {
       const elementText = this.extractTextFromElement(element, document);
-      if (elementText.length >= this.options.paragraphMinLengthChars) {
-        fullText += elementText + '\n\n';
-      }
+      fullText += elementText + '\n\n';
     });
 
     return fullText.trim();
@@ -507,20 +501,13 @@ export class PageBasedEPUBParser {
            wordCount >= this.options.paragraphTargetLengthWords;
   }
 
-  private wouldExceedMax(currentText: string, additionalText: string): boolean {
-    const totalLength = currentText.length + additionalText.length + 1; // +1 for space
-    return totalLength > this.options.paragraphMaxLengthChars;
-  }
-
   private extractParagraphsFromText(text: string, basePosition: number): ParsedParagraph[] {
     logger.debug(`📝 Starting target-based paragraph extraction`, {
       textLength: text.length,
       basePosition,
       textPreview: text.substring(0, 150) + (text.length > 150 ? '...' : ''),
       targetChars: this.options.paragraphTargetLengthChars,
-      targetWords: this.options.paragraphTargetLengthWords,
-      minLength: this.options.paragraphMinLengthChars,
-      maxLength: this.options.paragraphMaxLengthChars
+      targetWords: this.options.paragraphTargetLengthWords
     });
 
     const paragraphs: ParsedParagraph[] = [];
@@ -528,7 +515,7 @@ export class PageBasedEPUBParser {
     // Split by double newlines to get initial paragraph-like chunks
     const initialChunks = text.split(/\n\s*\n/)
       .map(chunk => chunk.trim())
-      .filter(chunk => chunk.length >= this.options.paragraphMinLengthChars);
+      .filter(chunk => chunk.length > 0);
     
     logger.debug(`📊 Initial text split`, {
       totalChunks: text.split(/\n\s*\n/).length,
@@ -536,7 +523,7 @@ export class PageBasedEPUBParser {
       filteredOutCount: text.split(/\n\s*\n/).length - initialChunks.length
     });
 
-    // Combine chunks to reach target size, respecting sentence boundaries
+    // Combine chunks to reach target size, finalizing close to target at sentence boundaries
     let currentParagraph = '';
     let chunkIndex = 0;
 
@@ -550,176 +537,195 @@ export class PageBasedEPUBParser {
         continue;
       }
 
-      // Check if adding this chunk would exceed max limits
-      if (this.wouldExceedMax(currentParagraph, chunk)) {
-        // Before finalizing, check if we can complete the current sentence
-        if (!this.endsWithCompleteSentence(currentParagraph)) {
-          const sentenceBoundary = this.findLastSentenceBoundary(currentParagraph);
-          if (sentenceBoundary > 0) {
-            // Split at the last complete sentence
-            const completePart = currentParagraph.substring(0, sentenceBoundary).trim();
-            const incompletePart = currentParagraph.substring(sentenceBoundary).trim();
-            
-            logger.debug(`📝 Splitting at sentence boundary to avoid mid-sentence break`, {
-              originalLength: currentParagraph.length,
-              completePartLength: completePart.length,
-              incompletePartLength: incompletePart.length
-            });
-            
-            // Save the complete part
-            this.finalizeParagraph(completePart, paragraphs);
-            
-            // Start new paragraph with incomplete part + current chunk
-            currentParagraph = incompletePart + '\n\n' + chunk;
-            chunkIndex++;
-            continue;
-          }
-        }
-        
-        // No sentence boundary found or paragraph already ends with complete sentence
-        this.finalizeParagraph(currentParagraph, paragraphs);
+      const testParagraph = currentParagraph + '\n\n' + chunk;
+      
+      // Check if adding this chunk would exceed 2x target length
+      if (testParagraph.length > this.options.paragraphTargetLengthChars * 2) {
+        // Finalize current paragraph ensuring it ends with complete sentence
+        this.finalizeParagraphWithSentenceBoundary(currentParagraph, paragraphs);
         currentParagraph = chunk;
         chunkIndex++;
         continue;
       }
 
-      // Check if current paragraph already meets target size
-      if (this.meetsTargetSize(currentParagraph)) {
-        // We've reached target, but check if we're in the middle of a sentence
+      // Check if we've reached or exceeded target size
+      const currentChars = currentParagraph.length;
+      const currentWords = this.countWords(currentParagraph);
+      const testChars = testParagraph.length;
+      const testWords = this.countWords(testParagraph);
+      
+      const reachedTargetChars = currentChars >= this.options.paragraphTargetLengthChars;
+      const reachedTargetWords = currentWords >= this.options.paragraphTargetLengthWords;
+      
+      if ((reachedTargetChars || reachedTargetWords)) {
+        // We've reached target and adding more would make it too long
+        // Check if current paragraph ends with complete sentence
         if (this.endsWithCompleteSentence(currentParagraph)) {
-          // Complete sentence - safe to finalize
-          this.finalizeParagraph(currentParagraph, paragraphs);
+          logger.debug(`📝 Finalizing at target size with complete sentence`, {
+            currentChars,
+            currentWords,
+            targetChars: this.options.paragraphTargetLengthChars,
+            targetWords: this.options.paragraphTargetLengthWords
+          });
+          
+          this.finalizeParagraphWithSentenceBoundary(currentParagraph, paragraphs);
           currentParagraph = chunk;
           chunkIndex++;
           continue;
         } else {
-          // In middle of sentence - try to add next chunk if it won't exceed max
-          if (!this.wouldExceedMax(currentParagraph, chunk)) {
-            logger.debug(`📝 Adding chunk to complete sentence despite meeting target size`, {
-              currentLength: currentParagraph.length,
-              chunkLength: chunk.length,
-              endsWithSentence: this.endsWithCompleteSentence(currentParagraph + '\n\n' + chunk)
+          // Try to find a sentence boundary in the test paragraph
+          const testEndsWithSentence = this.endsWithCompleteSentence(testParagraph);
+          if (testEndsWithSentence && testChars <= this.options.paragraphTargetLengthChars * 2) {
+            // Test paragraph ends with sentence and isn't too much over target, use it
+            logger.debug(`📝 Adding chunk to complete sentence near target`, {
+              testChars,
+              testWords,
+              targetChars: this.options.paragraphTargetLengthChars,
+              targetWords: this.options.paragraphTargetLengthWords,
+              threshold: this.options.paragraphTargetLengthChars * 2
             });
             
-            currentParagraph += '\n\n' + chunk;
+            currentParagraph = testParagraph;
             chunkIndex++;
+            
+            this.finalizeParagraphWithSentenceBoundary(currentParagraph, paragraphs);
+            currentParagraph = '';
             continue;
           } else {
-            // Would exceed max - split at sentence boundary if possible
-            const sentenceBoundary = this.findLastSentenceBoundary(currentParagraph);
-            if (sentenceBoundary > 0) {
-              const completePart = currentParagraph.substring(0, sentenceBoundary).trim();
-              const incompletePart = currentParagraph.substring(sentenceBoundary).trim();
-              
-              this.finalizeParagraph(completePart, paragraphs);
-              currentParagraph = incompletePart + '\n\n' + chunk;
-              chunkIndex++;
-              continue;
-            } else {
-              // No good split point - finalize as is
-              this.finalizeParagraph(currentParagraph, paragraphs);
-              currentParagraph = chunk;
-              chunkIndex++;
-              continue;
-            }
+            // Can't find good sentence boundary in test, try to complete current paragraph
+            const completedParagraph = this.completeParagraphAtSentenceBoundary(currentParagraph);
+            this.finalizeParagraphWithSentenceBoundary(completedParagraph, paragraphs);
+            currentParagraph = chunk;
+            chunkIndex++;
+            continue;
           }
         }
       }
 
       // Add chunk to current paragraph
-      currentParagraph += '\n\n' + chunk;
+      currentParagraph = testParagraph;
       chunkIndex++;
+      
+      // Safety check: if current paragraph is getting too large, force finalization
+      if (currentParagraph.length > this.options.paragraphTargetLengthChars * 2) {
+        logger.debug(`⚠️ Forcing paragraph finalization due to excessive size`, {
+          currentLength: currentParagraph.length,
+          maxAllowed: this.options.paragraphTargetLengthChars * 2,
+          target: this.options.paragraphTargetLengthChars
+        });
+        
+        this.finalizeParagraphWithSentenceBoundary(currentParagraph, paragraphs);
+        currentParagraph = '';
+      }
     }
 
-    // Don't forget the last paragraph
+    // Don't forget the last paragraph - ensure it ends with complete sentence
     if (currentParagraph.trim().length > 0) {
-      this.finalizeParagraph(currentParagraph, paragraphs);
+      this.finalizeParagraphWithSentenceBoundary(currentParagraph, paragraphs);
     }
 
     logger.info(`📄 Target-based paragraph extraction completed`, {
       totalParagraphs: paragraphs.length,
       averageChars: paragraphs.length > 0 ? Math.round(paragraphs.reduce((sum, p) => sum + p.content.length, 0) / paragraphs.length) : 0,
       averageWords: paragraphs.length > 0 ? Math.round(paragraphs.reduce((sum, p) => sum + this.countWords(p.content), 0) / paragraphs.length) : 0,
-      paragraphsEndingWithSentence: paragraphs.filter(p => this.endsWithCompleteSentence(p.content)).length,
-      paragraphStats: paragraphs.map(p => ({
-        chars: p.content.length,
-        words: this.countWords(p.content),
-        meetsTarget: this.meetsTargetSize(p.content),
-        endsWithSentence: this.endsWithCompleteSentence(p.content)
-      }))
+      targetChars: this.options.paragraphTargetLengthChars,
+      targetWords: this.options.paragraphTargetLengthWords,
+      paragraphsAtTarget: paragraphs.filter(p => 
+        p.content.length >= this.options.paragraphTargetLengthChars || 
+        this.countWords(p.content) >= this.options.paragraphTargetLengthWords
+      ).length,
+      paragraphsWithSentenceEndings: paragraphs.filter(p => this.endsWithCompleteSentence(p.content)).length,
+      sentenceEndingCompliance: paragraphs.length > 0 ? 
+        Math.round((paragraphs.filter(p => this.endsWithCompleteSentence(p.content)).length / paragraphs.length) * 100) : 0
     });
 
-    return paragraphs;
+    return paragraphs.map((paragraph, index) => ({
+      ...paragraph,
+      orderIndex: index
+    }));
   }
 
-  /**
-   * Check if text ends with a complete sentence
-   */
   private endsWithCompleteSentence(text: string): boolean {
     const trimmed = text.trim();
-    // Check if text ends with sentence-ending punctuation
-    return /[.!?]["']?$/.test(trimmed);
+    // Enhanced sentence ending detection for Hebrew and English
+    // Matches: period, exclamation, question mark, optionally followed by closing quotes/brackets
+    return /[.!?][\u0022\u0027\u201C\u201D\u2018\u2019)\]}]*\s*$/.test(trimmed);
   }
 
-  /**
-   * Find the last complete sentence boundary in text
-   */
   private findLastSentenceBoundary(text: string): number {
     const trimmed = text.trim();
-    // Find the last sentence-ending punctuation
-    const match = trimmed.match(/.*[.!?]["']?/);
-    return match ? match[0].length : -1;
+    // Enhanced regex to find sentence boundaries in Hebrew and English text
+    // Looks for sentence endings followed by whitespace and capital/Hebrew letter, or end of text
+    const sentenceBoundaryRegex = /[.!?][\u0022\u0027\u201C\u201D\u2018\u2019)\]}]*(?:\s+(?=[A-Z\u05D0-\u05EA])|$)/g;
+    
+    let lastBoundary = -1;
+    let match;
+    
+    while ((match = sentenceBoundaryRegex.exec(trimmed)) !== null) {
+      lastBoundary = match.index + match[0].length;
+    }
+    
+    return lastBoundary;
   }
 
-  /**
-   * Check if adding more text would exceed maximum limits
-   */
+  private completeParagraphAtSentenceBoundary(text: string): string {
+    const trimmed = text.trim();
+    
+    // If already ends with complete sentence, return as-is
+    if (this.endsWithCompleteSentence(trimmed)) {
+      return trimmed;
+    }
+    
+    // Find the last sentence boundary
+    const lastBoundary = this.findLastSentenceBoundary(trimmed);
+    
+    if (lastBoundary > 0 && lastBoundary < trimmed.length) {
+      // Cut at the last sentence boundary
+      const completed = trimmed.substring(0, lastBoundary).trim();
+      
+      logger.debug(`✂️ Completed paragraph at sentence boundary`, {
+        originalLength: trimmed.length,
+        completedLength: completed.length,
+        removedText: trimmed.substring(lastBoundary).trim().substring(0, 50) + '...'
+      });
+      
+      return completed;
+    }
+    
+    // If no sentence boundary found, return original (better than nothing)
+    logger.warn(`⚠️ No sentence boundary found in paragraph, keeping original`, {
+      textLength: trimmed.length,
+      textPreview: trimmed.substring(0, 100) + '...'
+    });
+    
+    return trimmed;
+  }
 
-  /**
-   * Finalize a paragraph and add it to the list, splitting if necessary
-   */
-  private finalizeParagraph(paragraphText: string, paragraphs: ParsedParagraph[]): void {
-    const trimmed = paragraphText.trim();
+  private finalizeParagraphWithSentenceBoundary(text: string, paragraphs: ParsedParagraph[]): void {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return;
     
     // Calculate thresholds
     const targetChars = this.options.paragraphTargetLengthChars;
     const targetWords = this.options.paragraphTargetLengthWords;
-    const maxChars = this.options.paragraphMaxLengthChars;
-    
-    // Split threshold: 2x target size or approaching max
-    const splitThresholdChars = Math.min(targetChars * 2, maxChars * 0.8);
-    const splitThresholdWords = targetWords * 2;
     
     const currentChars = trimmed.length;
     const currentWords = this.countWords(trimmed);
     
-    if (currentChars <= splitThresholdChars && currentWords <= splitThresholdWords) {
-      // Paragraph is within reasonable limits, add as-is
-      paragraphs.push({
-        orderIndex: paragraphs.length,
-        content: trimmed,
-      });
-      
-      logger.debug(`✅ Added paragraph ${paragraphs.length}`, {
-        chars: currentChars,
-        words: currentWords,
-        meetsTarget: this.meetsTargetSize(trimmed),
-        endsWithSentence: this.endsWithCompleteSentence(trimmed),
-        withinSplitThreshold: true
-      });
-    } else {
+    // Only split if paragraph significantly exceeds target length
+    const splitThreshold = targetChars * 2; // Split at 2x target (1500 chars)
+    
+    if (currentChars > splitThreshold) {
       // Paragraph significantly exceeds target, split it at sentence boundaries
-      logger.info(`✂️ Splitting oversized paragraph`, {
+      logger.info(`✂️ Splitting oversized paragraph at sentence boundaries`, {
         chars: currentChars,
         words: currentWords,
+        splitThreshold,
         targetChars,
-        targetWords,
-        splitThresholdChars,
-        splitThresholdWords,
-        reason: currentChars > splitThresholdChars ? 'chars' : 'words'
+        reason: 'exceeds 2x target length'
       });
       
-      const splitParagraphs = this.splitLongParagraph(trimmed);
+      const splitParagraphs = this.splitLongParagraphAtSentences(trimmed);
       splitParagraphs.forEach(splitText => {
         paragraphs.push({
           orderIndex: paragraphs.length,
@@ -732,23 +738,38 @@ export class PageBasedEPUBParser {
           endsWithSentence: this.endsWithCompleteSentence(splitText)
         });
       });
+    } else {
+      // Ensure paragraph ends with complete sentence
+      const completedParagraph = this.completeParagraphAtSentenceBoundary(trimmed);
+      
+      paragraphs.push({
+        orderIndex: paragraphs.length,
+        content: completedParagraph,
+      });
+      
+      logger.debug(`✅ Added paragraph ${paragraphs.length}`, {
+        chars: completedParagraph.length,
+        words: this.countWords(completedParagraph),
+        meetsTarget: completedParagraph.length >= targetChars || this.countWords(completedParagraph) >= targetWords,
+        endsWithSentence: this.endsWithCompleteSentence(completedParagraph),
+        withinMaxLimit: true
+      });
     }
   }
 
-  private splitLongParagraph(text: string): string[] {
-    logger.debug(`🔪 Starting long paragraph split`, {
+  private splitLongParagraphAtSentences(text: string): string[] {
+    logger.debug(`🔪 Starting long paragraph split at sentence boundaries`, {
       textLength: text.length,
       targetLength: this.options.paragraphTargetLengthChars,
-      maxLength: this.options.paragraphMaxLengthChars,
       textPreview: text.substring(0, 200) + (text.length > 200 ? '...' : '')
     });
 
     const result: string[] = [];
     let currentChunk = '';
     
+    // Enhanced sentence splitting for Hebrew and English
     // Split by sentences - keep punctuation with the sentence
-    // Look for sentence endings followed by whitespace and capital letter or Hebrew letter
-    const sentenceRegex = /[.!?]+["']?\s+(?=[A-Z\u05D0-\u05EA])/g;
+    const sentenceRegex = /[.!?][\u0022\u0027\u201C\u201D\u2018\u2019)\]}]*\s+(?=[A-Z\u05D0-\u05EA])/g;
     const sentences: string[] = [];
     
     let lastIndex = 0;
@@ -756,11 +777,11 @@ export class PageBasedEPUBParser {
     
     while ((match = sentenceRegex.exec(text)) !== null) {
       // Include the sentence with its ending punctuation
-      const sentence = text.substring(lastIndex, match.index + match[0].length - match[0].match(/\s+$/)[0].length).trim();
+      const sentence = text.substring(lastIndex, match.index + match[0].length).trim();
       if (sentence.length > 0) {
         sentences.push(sentence);
       }
-      lastIndex = match.index + match[0].length - match[0].match(/\s+$/)[0].length;
+      lastIndex = match.index + match[0].length;
     }
     
     // Add the last sentence (from last match to end of text)
@@ -778,8 +799,8 @@ export class PageBasedEPUBParser {
     
     logger.debug(`📝 Text split into sentences`, {
       totalSentences: sentences.length,
-      averageWordLength: sentences.length > 0 ? Math.round(sentences.reduce((sum, s) => sum + s.trim().length, 0) / sentences.length) : 0,
-      sentencePreviews: sentences.slice(0, 5).map(s => s.trim().substring(0, 80) + '...')
+      averageSentenceLength: sentences.length > 0 ? Math.round(sentences.reduce((sum, s) => sum + s.trim().length, 0) / sentences.length) : 0,
+      sentencePreviews: sentences.slice(0, 3).map(s => s.trim().substring(0, 80) + '...')
     });
     
     for (let i = 0; i < sentences.length; i++) {
@@ -789,7 +810,6 @@ export class PageBasedEPUBParser {
         sentenceLength: sentence.length,
         currentChunkLength: currentChunk.length,
         wouldExceedTarget: (currentChunk + ' ' + sentence).length > this.options.paragraphTargetLengthChars,
-        wouldExceedMax: (currentChunk + ' ' + sentence).length > this.options.paragraphMaxLengthChars,
         sentencePreview: sentence.substring(0, 100) + (sentence.length > 100 ? '...' : '')
       });
       
@@ -797,7 +817,8 @@ export class PageBasedEPUBParser {
         // First sentence in chunk
         currentChunk = sentence;
         logger.debug(`🆕 Started new chunk with sentence`, {
-          chunkLength: currentChunk.length
+          chunkLength: currentChunk.length,
+          endsWithSentence: this.endsWithCompleteSentence(currentChunk)
         });
       } else {
         const combinedLength = (currentChunk + ' ' + sentence).length;
@@ -806,16 +827,16 @@ export class PageBasedEPUBParser {
         // Check if adding this sentence would exceed our target thresholds
         const exceedsTargetChars = combinedLength > this.options.paragraphTargetLengthChars;
         const exceedsTargetWords = combinedWords > this.options.paragraphTargetLengthWords;
-        const exceedsMax = combinedLength > this.options.paragraphMaxLengthChars;
         
-        if (exceedsMax || (exceedsTargetChars && exceedsTargetWords && currentChunk.length >= this.options.paragraphMinLengthChars)) {
-          // Save current chunk and start new one
+        if (exceedsTargetChars || exceedsTargetWords) {
+          // Save current chunk and start new one - current chunk should end with complete sentence
           logger.info(`💾 Saving chunk (target threshold reached)`, {
             chunkLength: currentChunk.length,
             chunkWords: this.countWords(currentChunk),
             targetChars: this.options.paragraphTargetLengthChars,
             targetWords: this.options.paragraphTargetLengthWords,
-            reason: exceedsMax ? 'max_exceeded' : 'target_exceeded',
+            reason: 'target_exceeded',
+            endsWithSentence: this.endsWithCompleteSentence(currentChunk),
             chunkPreview: currentChunk.substring(0, 100) + '...'
           });
           
@@ -824,14 +845,16 @@ export class PageBasedEPUBParser {
           
           logger.debug(`🆕 Started new chunk after split`, {
             newChunkLength: currentChunk.length,
-            totalChunksSoFar: result.length
+            totalChunksSoFar: result.length,
+            endsWithSentence: this.endsWithCompleteSentence(currentChunk)
           });
         } else {
           currentChunk += ' ' + sentence;
           logger.debug(`➕ Added sentence to current chunk`, {
             newChunkLength: currentChunk.length,
             newChunkWords: this.countWords(currentChunk),
-            remainingTargetCapacity: this.options.paragraphTargetLengthChars - currentChunk.length
+            remainingTargetCapacity: this.options.paragraphTargetLengthChars - currentChunk.length,
+            endsWithSentence: this.endsWithCompleteSentence(currentChunk)
           });
         }
       }
@@ -842,8 +865,8 @@ export class PageBasedEPUBParser {
       result.push(currentChunk);
       logger.debug(`💾 Added final chunk`, {
         chunkLength: currentChunk.length,
-        chunkWords: this.countWords(currentChunk),
-        totalChunks: result.length
+        totalChunks: result.length,
+        endsWithSentence: this.endsWithCompleteSentence(currentChunk)
       });
     }
 
@@ -855,73 +878,9 @@ export class PageBasedEPUBParser {
       chunkWords: result.map(chunk => this.countWords(chunk)),
       averageChunkLength: result.length > 0 ? Math.round(result.reduce((sum, chunk) => sum + chunk.length, 0) / result.length) : 0,
       averageChunkWords: result.length > 0 ? Math.round(result.reduce((sum, chunk) => sum + this.countWords(chunk), 0) / result.length) : 0,
-      allChunksWithinTarget: result.every(chunk => 
-        chunk.length <= this.options.paragraphTargetLengthChars * 1.5 && 
-        this.countWords(chunk) <= this.options.paragraphTargetLengthWords * 1.5
-      )
-    });
-
-    return result;
-  }
-
-  private splitByWords(text: string): string[] {
-    logger.debug(`🔤 Starting word-based splitting (fallback)`, {
-      textLength: text.length,
-      maxLength: this.options.paragraphMaxLengthChars,
-      textPreview: text.substring(0, 200) + (text.length > 200 ? '...' : '')
-    });
-
-    const words = text.split(/\s+/);
-    const result: string[] = [];
-    let currentChunk = '';
-    
-    logger.debug(`📝 Text split into words`, {
-      totalWords: words.length,
-      averageWordLength: words.length > 0 ? Math.round(words.reduce((sum, word) => sum + word.length, 0) / words.length) : 0
-    });
-    
-    for (let i = 0; i < words.length; i++) {
-      const word = words[i];
-      const testChunk = currentChunk.length === 0 ? word : currentChunk + ' ' + word;
-      
-      if (testChunk.length <= this.options.paragraphMaxLengthChars) {
-        currentChunk = testChunk;
-        
-        if (i % 50 === 0) { // Log every 50 words to avoid spam
-          logger.debug(`📝 Added word ${i + 1}/${words.length}`, {
-            currentChunkLength: currentChunk.length,
-            remainingCapacity: this.options.paragraphMaxLengthChars - currentChunk.length
-          });
-        }
-      } else {
-        // Save current chunk and start new one
-        if (currentChunk.length > 0) {
-          result.push(currentChunk);
-          logger.debug(`💾 Saved word-based chunk`, {
-            chunkLength: currentChunk.length,
-            totalChunksSoFar: result.length,
-            chunkPreview: currentChunk.substring(0, 100) + '...'
-          });
-        }
-        currentChunk = word;
-      }
-    }
-    
-    // Add the last chunk
-    if (currentChunk.length > 0) {
-      result.push(currentChunk);
-      logger.debug(`💾 Added final word-based chunk`, {
-        chunkLength: currentChunk.length,
-        totalChunks: result.length
-      });
-    }
-
-    logger.info(`✅ Word-based splitting completed`, {
-      originalLength: text.length,
-      splitInto: result.length,
-      chunkLengths: result.map(chunk => chunk.length),
-      averageChunkLength: result.length > 0 ? Math.round(result.reduce((sum, chunk) => sum + chunk.length, 0) / result.length) : 0,
-      allChunksWithinLimit: result.every(chunk => chunk.length <= this.options.paragraphMaxLengthChars)
+      chunksWithSentenceEndings: result.filter(chunk => this.endsWithCompleteSentence(chunk)).length,
+      sentenceEndingCompliance: result.length > 0 ? 
+        Math.round((result.filter(chunk => this.endsWithCompleteSentence(chunk)).length / result.length) * 100) : 0
     });
 
     return result;

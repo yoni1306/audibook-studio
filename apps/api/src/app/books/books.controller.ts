@@ -265,11 +265,11 @@ export class BooksController {
   async streamAudio(@Param('paragraphId') paragraphId: string) {
     const paragraph = await this.booksService.getParagraph(paragraphId);
     
-    if (!paragraph || !paragraph.page?.audioS3Key) {
+    if (!paragraph || !paragraph.audioS3Key) {
       throw new NotFoundException('Audio not found');
     }
     
-    const url = await this.s3Service.getSignedUrl(paragraph.page.audioS3Key);
+    const url = await this.s3Service.getSignedUrl(paragraph.audioS3Key);
     
     return { url };
   }
