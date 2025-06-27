@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { createLogger } from '../../../utils/logger';
 
@@ -28,8 +28,11 @@ export default function BookDetailPage() {
     audioRequested: boolean;
   } | null>(null);
 
+  // Track if this is the initial load
+  const isInitialLoad = useRef(true);
+
   // Create a logger instance for this component
-  const logger = createLogger('BookDetailPage');
+  const logger = useMemo(() => createLogger('BookDetailPage'), []);
 
   // Add correlation ID generator for frontend
   function generateCorrelationId() {
@@ -39,7 +42,6 @@ export default function BookDetailPage() {
   const fetchBook = useCallback(async () => {
     const correlationId = generateCorrelationId();
     try {
-      setLoading(true); // Set loading at the start
       setError(null); // Clear any previous errors
       const response = await fetch(
         `http://localhost:3333/api/books/${bookId}`,
@@ -82,13 +84,16 @@ export default function BookDetailPage() {
       console.error('Error fetching book:', error, { correlationId });
       logger.error('Network error fetching book:', { error: error instanceof Error ? error.message : String(error), correlationId });
     } finally {
-      setLoading(false);
+      if (isInitialLoad.current) {
+        setLoading(false); // Only clear loading if it's the initial load
+        isInitialLoad.current = false;
+      }
     }
   }, [bookId, logger]);
 
   useEffect(() => {
     if (bookId) {
-      fetchBook();
+      fetchBook(); // Initial fetch - loading will be cleared by isInitialLoad ref
     }
   }, [bookId, fetchBook]);
 
@@ -96,7 +101,7 @@ export default function BookDetailPage() {
   useEffect(() => {
     const interval = setInterval(() => {
       if (book?.paragraphs.some((p) => p.audioStatus === 'GENERATING') || book?.status !== 'READY') {
-        fetchBook();
+        fetchBook(); // Don't show loading state for periodic refreshes
       }
     }, 5000);
 
