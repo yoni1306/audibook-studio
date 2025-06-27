@@ -29,8 +29,15 @@ export default function BooksPage() {
         
         if (!res.ok) {
           // This is an actual server error
-          const errorData = await res.json();
-          throw new Error(errorData.message || 'Server error occurred');
+          let errorMessage = 'Server error occurred';
+          try {
+            const errorData = await res.json();
+            errorMessage = errorData.message || errorMessage;
+          } catch {
+            // If we can't parse the error response, use a generic message
+            errorMessage = `Server returned ${res.status}: ${res.statusText}`;
+          }
+          throw new Error(errorMessage);
         }
         
         const data = await res.json();
@@ -39,8 +46,18 @@ export default function BooksPage() {
         setBooks(Array.isArray(booksArray) ? booksArray : []);
         setError(null);
       } catch (err) {
-        console.error('Error:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load books');
+        console.error('Error fetching books:', err);
+        let errorMessage = 'Failed to load books';
+        
+        if (err instanceof TypeError && err.message.includes('fetch')) {
+          // Network error - server is likely down
+          errorMessage = 'Cannot connect to server. Please check if the API server is running on localhost:3333';
+        } else if (err instanceof Error) {
+          errorMessage = err.message;
+        }
+        
+        setError(errorMessage);
+        setBooks([]); // Clear any existing books
       } finally {
         setLoading(false);
       }

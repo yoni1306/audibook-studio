@@ -77,12 +77,6 @@ export default function CorrectionsPage() {
     return date.toISOString().split('T')[0]; // YYYY-MM-DD format
   };
 
-  const truncateText = (text: string | undefined | null, maxLength = 100): string => {
-    // Use a consistent approach that works on both server and client
-    const safeText = text?.toString() || '';
-    return typeof window !== 'undefined' ? safeText.slice(0, maxLength) + (safeText.length > maxLength ? '...' : '') : '';
-  };
-
   // API Functions
   const fetchCorrections = useCallback(async () => {
     setLoading(true);
@@ -288,7 +282,7 @@ export default function CorrectionsPage() {
     {
       field: 'location',
       headerName: 'Location',
-      width: 120,
+      width: 180,
       renderCell: (params) => {
         const { pageId, pageNumber, paragraphId, paragraphIndex } = params.row.location;
         
@@ -310,10 +304,35 @@ export default function CorrectionsPage() {
             onMouseEnter={(e) => (e.target as HTMLElement).style.textDecoration = 'underline'}
             onMouseLeave={(e) => (e.target as HTMLElement).style.textDecoration = 'none'}
           >
-            P.{pageNumber}¶{paragraphIndex}
+            Page: {pageNumber}, Paragraph: {paragraphIndex}
           </Link>
         );
       },
+    },
+    {
+      field: 'bookTitle',
+      headerName: 'Book',
+      width: 250,
+      renderCell: (params) => (
+        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
+          <Link href={`/books/${params.row.bookId}`} style={{ textDecoration: 'none', width: '100%' }}>
+            <Typography
+              variant="body2"
+              color="primary"
+              sx={{
+                '&:hover': { textDecoration: 'underline' },
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                width: '100%',
+              }}
+              title={params.value}
+            >
+              {params.value}
+            </Typography>
+          </Link>
+        </Box>
+      ),
     },
     {
       field: 'ttsModel',
@@ -340,31 +359,6 @@ export default function CorrectionsPage() {
       ),
     },
     {
-      field: 'bookTitle',
-      headerName: 'Book',
-      width: 200,
-      renderCell: (params) => (
-        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
-          <Link href={`/books/${params.row.bookId}`} style={{ textDecoration: 'none', width: '100%' }}>
-            <Typography
-              variant="body2"
-              color="primary"
-              sx={{
-                '&:hover': { textDecoration: 'underline' },
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                width: '100%',
-              }}
-              title={params.value}
-            >
-              {params.value}
-            </Typography>
-          </Link>
-        </Box>
-      ),
-    },
-    {
       field: 'createdAt',
       headerName: 'Date',
       width: 120,
@@ -384,7 +378,7 @@ export default function CorrectionsPage() {
   }));
 
   return (
-    <Box sx={{ maxWidth: '1400px', mx: 'auto', p: 3 }}>
+    <Box sx={{ maxWidth: '1800px', mx: 'auto', p: 3 }}>
       {/* Header */}
       <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
         Text Corrections

@@ -1,5 +1,5 @@
 import { createLogger } from '@audibook/logger';
-import { PageBreakIndicator, PageBreakOptions } from './types';
+import { PageBreakIndicator } from './types';
 
 const logger = createLogger('ComputedPageBreakDetector');
 
@@ -10,64 +10,11 @@ const logger = createLogger('ComputedPageBreakDetector');
 export class ComputedPageBreakDetector {
   /**
    * Compute page breaks based on content length and target sizes
+   * Currently returns empty array since we're not using computed breaks
    */
-  detect(
-    content: string, 
-    options: Pick<PageBreakOptions, 'targetPageSizeChars' | 'minPageSizeChars'> = {}
-  ): PageBreakIndicator[] {
-    const indicators: PageBreakIndicator[] = [];
-    const targetSize = options.targetPageSizeChars || 2000;
-    const minSize = options.minPageSizeChars || 500;
-
-    logger.debug(`Computing page breaks for ${content.length} characters with target size ${targetSize}`);
-
-    if (content.length <= targetSize) {
-      logger.debug('Content is smaller than target page size, no breaks needed');
-      return indicators;
-    }
-
-    // Find natural break points (sentences, paragraphs)
-    const breakPoints = this.findNaturalBreakPoints(content);
-    
-    let currentPosition = 0;
-    let pageCount = 0;
-
-    while (currentPosition < content.length) {
-      const idealBreakPoint = currentPosition + targetSize;
-      
-      if (idealBreakPoint >= content.length) {
-        break; // Last page
-      }
-
-      // Find the best break point near the ideal position
-      const bestBreakPoint = this.findBestBreakPoint(
-        breakPoints, 
-        idealBreakPoint, 
-        currentPosition + minSize,
-        content.length
-      );
-
-      if (bestBreakPoint > currentPosition + minSize) {
-        indicators.push({
-          type: 'computed',
-          confidence: 0.4,
-          position: bestBreakPoint,
-          reason: `Computed break at ${bestBreakPoint} (page ${pageCount + 1})`,
-          elementTag: undefined,
-          elementText: content.substring(bestBreakPoint - 50, bestBreakPoint + 50)
-        });
-
-        currentPosition = bestBreakPoint;
-        pageCount++;
-      } else {
-        // Force a break if we can't find a good natural one
-        currentPosition = idealBreakPoint;
-        pageCount++;
-      }
-    }
-
-    logger.debug(`Computed ${indicators.length} page breaks for ${pageCount + 1} pages`);
-    return indicators;
+  detect(content: string): PageBreakIndicator[] {
+    logger.debug(`Computed page break detection disabled for ${content.length} characters`);
+    return [];
   }
 
   private findNaturalBreakPoints(content: string): number[] {

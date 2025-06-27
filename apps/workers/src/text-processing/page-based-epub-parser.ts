@@ -50,14 +50,10 @@ export interface PageBasedParserOptions {
 export class PageBasedEPUBParser {
   private readonly defaultOptions: Required<PageBasedParserOptions> = {
     pageBreakDetection: {
-      targetPageSizeChars: 2000,
-      minPageSizeChars: 500,
-      maxPageSizeChars: 5000,
       includeExplicit: true,
       includeStructural: true,
       includeStylistic: true,
       includeSemantic: true,
-      includeComputed: false,
       minConfidence: 0.6,
     },
     paragraphTargetLengthChars: 750,

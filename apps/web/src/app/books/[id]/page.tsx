@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { createLogger } from '../../../utils/logger';
 
@@ -31,31 +31,15 @@ export default function BookDetailPage() {
   // Create a logger instance for this component
   const logger = createLogger('BookDetailPage');
 
-  useEffect(() => {
-    if (bookId) {
-      fetchBook();
-    }
-  }, [bookId]);
-
-  // Refresh every 5 seconds to check audio status
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (book?.paragraphs.some((p) => p.audioStatus === 'GENERATING')) {
-        fetchBook();
-      }
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [book]);
-
   // Add correlation ID generator for frontend
   function generateCorrelationId() {
     return `web-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
 
-  const fetchBook = async () => {
+  const fetchBook = useCallback(async () => {
     const correlationId = generateCorrelationId();
     try {
+      setLoading(true); // Set loading at the start
       setError(null); // Clear any previous errors
       const response = await fetch(
         `http://localhost:3333/api/books/${bookId}`,
@@ -71,6 +55,7 @@ export default function BookDetailPage() {
         const errorData = await response.json();
         setError(`Server error: ${errorData.message || 'An unexpected error occurred'}`);
         logger.error('Server error from API:', { ...errorData, correlationId });
+        setBook(null);
         return;
       }
       
@@ -84,19 +69,39 @@ export default function BookDetailPage() {
       } else if (data.book) {
         // Book found
         setBook(data.book);
+        setError(null); // Clear any previous errors
       } else {
         // Handle legacy response format (direct book object)
         setBook(data);
+        setError(null); // Clear any previous errors
       }
     } catch (error) {
       const errorMessage = 'Failed to connect to the server. Please check if the API server is running.';
       setError(errorMessage);
+      setBook(null);
       console.error('Error fetching book:', error, { correlationId });
       logger.error('Network error fetching book:', { error: error instanceof Error ? error.message : String(error), correlationId });
     } finally {
       setLoading(false);
     }
-  };
+  }, [bookId, logger]);
+
+  useEffect(() => {
+    if (bookId) {
+      fetchBook();
+    }
+  }, [bookId, fetchBook]);
+
+  // Refresh every 5 seconds to check audio status or if book is not ready
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (book?.paragraphs.some((p) => p.audioStatus === 'GENERATING') || book?.status !== 'READY') {
+        fetchBook();
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [book, fetchBook]);
 
   const startEdit = (paragraph: Paragraph) => {
     setEditingId(paragraph.id);
@@ -215,6 +220,30 @@ export default function BookDetailPage() {
   };
 
   const handleSkipBulkFix = () => {
+    // Apply the original edit when skipping bulk fixes
+    if (pendingBulkFix) {
+      // Make the API call to save the original content
+      fetch(`http://localhost:3333/api/books/paragraphs/${pendingBulkFix.paragraphId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: pendingBulkFix.content,
+          generateAudio: pendingBulkFix.audioRequested,
+        }),
+      })
+      .then(response => {
+        if (response.ok) {
+          // Refresh the book data to show the updated content
+          fetchBook();
+        }
+      })
+      .catch(error => {
+        console.error('Error applying original edit:', error);
+      });
+    }
+    
     setShowBulkFixModal(false);
     setPendingBulkFix(null);
   };

@@ -8,14 +8,10 @@ export interface PageBreakIndicator {
 }
 
 export interface PageBreakOptions {
-  targetPageSizeChars?: number;
-  minPageSizeChars?: number;
-  maxPageSizeChars?: number;
   includeExplicit?: boolean;
   includeStructural?: boolean;
   includeStylistic?: boolean;
   includeSemantic?: boolean;
-  includeComputed?: boolean;
   minConfidence?: number;
 }
 

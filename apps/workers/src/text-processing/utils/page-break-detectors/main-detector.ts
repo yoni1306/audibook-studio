@@ -5,7 +5,6 @@ import { ExplicitPageBreakDetector } from './explicit-detector';
 import { StructuralPageBreakDetector } from './structural-detector';
 import { StylisticPageBreakDetector } from './stylistic-detector';
 import { SemanticPageBreakDetector } from './semantic-detector';
-import { ComputedPageBreakDetector } from './computed-detector';
 
 const logger = createLogger('EPUBPageBreakDetector');
 
@@ -15,14 +14,10 @@ const logger = createLogger('EPUBPageBreakDetector');
  */
 export class EPUBPageBreakDetector {
   private readonly defaultOptions: Required<PageBreakOptions> = {
-    targetPageSizeChars: 2000,
-    minPageSizeChars: 500,
-    maxPageSizeChars: 5000,
     includeExplicit: true,
     includeStructural: true,
     includeStylistic: true,
     includeSemantic: true,
-    includeComputed: false,
     minConfidence: 0.6,
   };
 
@@ -30,7 +25,6 @@ export class EPUBPageBreakDetector {
   private readonly structuralDetector = new StructuralPageBreakDetector();
   private readonly stylisticDetector = new StylisticPageBreakDetector();
   private readonly semanticDetector = new SemanticPageBreakDetector();
-  private readonly computedDetector = new ComputedPageBreakDetector();
 
   constructor(private options: PageBreakOptions = {}) {
     this.options = { ...this.defaultOptions, ...options };
@@ -50,15 +44,11 @@ export class EPUBPageBreakDetector {
 
     logger.debug(`🔍 Starting page break detection`, {
       contentLength: content.length,
-      targetPageSizeChars: mergedOptions.targetPageSizeChars,
-      minPageSizeChars: mergedOptions.minPageSizeChars,
-      maxPageSizeChars: mergedOptions.maxPageSizeChars,
       detectionTypes: {
         explicit: mergedOptions.includeExplicit,
         structural: mergedOptions.includeStructural,
         stylistic: mergedOptions.includeStylistic,
         semantic: mergedOptions.includeSemantic,
-        computed: mergedOptions.includeComputed
       }
     });
 
@@ -83,38 +73,28 @@ export class EPUBPageBreakDetector {
       logger.debug(`Found ${stylistic.length} stylistic page breaks`);
     }
 
-    // Semantic page breaks
+    // Semantic page breaks (based on content meaning)
     if (mergedOptions.includeSemantic) {
       const semantic = this.semanticDetector.detect($);
       indicators.push(...semantic);
       logger.debug(`Found ${semantic.length} semantic page breaks`);
     }
 
-    // Computed page breaks (based on content length)
-    if (mergedOptions.includeComputed) {
-      const computed = this.computedDetector.detect(content, {
-        targetPageSizeChars: mergedOptions.targetPageSizeChars,
-        minPageSizeChars: mergedOptions.minPageSizeChars
-      });
-      indicators.push(...computed);
-      logger.debug(`Found ${computed.length} computed page breaks`);
-    }
+    // Filter by confidence and sort by position
+    const filteredIndicators = indicators
+      .filter(indicator => indicator.confidence >= mergedOptions.minConfidence)
+      .sort((a, b) => a.position - b.position);
 
-    // Filter by confidence and remove duplicates
-    const filtered = indicators
-      .filter(ind => ind.confidence >= (mergedOptions.minConfidence || 0.6))
-      .sort((a, b) => b.confidence - a.confidence);
-
-    logger.debug(`Filtered ${indicators.length} indicators to ${filtered.length} by confidence >= ${mergedOptions.minConfidence}`);
+    logger.debug(`Filtered ${indicators.length} indicators to ${filteredIndicators.length} by confidence >= ${mergedOptions.minConfidence}`);
 
     // Remove nearby duplicates (within 50 positions)
-    const deduped = this.removeDuplicates(filtered);
+    const deduped = this.removeDuplicates(filteredIndicators);
 
     const result = deduped.sort((a, b) => a.position - b.position);
     
     logger.info('Page break detection completed', {
       totalFound: indicators.length,
-      afterFiltering: filtered.length,
+      afterFiltering: filteredIndicators.length,
       afterDeduplication: result.length,
       finalBreaks: result.map(r => ({ position: r.position, type: r.type, confidence: r.confidence }))
     });
@@ -154,7 +134,6 @@ export class EPUBPageBreakDetector {
       structural: this.structuralDetector.detect($).length,
       stylistic: this.stylisticDetector.detect($).length,
       semantic: this.semanticDetector.detect($).length,
-      computed: this.computedDetector.detect(content).length,
     };
 
     logger.debug('Detection statistics:', stats);
