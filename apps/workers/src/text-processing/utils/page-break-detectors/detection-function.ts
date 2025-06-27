@@ -18,13 +18,11 @@ export async function detectEPUBPageBreaks(
   logger.info(`🔍 Starting page break detection for ${chapters.length} chapters`, {
     correlationId,
     options: {
-      targetPageSizeChars: options.targetPageSizeChars || 2000,
       minConfidence: options.minConfidence || 0.5,
       includeExplicit: options.includeExplicit !== false,
       includeStructural: options.includeStructural !== false,
       includeStylistic: options.includeStylistic !== false,
       includeSemantic: options.includeSemantic !== false,
-      includeComputed: options.includeComputed || false
     }
   });
 

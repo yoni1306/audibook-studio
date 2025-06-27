@@ -96,14 +96,10 @@ const worker = new Worker(
               const parseStart = Date.now();
               const parser = new PageBasedEPUBParser({
                 pageBreakDetection: {
-                  targetPageSizeChars: 2000,
-                  minPageSizeChars: 500,
-                  maxPageSizeChars: 5000,
                   includeExplicit: true,
                   includeStructural: true,
                   includeStylistic: true,
                   includeSemantic: true,
-                  includeComputed: false,
                   minConfidence: 0.6,
                 },
                 paragraphTargetLengthChars: 750,
