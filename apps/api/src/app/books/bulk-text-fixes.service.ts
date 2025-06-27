@@ -266,15 +266,32 @@ export class BulkTextFixesService {
               
               // Replace all occurrences using the same Hebrew-aware pattern
               const escapedWord = this.escapeRegExp(fix.originalWord);
-              const pattern = `(^|\\s|[\\p{P}])(${escapedWord})(?=\\s|[\\p{P}]|$)`;
+              const hebrewPrefixes = '[ובלכמשה]';
+              const pattern = `(^|\\s|[\\p{P}]|${hebrewPrefixes})(${escapedWord})(?=\\s|[\\p{P}]|$)`;
               try {
                 const regex = new RegExp(pattern, 'gu');
-                updatedContent = updatedContent.replace(regex, `$1${fix.correctedWord}`);
+                updatedContent = updatedContent.replace(regex, (match, prefix, wordMatch) => {
+                  // Find the position of this match in the current content
+                  const matchIndex = updatedContent.indexOf(match);
+                  const wordStart = matchIndex + prefix.length;
+                  const wordEnd = wordStart + wordMatch.length;
+                  
+                  // Check if this word is part of a compound word (connected to hyphen)
+                  const charBefore = wordStart > 0 ? updatedContent[wordStart - 1] : '';
+                  const charAfter = wordEnd < updatedContent.length ? updatedContent[wordEnd] : '';
+                  
+                  // Skip replacement if it's a compound word
+                  if (charBefore === '-' || charAfter === '-') {
+                    return match; // Return unchanged
+                  }
+                  
+                  // Replace only the word part, preserving the prefix
+                  return `${prefix}${fix.correctedWord}`;
+                });
               } catch (error) {
-                this.logger.error(`Error using Unicode regex for Hebrew word replacement: ${error}`);
-                // Fallback to standard word boundary regex
-                const fallbackRegex = new RegExp(`\\b${escapedWord}\\b`, 'g');
-                updatedContent = updatedContent.replace(fallbackRegex, fix.correctedWord);
+                // Fallback to simple string replacement if regex fails
+                this.logger.error(`Error using Unicode regex for replacement: ${error}`);
+                updatedContent = updatedContent.replace(new RegExp(escapedWord, 'g'), fix.correctedWord);
               }
               
               if (beforeContent !== updatedContent) {
@@ -301,31 +318,46 @@ export class BulkTextFixesService {
               },
             });
 
-            // Analyze the changes for the response
-            const changes = this.textFixesService.analyzeTextChanges(
-              paragraph.content,
-              updatedContent
-            );
-
-            // Record each individual correction in the textCorrection table
-            for (const change of changes) {
-              try {
-                await tx.textCorrection.create({
-                  data: {
-                    bookId,
-                    paragraphId,
-                    originalWord: change.originalWord,
-                    correctedWord: change.correctedWord,
-                    sentenceContext: this.extractSentenceContext(updatedContent, change.originalWord, change.position),
-                    fixType: change.fixType,
-                    ttsModel,
-                    ttsVoice,
-                  },
-                });
-                this.logger.log(`📝 Recorded correction: "${change.originalWord}" → "${change.correctedWord}" in paragraph ${paragraphId}`);
-              } catch (error) {
-                this.logger.error(`❌ Failed to record correction: ${error.message}`);
-                // Don't fail the entire operation if correction recording fails
+            // Record each individual correction that was actually applied
+            // Instead of analyzing the entire text diff, record only the fixes we just applied
+            const appliedChanges = [];
+            for (const fix of paragraphFixesList) {
+              const matches = this.findHebrewWordMatches(paragraph.content, fix.originalWord);
+              if (matches && matches.length > 0) {
+                // Find the position of the first occurrence in the original content
+                const wordPosition = this.findWordPosition(paragraph.content, fix.originalWord);
+                // Extract context from the original content before replacement
+                const sentenceContext = this.extractSentenceContext(paragraph.content, fix.originalWord, wordPosition);
+                
+                // Record one correction entry for each occurrence that was actually replaced
+                for (let i = 0; i < matches.length; i++) {
+                  try {
+                    await tx.textCorrection.create({
+                      data: {
+                        bookId,
+                        paragraphId,
+                        originalWord: fix.originalWord,
+                        correctedWord: fix.correctedWord,
+                        sentenceContext,
+                        fixType: 'BULK_FIX',
+                        ttsModel,
+                        ttsVoice,
+                      },
+                    });
+                    this.logger.log(`📝 Recorded correction: "${fix.originalWord}" → "${fix.correctedWord}" in paragraph ${paragraphId} (occurrence ${i + 1})`);
+                    
+                    // Add to applied changes for response
+                    appliedChanges.push({
+                      originalWord: fix.originalWord,
+                      correctedWord: fix.correctedWord,
+                      position: 0, // Position tracking not critical for bulk fixes
+                      fixType: 'BULK_FIX'
+                    });
+                  } catch (error) {
+                    this.logger.error(`❌ Failed to record correction: ${error.message}`);
+                    // Don't fail the entire operation if correction recording fails
+                  }
+                }
               }
             }
 
@@ -335,7 +367,7 @@ export class BulkTextFixesService {
               pageNumber: paragraph.page.pageNumber,
               orderIndex: paragraph.orderIndex,
               wordsFixed: wordsFixedInParagraph,
-              changes,
+              changes: appliedChanges,
             });
 
             totalWordsFixed += wordsFixedInParagraph;
@@ -428,6 +460,47 @@ export class BulkTextFixesService {
   }
 
   /**
+   * Finds the position of the first occurrence of a Hebrew word in text
+   * @param text The text to search in
+   * @param word The Hebrew word to find
+   * @returns The position of the first occurrence, or 0 if not found
+   */
+  private findWordPosition(text: string, word: string): number {
+    // Escape the search word for regex safety
+    const escapedWord = this.escapeRegExp(word);
+    
+    // Hebrew word boundaries are more complex than English
+    const hebrewPrefixes = '[ובלכמשה]';
+    const pattern = `(^|\\s|[\\p{P}]|${hebrewPrefixes})(${escapedWord})(?=\\s|[\\p{P}]|$)`;
+    
+    try {
+      const regex = new RegExp(pattern, 'u'); // Note: no 'g' flag to get first match only
+      const match = regex.exec(text);
+      
+      if (match) {
+        const prefix = match[1];
+        const wordMatch = match[2];
+        const matchStart = match.index;
+        const wordStart = matchStart + prefix.length;
+        const wordEnd = wordStart + wordMatch.length;
+        
+        // Check if there's a hyphen immediately before or after the word itself
+        const charBefore = wordStart > 0 ? text[wordStart - 1] : '';
+        const charAfter = wordEnd < text.length ? text[wordEnd] : '';
+        
+        if (charBefore !== '-' && charAfter !== '-') {
+          return wordStart; // Return the position of the word itself, not including prefix
+        }
+      }
+    } catch (error) {
+      this.logger.error(`Error using Unicode regex for word position: ${error}`);
+    }
+    
+    // Fallback to simple indexOf if regex fails
+    return Math.max(0, text.indexOf(word));
+  }
+
+  /**
    * Finds matches of a Hebrew word in text, properly handling word boundaries
    * This is needed because JavaScript's \b doesn't work correctly with Hebrew characters
    * Uses exact matching - words must match exactly including niqqud, but ignores punctuation
@@ -439,9 +512,16 @@ export class BulkTextFixesService {
     // Escape the search word for regex safety
     const escapedWord = this.escapeRegExp(word);
     
-    // Create a pattern that matches the word when surrounded by spaces, punctuation, or at start/end of text
-    // The word itself should not include punctuation, but can be followed by it
-    const pattern = `(^|\\s|[\\p{P}])(${escapedWord})(?=\\s|[\\p{P}]|$)`;
+    // Hebrew word boundaries are more complex than English
+    // A word can be preceded by:
+    // - Start of text (^)
+    // - Whitespace (\s)
+    // - Punctuation ([\p{P}]) but we'll filter out hyphen matches manually
+    // - Hebrew prefixes like ו (and), ב (in), ל (to), כ (as), מ (from), ש (that), ה (the)
+    const hebrewPrefixes = '[ובלכמשה]';
+    
+    // Create a pattern that matches the word when properly bounded
+    const pattern = `(^|\\s|[\\p{P}]|${hebrewPrefixes})(${escapedWord})(?=\\s|[\\p{P}]|$)`;
     
     try {
       // Use Unicode flag 'u' to properly handle Unicode characters
@@ -449,9 +529,23 @@ export class BulkTextFixesService {
       const matches = [];
       let match;
       
-      // Find all matches in the text and return only the word part (without punctuation)
+      // Find all matches in the text and filter out hyphen-connected words
       while ((match = regex.exec(text)) !== null) {
-        matches.push(match[2]);
+        const prefix = match[1];
+        const wordMatch = match[2];
+        
+        // Skip if the word is connected to a hyphen (compound word)
+        const matchStart = match.index;
+        const wordStart = matchStart + prefix.length;
+        const wordEnd = wordStart + wordMatch.length;
+        
+        // Check if there's a hyphen immediately before or after the word itself
+        const charBefore = wordStart > 0 ? text[wordStart - 1] : '';
+        const charAfter = wordEnd < text.length ? text[wordEnd] : '';
+        
+        if (charBefore !== '-' && charAfter !== '-') {
+          matches.push(wordMatch); // Only the word part, not the prefix
+        }
       }
       
       return matches.length > 0 ? matches as RegExpMatchArray : null;
@@ -521,19 +615,16 @@ export class BulkTextFixesService {
     // Find the sentence containing the word at the given position
     const sentenceRegex = /[^.!?]+[.!?]+/g;
     let sentenceMatch;
-    let currentPos = 0;
     
     while ((sentenceMatch = sentenceRegex.exec(content)) !== null) {
       const sentence = sentenceMatch[0];
-      const sentenceStart = currentPos;
-      const sentenceEnd = currentPos + sentence.length;
+      const sentenceStart = sentenceMatch.index;
+      const sentenceEnd = sentenceStart + sentence.length;
       
       // Check if the position falls within this sentence
       if (position >= sentenceStart && position < sentenceEnd) {
         return sentence.trim();
       }
-      
-      currentPos = sentenceEnd;
     }
     
     // If no sentence found, extract context around the position

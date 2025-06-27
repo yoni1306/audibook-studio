@@ -214,13 +214,17 @@ describe('BulkTextFixesService', () => {
       expect(otResult).toBeDefined();
       expect(otResult.correctedWord).toBe('אוֹת');
       
-      // With our improved Hebrew word boundary detection, we now correctly match אות in אות-יד
-      // This is actually the correct behavior for Hebrew text
-      expect(otResult.paragraphs.length).toBe(3); // Should find in paragraphs 3, 4, and 5
-      expect(otResult.paragraphs.map(p => p.id)).toContain('paragraph-3'); // Now correctly matches in 'אות-יד'
+      // With our improved Hebrew word boundary detection, we now correctly exclude compound words
+      // The word אות appears in:
+      // - paragraph-2: 'אותיות' (should NOT match - substring)
+      // - paragraph-3: 'אות-יד' (should NOT match - compound word)
+      // - paragraph-4: 'כל אות וגם' (should match - standalone)
+      // - paragraph-5: 'כל אות במילה' (should match - standalone)
+      expect(otResult.paragraphs.length).toBe(2); // Should find in paragraphs 4 and 5 only
       expect(otResult.paragraphs.map(p => p.id)).toContain('paragraph-4');
       expect(otResult.paragraphs.map(p => p.id)).toContain('paragraph-5');
       expect(otResult.paragraphs.map(p => p.id)).not.toContain('paragraph-2'); // Should not match substring in 'אותיות'
+      expect(otResult.paragraphs.map(p => p.id)).not.toContain('paragraph-3'); // Should not match compound word 'אות-יד'
       
       // Check ארה״ב -> ארצות הברית
       const usaResult = result.find(r => r.originalWord === 'ארה״ב');

@@ -29,11 +29,20 @@ export default function BookHeader({ book }: BookHeaderProps) {
     .filter(p => p.audioDuration && p.audioDuration > 0)
     .reduce((sum, p) => sum + (p.audioDuration || 0), 0);
   
-  const estimatedHours = Math.floor(totalDurationSeconds / 3600);
-  const estimatedMinutes = Math.floor((totalDurationSeconds % 3600) / 60);
+  // If no audio duration available, estimate based on text length
+  // Average reading speed: ~200 words per minute, speaking speed: ~150 words per minute
+  let estimatedSeconds = totalDurationSeconds;
+  if (estimatedSeconds === 0) {
+    const totalWords = book.paragraphs
+      .reduce((sum, p) => sum + (p.content?.split(/\s+/).length || 0), 0);
+    estimatedSeconds = Math.round((totalWords / 150) * 60); // 150 words per minute speaking
+  }
+  
+  const estimatedHours = Math.floor(estimatedSeconds / 3600);
+  const estimatedMinutes = Math.floor((estimatedSeconds % 3600) / 60);
   
   const formatTime = () => {
-    if (totalDurationSeconds === 0) return 'Not calculated';
+    if (estimatedSeconds === 0) return 'Not available';
     if (estimatedHours > 0) {
       return `${estimatedHours}h ${estimatedMinutes}m`;
     }
@@ -47,7 +56,14 @@ export default function BookHeader({ book }: BookHeaderProps) {
       </Link>
 
       <div style={{ marginTop: '20px', marginBottom: '30px' }}>
-        <h1 style={{ margin: '0 0 10px 0', fontSize: '2.5rem', fontWeight: 'bold' }}>
+        <h1 style={{ 
+          margin: '0 0 10px 0', 
+          fontSize: '2.5rem', 
+          fontWeight: 'bold',
+          direction: 'rtl',
+          textAlign: 'right',
+          unicodeBidi: 'plaintext'
+        }}>
           {book.title}
         </h1>
         {book.author && (
@@ -90,7 +106,7 @@ export default function BookHeader({ book }: BookHeaderProps) {
               {formatTime()}
             </div>
             <div style={{ fontSize: '0.9rem', color: '#666', marginTop: '5px' }}>
-              Estimated Length
+              Estimated Length {totalDurationSeconds > 0 ? '(Audio)' : '(Text-based)'}
             </div>
           </div>
         </div>
