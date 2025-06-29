@@ -1,0 +1,20 @@
+# openapi-config.yaml
+# Configuration for OpenAPI Generator
+
+generator: typescript-fetch
+inputSpec: http://localhost:3000/api-json  # Your API's OpenAPI spec URL
+outputDir: libs/api-client/src/generated
+additionalProperties:
+  npmName: "@audibook/api-client"
+  npmVersion: "1.0.0"
+  supportsES6: true
+  typescriptThreePlus: true
+  withInterfaces: true
+  # Don't generate the default api client, we'll create our own wrapper
+  generateApiClients: true
+  # Generate models and API interfaces
+  generateModels: true
+  modelPropertyNaming: camelCase
+  enumPropertyNaming: UPPERCASE
+  # Use native fetch
+  platform: browser

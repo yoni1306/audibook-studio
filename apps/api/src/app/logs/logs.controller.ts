@@ -1,4 +1,5 @@
 import { Controller, Post, Body, Logger, InternalServerErrorException } from '@nestjs/common';
+import { ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 
 interface LogEntry {
   timestamp: string;
@@ -13,6 +14,24 @@ export class LogsController {
   private readonly logger = new Logger('ClientLogs');
 
   @Post()
+  @ApiOperation({ summary: 'Receive client logs', description: 'Receive and process logs from client applications' })
+  @ApiResponse({ status: 200, description: 'Successfully processed client logs' })
+  @ApiBody({
+    description: 'Client logs data',
+    schema: {
+      type: 'object',
+      properties: {
+        logs: {
+          type: 'array',
+          items: {
+            type: 'object',
+            description: 'Log entry from client'
+          }
+        }
+      },
+      required: ['logs']
+    }
+  })
   async receiveLogs(@Body() body: { logs: LogEntry[] }) {
     try {
       this.logger.log('📝 [API] Receiving client logs');

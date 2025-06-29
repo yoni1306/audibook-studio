@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { apiUrl } from '../../utils/api';
+import { useState, useEffect, useCallback } from 'react';
+import { useApiClient } from '@hooks/useApiClient';
 
 // Force dynamic rendering to prevent build-time pre-rendering
 export const dynamic = 'force-dynamic';
@@ -18,54 +18,48 @@ interface QueueStatus {
 interface Job {
   id: string;
   name: string;
-  data: any;
-  state?: string;
-  timestamp: number;
-  failedReason?: string;
-  stacktrace?: string[];
-  returnvalue?: any;
-  processedOn?: number;
-  finishedOn?: number;
-  attemptsMade?: number;
+  data: Record<string, unknown>;
+  opts: Record<string, unknown> | null;
+  progress: number | null;
+  delay: number | null;
+  timestamp: string;
+  attemptsMade: number;
+  processedOn: string | null;
+  finishedOn: string | null;
+  failedReason: string | null;
+  stacktrace: string[] | null;
+  returnvalue: Record<string, never> | null;
 }
 
 export default function QueuePage() {
+  // API client
+  const apiClient = useApiClient();
+  
   const [status, setStatus] = useState<QueueStatus | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [selectedStatus, setSelectedStatus] = useState('waiting');
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [expandedJobs, setExpandedJobs] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    fetchStatus();
-    fetchJobs(selectedStatus);
-
-    if (autoRefresh) {
-      const interval = setInterval(() => {
-        fetchStatus();
-        fetchJobs(selectedStatus);
-      }, 2000);
-
-      return () => clearInterval(interval);
-    }
-  }, [selectedStatus, autoRefresh]);
-
-  const fetchStatus = async () => {
+  const fetchStatus = useCallback(async () => {
     try {
-      const response = await fetch(`${apiUrl}/api/queue/status`);
-      const data = await response.json();
-      setStatus(data);
+      const { data, error } = await apiClient.queue.getStatus();
+      if (error) {
+        throw new Error(`API error: ${error}`);
+      }
+      setStatus(data || null);
     } catch (error) {
       console.error('Error fetching status:', error);
     }
-  };
+  }, [apiClient]);
 
-  const fetchJobs = async (status: string) => {
+  const fetchJobs = useCallback(async (status: string) => {
     try {
-      const response = await fetch(
-        `${apiUrl}/api/queue/jobs/${status}`
-      );
-      const data = await response.json();
+      const { data, error } = await apiClient.queue.getJobs(status);
+      
+      if (error) {
+        throw new Error(`API error: ${error}`);
+      }
       
       // Handle different response structures
       if (Array.isArray(data)) {
@@ -80,31 +74,51 @@ export default function QueuePage() {
       console.error('Error fetching jobs:', error);
       setJobs([]);
     }
-  };
+  }, [apiClient]);
 
-  const retryJob = async (jobId: string) => {
+  const retryJob = useCallback(async (jobId: string) => {
     try {
-      await fetch(`${apiUrl}/api/queue/retry/${jobId}`, {
-        method: 'POST',
-      });
+      const { error } = await apiClient.queue.retryJob(jobId);
+      
+      if (error) {
+        throw new Error(`API error: ${error}`);
+      }
+      
       fetchStatus();
       fetchJobs(selectedStatus);
     } catch (error) {
       console.error('Error retrying job:', error);
     }
-  };
+  }, [apiClient, fetchStatus, fetchJobs, selectedStatus]);
 
-  const cleanJobs = async (status: string) => {
+  const cleanJobs = useCallback(async (status: string) => {
     try {
-      await fetch(`${apiUrl}/api/queue/clean/${status}`, {
-        method: 'DELETE',
-      });
+      const { error } = await apiClient.queue.cleanJobs(status);
+      
+      if (error) {
+        throw new Error(`API error: ${error}`);
+      }
+      
       fetchStatus();
       fetchJobs(selectedStatus);
     } catch (error) {
       console.error('Error cleaning jobs:', error);
     }
-  };
+  }, [apiClient, fetchStatus, fetchJobs, selectedStatus]);
+
+  useEffect(() => {
+    fetchStatus();
+    fetchJobs(selectedStatus);
+
+    if (autoRefresh) {
+      const interval = setInterval(() => {
+        fetchStatus();
+        fetchJobs(selectedStatus);
+      }, 2000);
+
+      return () => clearInterval(interval);
+    }
+  }, [selectedStatus, autoRefresh, fetchStatus, fetchJobs]);
 
   const toggleJobExpanded = (jobId: string) => {
     const newExpanded = new Set(expandedJobs);
@@ -116,14 +130,16 @@ export default function QueuePage() {
     setExpandedJobs(newExpanded);
   };
 
-  const formatTimestamp = (timestamp?: number) => {
+  const formatTimestamp = (timestamp?: string) => {
     if (!timestamp) return 'N/A';
     return new Date(timestamp).toLocaleString();
   };
 
   const getJobDuration = (job: Job) => {
     if (!job.processedOn || !job.finishedOn) return 'N/A';
-    const duration = job.finishedOn - job.processedOn;
+    const processedOn = new Date(job.processedOn).getTime();
+    const finishedOn = new Date(job.finishedOn).getTime();
+    const duration = finishedOn - processedOn;
     return `${(duration / 1000).toFixed(2)}s`;
   };
 

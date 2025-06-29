@@ -9,7 +9,7 @@ const path = require('path');
 const fs = require('fs');
 const originalResolveFilename = Module._resolveFilename;
 const distPath = __dirname;
-const manifest = [{"module":"@audibook/correlation","exactMatch":"libs/shared/correlation/src/index.js","pattern":"libs/shared/correlation/src/index.ts"},{"module":"@audibook/logger","exactMatch":"libs/shared/logger/src/index.js","pattern":"libs/shared/logger/src/index.ts"}];
+const manifest = [{"module":"@audibook/api-client","exactMatch":"libs/api-client/src/index.js","pattern":"libs/api-client/src/index.ts"},{"module":"@audibook/correlation","exactMatch":"libs/shared/correlation/src/index.js","pattern":"libs/shared/correlation/src/index.ts"},{"module":"@audibook/logger","exactMatch":"libs/shared/logger/src/index.js","pattern":"libs/shared/logger/src/index.ts"},{"module":"@hooks/*","pattern":"apps/web/hooks/*"}];
 
 Module._resolveFilename = function(request, parent) {
   let found;

@@ -18,4 +18,15 @@ export default [
   {
     ignores: ['.next/**/*'],
   },
+  {
+    files: ['**/*.ts', '**/*.tsx'],
+    rules: {
+      '@nx/enforce-module-boundaries': [
+        'error',
+        {
+          allow: ['@hooks/*'],
+        },
+      ],
+    },
+  },
 ];

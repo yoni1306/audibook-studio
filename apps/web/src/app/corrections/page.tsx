@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { apiUrl } from '../../utils/api';
+import { useApiClient } from '@hooks/useApiClient';
 
 // Force dynamic rendering to prevent build-time pre-rendering
 export const dynamic = 'force-dynamic';
@@ -46,6 +46,9 @@ interface Correction {
 }
 
 export default function CorrectionsPage() {
+  // API client
+  const apiClient = useApiClient();
+  
   // State
   const [corrections, setCorrections] = useState<Correction[]>([]);
   const [fixTypes, setFixTypes] = useState<string[]>([]);
@@ -87,30 +90,22 @@ export default function CorrectionsPage() {
     setError(null);
     
     try {
-      const response = await fetch(`${apiUrl}/api/books/all-corrections`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const { data, error } = await apiClient.books.getAllCorrections({
+        page: paginationModel.page + 1, // API expects 1-based page numbers
+        limit: paginationModel.pageSize,
+        sortBy: (sortModel[0]?.field as 'createdAt' | 'originalWord' | 'correctedWord') || 'createdAt',
+        sortOrder: sortModel[0]?.sort || 'desc',
+        filters: {
+          originalWord: originalWordFilter || undefined,
+          correctedWord: correctedWordFilter || undefined,
+          fixType: fixTypeFilter || undefined,
+          bookTitle: bookTitleFilter || undefined,
         },
-        body: JSON.stringify({
-          page: paginationModel.page + 1, // API expects 1-based page numbers
-          pageSize: paginationModel.pageSize,
-          sortBy: sortModel[0]?.field || 'createdAt',
-          sortOrder: sortModel[0]?.sort || 'desc',
-          filters: {
-            originalWord: originalWordFilter || undefined,
-            correctedWord: correctedWordFilter || undefined,
-            fixType: fixTypeFilter || undefined,
-            bookTitle: bookTitleFilter || undefined,
-          },
-        }),
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (error) {
+        throw new Error(`API error: ${error}`);
       }
-
-      const data = await response.json();
       
       if (data && Array.isArray(data.corrections)) {
         setCorrections(data.corrections);
@@ -127,24 +122,24 @@ export default function CorrectionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [paginationModel, sortModel, originalWordFilter, correctedWordFilter, fixTypeFilter, bookTitleFilter]);
+  }, [apiClient, paginationModel, sortModel, originalWordFilter, correctedWordFilter, fixTypeFilter, bookTitleFilter]);
 
   const fetchFixTypes = useCallback(async () => {
     try {
-      const response = await fetch(`${apiUrl}/api/books/fix-types`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      const { data, error } = await apiClient.books.getFixTypes();
+      
+      if (error) {
+        throw new Error(`API error: ${error}`);
       }
       
-      const data = await response.json();
       // The backend returns { fixTypes: [...] }, so we need to access the fixTypes property
-      setFixTypes(data.fixTypes || []);
+      setFixTypes(data?.fixTypes || []);
     } catch (err) {
       console.error('Error fetching fix types:', err);
       // Set an empty array as fallback
       setFixTypes([]);
     }
-  }, []);
+  }, [apiClient]);
 
   // Effects
   useEffect(() => {

@@ -1,25 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { apiUrl } from '../../../../utils/api';
-
-export interface BulkFixSuggestion {
-  originalWord: string;
-  correctedWord: string;
-  fixType: string;
-  paragraphIds: string[];
-  count: number;
-  paragraphs: Array<{
-    id: string;
-    pageId: string;
-    pageNumber: number;
-    orderIndex: number;
-    content: string;
-    occurrences: number;
-    previewBefore: string;
-    previewAfter: string;
-  }>;
-}
+import { useApiClient } from '@hooks/useApiClient';
+import { BulkFixSuggestion } from '@audibook/api-client';
 
 interface BulkFixModalProps {
   onClose: () => void;
@@ -38,6 +21,7 @@ export default function BulkFixModal({
   bookId, 
   onFixesApplied 
 }: BulkFixModalProps) {
+  const apiClient = useApiClient();
   const [selectedFixes, setSelectedFixes] = useState<{[key: string]: string[]}>({});
   const [applying, setApplying] = useState(false);
   const [expandedWord, setExpandedWord] = useState<string | null>(null);
@@ -54,11 +38,8 @@ export default function BulkFixModal({
         const key = `${suggestion.originalWord}:${suggestion.correctedWord}`;
         // Handle both old and new formats
         if (suggestion.paragraphIds) {
-          // New format from DTO
+          // API client format with paragraphIds
           initialSelection[key] = [...suggestion.paragraphIds];
-        } else if (suggestion.paragraphs) {
-          // Old format
-          initialSelection[key] = suggestion.paragraphs.map(p => p.id);
         }
       });
       setSelectedFixes(initialSelection);
@@ -95,23 +76,25 @@ export default function BulkFixModal({
     console.log('🔧 Starting bulk fix application...');
     console.log('📊 Selected fixes:', selectedFixes);
     
-    const fixesToApply = Object.entries(selectedFixes).map(([wordKey, paragraphIds]) => {
-      const suggestion = suggestions.find(s => `${s.originalWord}:${s.correctedWord}` === wordKey);
-      if (!suggestion) {
-        console.warn(`⚠️ No suggestion found for wordKey: ${wordKey}`);
-        console.warn(`🔍 Available suggestions:`, suggestions.map(s => `${s.originalWord}:${s.correctedWord}`));
-        return null;
-      }
-      
-      const fix = {
-        originalWord: suggestion.originalWord,
-        correctedWord: suggestion.correctedWord,
-        paragraphIds: paragraphIds
-      };
-      
-      console.log(`📝 Prepared fix: "${fix.originalWord}" → "${fix.correctedWord}" for ${fix.paragraphIds.length} paragraphs:`, fix.paragraphIds);
-      return fix;
-    }).filter(Boolean);
+    const fixesToApply = Object.entries(selectedFixes)
+      .map(([wordKey, paragraphIds]) => {
+        const suggestion = suggestions.find(s => `${s.originalWord}:${s.correctedWord}` === wordKey);
+        if (!suggestion) {
+          console.warn(`⚠️ No suggestion found for wordKey: ${wordKey}`);
+          console.warn(`🔍 Available suggestions:`, suggestions.map(s => `${s.originalWord}:${s.correctedWord}`));
+          return null;
+        }
+        
+        const fix = {
+          originalWord: suggestion.originalWord,
+          correctedWord: suggestion.correctedWord,
+          paragraphIds: paragraphIds
+        };
+        
+        console.log(`📝 Prepared fix: "${fix.originalWord}" → "${fix.correctedWord}" for ${fix.paragraphIds.length} paragraphs:`, fix.paragraphIds);
+        return fix;
+      })
+      .filter((fix): fix is { originalWord: string; correctedWord: string; paragraphIds: string[] } => fix !== null);
 
     console.log(`🎯 Total fixes to apply: ${fixesToApply.length}`);
     console.log('📋 Complete fixes payload:', fixesToApply);
@@ -124,27 +107,22 @@ export default function BulkFixModal({
     setApplying(true);
     
     try {
-      console.log(`🚀 Making API call to ${apiUrl}/api/books/bulk-fixes...`);
-      const response = await fetch(`${apiUrl}/api/books/bulk-fixes`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          bookId,
-          fixes: fixesToApply,
-        }),
+      console.log('🚀 Making API call to /books/bulk-fixes...');
+      const { data: result, error } = await apiClient.books.applyBulkFixes({
+        bookId,
+        fixes: fixesToApply,
       });
 
-      console.log(`📡 API Response status: ${response.status} ${response.statusText}`);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ API Error response:', errorText);
-        throw new Error(`Failed to apply fixes: ${response.status} ${response.statusText}`);
+      if (error) {
+        console.error('❌ API Error response:', error);
+        throw new Error(`Failed to apply fixes: ${error}`);
       }
 
-      const result = await response.json();
+      if (!result) {
+        console.error('❌ API returned no result');
+        throw new Error('Failed to apply fixes: No result returned from API');
+      }
+
       console.log('✅ API Success response:', result);
       console.log(`📈 Results: ${result.totalParagraphsUpdated} paragraphs updated, ${result.totalWordsFixed} words fixed`);
 
@@ -230,29 +208,25 @@ export default function BulkFixModal({
             const wordKey = `${suggestion.originalWord}:${suggestion.correctedWord}`;
             const selectedParagraphs = selectedFixes[wordKey] || [];
             
-            // Handle both old and new formats
-            let allParagraphIds: string[] = [];
-            let paragraphsToRender: Array<{
-              id: string;
-              pageId: string;
-              pageNumber: number;
-              orderIndex: number;
-              content: string;
-              occurrences: number;
-              previewBefore: string;
-              previewAfter: string;
-            }> = [];
+            // Use the new API format with full paragraph details
+            const allParagraphIds = suggestion.paragraphIds || [];
             
-            if (suggestion.paragraphs) {
-              // New format with paragraph details (preferred)
-              allParagraphIds = suggestion.paragraphs.map(p => p.id);
-              paragraphsToRender = suggestion.paragraphs;
-              logger.debug(`Using paragraphs for ${suggestion.originalWord}->${suggestion.correctedWord}`);
-            } else if (suggestion.paragraphIds) {
-              // Fallback to just IDs if no paragraph details
-              allParagraphIds = suggestion.paragraphIds;
-              logger.debug(`Using paragraphIds only for ${suggestion.originalWord}->${suggestion.correctedWord}`);
-            }
+            // Use the paragraphs field which contains full paragraph details
+            const paragraphsToRender = suggestion.paragraphs?.map(paragraph => ({
+              id: paragraph.id || '',
+              pageId: paragraph.pageId || '',
+              pageNumber: paragraph.pageNumber || 0,
+              orderIndex: paragraph.orderIndex || 0,
+              content: paragraph.content || '',
+              occurrences: paragraph.occurrences || 1,
+              previewBefore: paragraph.previewBefore || '',
+              previewAfter: paragraph.previewAfter || ''
+            })) || [];
+            
+            logger.debug(`Using paragraphs for ${suggestion.originalWord}->${suggestion.correctedWord}`, {
+              paragraphIds: allParagraphIds,
+              paragraphs: suggestion.paragraphs
+            });
             
             const allSelected = allParagraphIds.length === selectedParagraphs.length;
             const isExpanded = expandedWord === wordKey;
@@ -280,7 +254,7 @@ export default function BulkFixModal({
                         <span style={{ color: '#16a34a', fontWeight: '500', fontSize: '15px' }}>&quot;{suggestion.correctedWord}&quot;</span>
                       </div>
                       <span style={{ fontSize: '15px', color: '#6b7280' }}>
-                        Found in {suggestion.paragraphs?.length || suggestion.paragraphIds?.length} paragraphs
+                        Found in {suggestion.paragraphIds?.length || 0} paragraphs
                       </span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

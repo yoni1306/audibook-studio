@@ -16,6 +16,19 @@ body {
   padding: 0;
 }
 
+/* Navigation styles */
+.nav-link {
+  text-decoration: none;
+  color: #666;
+  padding: 5px 10px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.nav-link:hover {
+  background-color: #e0e0e0;
+}
+
 *,
 ::before,
 ::after {

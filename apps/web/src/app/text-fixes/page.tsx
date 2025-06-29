@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { apiUrl } from '../../utils/api';
+import { useState, useEffect, useCallback } from 'react';
+import { useApiClient } from '@hooks/useApiClient';
 
 // Force dynamic rendering to prevent build-time pre-rendering
 export const dynamic = 'force-dynamic';
@@ -39,6 +39,9 @@ interface Statistics {
 }
 
 export default function TextFixesPage() {
+  // API client
+  const apiClient = useApiClient();
+  
   const [wordFixes, setWordFixes] = useState<WordFix[]>([]);
   const [statistics, setStatistics] = useState<Statistics | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,36 +50,44 @@ export default function TextFixesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const [wordsResponse, statsResponse] = await Promise.all([
-        fetch(`${apiUrl}/api/text-fixes/words`),
-        fetch(`${apiUrl}/api/text-fixes/statistics`),
+      const [{ data: wordsData, error: wordsError }, { data: statsData, error: statsError }] = await Promise.all([
+        apiClient.textFixes.getWords(),
+        apiClient.textFixes.getStatistics(),
       ]);
 
-      const words = await wordsResponse.json();
-      const stats = await statsResponse.json();
+      if (wordsError) {
+        throw new Error(`Error fetching words: ${wordsError}`);
+      }
+      if (statsError) {
+        throw new Error(`Error fetching statistics: ${statsError}`);
+      }
 
-      setWordFixes(words);
-      setStatistics(stats);
+      setWordFixes(wordsData || []);
+      setStatistics(statsData || null);
     } catch (error) {
       console.error('Error fetching text fixes:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [apiClient]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const fetchBookFixes = async (bookId: string) => {
     if (!bookId) return;
     
     try {
-      const response = await fetch(`${apiUrl}/api/text-fixes/book/${bookId}`);
-      const fixes = await response.json();
-      setBookFixes(fixes);
+      const { data, error } = await apiClient.textFixes.getBookFixes(bookId);
+      
+      if (error) {
+        throw new Error(`Error fetching book fixes: ${error}`);
+      }
+      
+      setBookFixes(data || []);
     } catch (error) {
       console.error('Error fetching book fixes:', error);
     }

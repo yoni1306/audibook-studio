@@ -1,10 +1,13 @@
 import { Controller, Get, Logger, InternalServerErrorException } from '@nestjs/common';
+import { ApiOperation, ApiResponse } from '@nestjs/swagger';
 
 @Controller('health')
 export class HealthController {
   private readonly logger = new Logger(HealthController.name);
 
   @Get()
+  @ApiOperation({ summary: 'Health check', description: 'Check the health status of the API service' })
+  @ApiResponse({ status: 200, description: 'Service is healthy' })
   check() {
     try {
       this.logger.log('🏥 [API] Health check requested');

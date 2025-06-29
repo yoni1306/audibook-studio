@@ -1,6 +1,6 @@
 'use client';
 
-import { BulkFixSuggestion } from './BulkFixModal';
+import { BulkFixSuggestion } from '@audibook/api-client';
 
 interface BulkFixNotificationProps {
   suggestions: BulkFixSuggestion[];

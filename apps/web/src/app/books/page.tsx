@@ -2,26 +2,17 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { apiUrl } from '../../utils/api';
+import { useApiClient } from '../../../hooks/useApiClient';
+import type { BookWithCounts } from '@audibook/api-client';
 
 // Force dynamic rendering to prevent build-time pre-rendering
 export const dynamic = 'force-dynamic';
 
-interface Book {
-  id: string;
-  title: string;
-  author: string | null;
-  status: string;
-  createdAt: string;
-  _count: {
-    paragraphs: number;
-  };
-}
-
 export default function BooksPage() {
-  const [books, setBooks] = useState<Book[]>([]);
+  const [books, setBooks] = useState<BookWithCounts[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const apiClient = useApiClient();
 
   useEffect(() => {
     const fetchBooks = async () => {
@@ -29,25 +20,19 @@ export default function BooksPage() {
         setLoading(true);
         setError(null);
         
-
-        const res = await fetch(`${apiUrl}/api/books`);
+        const { data, error } = await apiClient.books.getAll();
         
-        if (!res.ok) {
-          // This is an actual server error
-          let errorMessage = 'Server error occurred';
-          try {
-            const errorData = await res.json();
-            errorMessage = errorData.message || errorMessage;
-          } catch {
-            // If we can't parse the error response, use a generic message
-            errorMessage = `Server returned ${res.status}: ${res.statusText}`;
-          }
-          throw new Error(errorMessage);
+        if (error) {
+          throw new Error(`API error: ${error}`);
         }
         
-        const data = await res.json();
-        // Handle new API response structure
-        const booksArray = data.books || data; // Support both old and new format
+        if (!data) {
+          setBooks([]);
+          return;
+        }
+        
+        // Handle API response structure
+        const booksArray = data.books || [];
         setBooks(Array.isArray(booksArray) ? booksArray : []);
         setError(null);
       } catch (err) {
@@ -69,7 +54,7 @@ export default function BooksPage() {
     };
 
     fetchBooks();
-  }, []);
+  }, [apiClient.books]);
 
   if (loading) return <div style={{ padding: '20px' }}>Loading books...</div>;
 
