@@ -12,6 +12,8 @@ interface LogEntry {
   data?: unknown;
 }
 
+import { apiUrl } from './api';
+
 class ClientLogger {
   private context: string;
   private batchedLogs: LogEntry[] = [];
@@ -73,7 +75,7 @@ class ClientLogger {
     }
   }
 
-  private async sendLogs(): void {
+  private async sendLogs(): Promise<void> {
     if (this.batchedLogs.length === 0) return;
     
     if (this.batchTimeout) {
@@ -85,7 +87,7 @@ class ClientLogger {
     this.batchedLogs = [];
 
     try {
-      await fetch('http://localhost:3333/api/logs', {
+      await fetch(`${apiUrl}/api/logs`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

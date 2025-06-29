@@ -1,6 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { apiUrl } from '../../utils/api';
+
+// Force dynamic rendering to prevent build-time pre-rendering
+export const dynamic = 'force-dynamic';
 
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -29,7 +33,7 @@ export default function UploadPage() {
     try {
       // Get presigned URL from API
       const response = await fetch(
-        'http://localhost:3333/api/s3/presigned-upload',
+        `${apiUrl}/api/s3/presigned-upload`,
         {
           method: 'POST',
           headers: {

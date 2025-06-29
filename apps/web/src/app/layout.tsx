@@ -13,22 +13,19 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <head>
-        <style>{`
-          .nav-link {
-            text-decoration: none;
-            color: #666;
-            padding: 5px 10px;
-            border-radius: 4px;
-            transition: background-color 0.2s;
-          }
-          .nav-link:hover {
-            background-color: #e0e0e0;
-          }
-        `}</style>
-      </head>
-      <body>
+    <>
+      <style jsx global>{`
+            .nav-link {
+              text-decoration: none;
+              color: #666;
+              padding: 5px 10px;
+              border-radius: 4px;
+              transition: background-color 0.2s;
+            }
+            .nav-link:hover {
+              background-color: #e0e0e0;
+            }
+      `}</style>
         <header style={{
           backgroundColor: '#f5f5f5',
           borderBottom: '1px solid #ddd',
@@ -61,7 +58,6 @@ export default function RootLayout({
         <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 20px' }}>
           {children}
         </main>
-      </body>
-    </html>
+    </>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { apiUrl } from '../../../../utils/api';
 
 export interface BulkFixSuggestion {
   originalWord: string;
@@ -123,8 +124,8 @@ export default function BulkFixModal({
     setApplying(true);
     
     try {
-      console.log('🚀 Making API call to http://localhost:3333/api/books/bulk-fixes...');
-      const response = await fetch('http://localhost:3333/api/books/bulk-fixes', {
+      console.log(`🚀 Making API call to ${apiUrl}/api/books/bulk-fixes...`);
+      const response = await fetch(`${apiUrl}/api/books/bulk-fixes`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

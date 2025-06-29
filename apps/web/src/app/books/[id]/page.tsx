@@ -3,6 +3,10 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { createLogger } from '../../../utils/logger';
+import { apiUrl } from '../../../utils/api';
+
+// Force dynamic rendering to prevent build-time pre-rendering
+export const dynamic = 'force-dynamic';
 
 // Components
 import BookHeader, { Book } from './components/BookHeader';
@@ -44,7 +48,7 @@ export default function BookDetailPage() {
     try {
       setError(null); // Clear any previous errors
       const response = await fetch(
-        `http://localhost:3333/api/books/${bookId}`,
+        `${apiUrl}/api/books/${bookId}`,
         {
           headers: {
             'x-correlation-id': correlationId,
@@ -122,7 +126,7 @@ export default function BookDetailPage() {
     setSaving(true);
     try {
       const response = await fetch(
-        `http://localhost:3333/api/books/paragraphs/${paragraphId}`,
+        `${apiUrl}/api/books/paragraphs/${paragraphId}`,
         {
           method: 'PATCH',
           headers: {
@@ -173,7 +177,7 @@ export default function BookDetailPage() {
   ) => {
     try {
       const response = await fetch(
-        `http://localhost:3333/api/books/paragraphs/${paragraphId}`,
+        `${apiUrl}/api/books/paragraphs/${paragraphId}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -228,7 +232,7 @@ export default function BookDetailPage() {
     // Apply the original edit when skipping bulk fixes
     if (pendingBulkFix) {
       // Make the API call to save the original content
-      fetch(`http://localhost:3333/api/books/paragraphs/${pendingBulkFix.paragraphId}`, {
+      fetch(`${apiUrl}/api/books/paragraphs/${pendingBulkFix.paragraphId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

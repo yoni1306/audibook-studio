@@ -3,7 +3,6 @@ import { ConfigService } from '@nestjs/config';
 import {
   S3Client,
   PutObjectCommand,
-  CreateBucketCommand,
   HeadBucketCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -19,7 +18,7 @@ export class S3Service {
     const endpoint = this.configService.get('S3_ENDPOINT');
 
     this.s3Client = new S3Client({
-      region: this.configService.get('AWS_REGION', 'us-east-1'),
+      region: this.configService.get('AWS_REGION', 'eu-central-1'),
       credentials: {
         accessKeyId: this.configService.get('AWS_ACCESS_KEY_ID'),
         secretAccessKey: this.configService.get('AWS_SECRET_ACCESS_KEY'),
@@ -42,17 +41,13 @@ export class S3Service {
       await this.s3Client.send(
         new HeadBucketCommand({ Bucket: this.bucketName })
       );
-      this.logger.log(`Bucket ${this.bucketName} exists`);
+      this.logger.log(`✓ Bucket ${this.bucketName} is accessible`);
     } catch (error) {
-      this.logger.log(`Creating bucket ${this.bucketName}`);
-      try {
-        await this.s3Client.send(
-          new CreateBucketCommand({ Bucket: this.bucketName })
-        );
-        this.logger.log(`Bucket ${this.bucketName} created`);
-      } catch (createError) {
-        this.logger.error('Failed to create bucket', createError);
-      }
+      this.logger.warn(
+        `⚠ Bucket ${this.bucketName} is not accessible. Make sure the bucket exists and credentials have proper permissions.`,
+        error.message
+      );
+      // Don't try to create bucket - assume it exists and will be accessible when needed
     }
   }
 

@@ -31,3 +31,5 @@ dist/
 
 # Keep example
 !.env.example
+
+# scripts/deploy/

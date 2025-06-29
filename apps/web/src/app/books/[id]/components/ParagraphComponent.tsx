@@ -1,5 +1,7 @@
 'use client';
 
+import { apiUrl } from '../../../../utils/api';
+
 export interface Paragraph {
   id: string;
   pageNumber: number;
@@ -182,7 +184,7 @@ export default function ParagraphComponent({
               >
                 <audio controls style={{ width: '100%' }}>
                   <source
-                    src={`http://localhost:3333/api/books/paragraphs/${paragraph.id}/audio`}
+                    src={`${apiUrl}/api/books/paragraphs/${paragraph.id}/audio`}
                     type="audio/mpeg"
                   />
                   Your browser does not support the audio element.
