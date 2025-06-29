@@ -32,4 +32,6 @@ dist/
 # Keep example
 !.env.example
 
-# scripts/deploy/
+scripts/deploy/
+
+aws-credentials-production.txt
