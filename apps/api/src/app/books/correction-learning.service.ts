@@ -267,6 +267,7 @@ export class CorrectionLearningService {
     correctedWord?: string;
     fixType?: string;
     bookId?: string;
+    bookTitle?: string;
     page?: number;
     limit?: number;
     sortBy?: 'createdAt' | 'originalWord' | 'correctedWord';
@@ -291,18 +292,20 @@ export class CorrectionLearningService {
         correctedWord,
         fixType,
         bookId,
+        bookTitle,
         page = 1,
         limit = 50,
         sortBy = 'createdAt',
         sortOrder = 'desc',
       } = filters;
 
-      // Build where clause using direct bookId field
+      // Build where clause with support for both bookId and bookTitle filtering
       const where: {
         originalWord?: { contains: string; mode: 'insensitive' };
         correctedWord?: { contains: string; mode: 'insensitive' };
         fixType?: string;
         bookId?: string;
+        book?: { title?: { contains: string; mode: 'insensitive' } };
       } = {};
       
       if (originalWord) {
@@ -325,6 +328,15 @@ export class CorrectionLearningService {
       
       if (bookId) {
         where.bookId = bookId;
+      }
+      
+      if (bookTitle) {
+        where.book = {
+          title: {
+            contains: bookTitle,
+            mode: 'insensitive',
+          },
+        };
       }
 
       // Calculate pagination

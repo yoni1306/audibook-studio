@@ -1,31 +1,23 @@
 'use client';
 
 import Link from 'next/link';
-import { Paragraph } from './ParagraphComponent';
-
-export interface Book {
-  id: string;
-  title: string;
-  author: string | null;
-  status: string;
-  createdAt: string;
-  paragraphs: Paragraph[];
-}
+import { BookWithDetails } from '@audibook/api-client';
 
 interface BookHeaderProps {
-  book: Book;
+  book: BookWithDetails;
 }
 
 export default function BookHeader({ book }: BookHeaderProps) {
   // Calculate stats
-  const pageCount = book.paragraphs.length > 0 
-    ? Math.max(...book.paragraphs.map(p => p.pageNumber || 0))
+  const paragraphs = book.paragraphs;
+  const pageCount = paragraphs.length > 0 
+    ? Math.max(...paragraphs.map(p => p.pageNumber || 0))
     : 0;
   
-  const paragraphCount = book.paragraphs.length;
+  const paragraphCount = paragraphs.length;
   
   // Calculate estimated listening time from audio durations
-  const totalDurationSeconds = book.paragraphs
+  const totalDurationSeconds = paragraphs
     .filter(p => p.audioDuration && p.audioDuration > 0)
     .reduce((sum, p) => sum + (p.audioDuration || 0), 0);
   
@@ -33,7 +25,7 @@ export default function BookHeader({ book }: BookHeaderProps) {
   // Average reading speed: ~200 words per minute, speaking speed: ~150 words per minute
   let estimatedSeconds = totalDurationSeconds;
   if (estimatedSeconds === 0) {
-    const totalWords = book.paragraphs
+    const totalWords = paragraphs
       .reduce((sum, p) => sum + (p.content?.split(/\s+/).length || 0), 0);
     estimatedSeconds = Math.round((totalWords / 150) * 60); // 150 words per minute speaking
   }

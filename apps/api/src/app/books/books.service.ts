@@ -150,6 +150,7 @@ export class BooksService {
         _count: {
           select: { 
             pages: true,
+            textCorrections: true,
           },
         },
       },

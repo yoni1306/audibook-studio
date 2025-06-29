@@ -12,7 +12,7 @@ interface LogEntry {
   data?: unknown;
 }
 
-import { apiUrl } from './api';
+import { getApiUrl } from './api';
 
 class ClientLogger {
   private context: string;
@@ -87,7 +87,7 @@ class ClientLogger {
     this.batchedLogs = [];
 
     try {
-      await fetch(`${apiUrl}/api/logs`, {
+      await fetch(`${getApiUrl()}/api/logs`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

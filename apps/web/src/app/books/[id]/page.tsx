@@ -3,22 +3,26 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { createLogger } from '../../../utils/logger';
-import { apiUrl } from '../../../utils/api';
+import { useApiClient } from '@hooks/useApiClient';
 
 // Force dynamic rendering to prevent build-time pre-rendering
 export const dynamic = 'force-dynamic';
 
 // Components
-import BookHeader, { Book } from './components/BookHeader';
+import BookHeader from './components/BookHeader';
+import { BookWithDetails, BulkFixSuggestion } from '@audibook/api-client';
 import AudioStats from './components/AudioStats';
 import BulkFixNotification from './components/BulkFixNotification';
 import ParagraphComponent, { Paragraph } from './components/ParagraphComponent';
-import BulkFixModal, { BulkFixSuggestion } from './components/BulkFixModal';
+import BulkFixModal from './components/BulkFixModal';
 
 export default function BookDetailPage() {
   const params = useParams();
   const bookId = params.id as string;
-  const [book, setBook] = useState<Book | null>(null);
+  
+  // API client
+  const apiClient = useApiClient();
+  const [book, setBook] = useState<BookWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -47,27 +51,23 @@ export default function BookDetailPage() {
     const correlationId = generateCorrelationId();
     try {
       setError(null); // Clear any previous errors
-      const response = await fetch(
-        `${apiUrl}/api/books/${bookId}`,
-        {
-          headers: {
-            'x-correlation-id': correlationId,
-          },
-        }
-      );
+      const { data, error } = await apiClient.books.getById(bookId);
       
-      if (!response.ok) {
+      if (error) {
         // This is an actual error (500, network issues, etc.)
-        const errorData = await response.json();
-        setError(`Server error: ${errorData.message || 'An unexpected error occurred'}`);
-        logger.error('Server error from API:', { ...errorData, correlationId });
+        setError(`Server error: ${error || 'An unexpected error occurred'}`);
+        logger.error('Server error from API:', { error, correlationId });
         setBook(null);
         return;
       }
       
-      const data = await response.json();
+      if (!data) {
+        setError('No data received from server');
+        setBook(null);
+        return;
+      }
       
-      // Handle new API response structure
+      // Handle API response structure
       if (data.found === false) {
         // Valid response but no data found
         setBook(null);
@@ -77,9 +77,9 @@ export default function BookDetailPage() {
         setBook(data.book);
         setError(null); // Clear any previous errors
       } else {
-        // Handle legacy response format (direct book object)
-        setBook(data);
-        setError(null); // Clear any previous errors
+        // Unexpected response structure
+        setError('Unexpected response format from server');
+        setBook(null);
       }
     } catch (error) {
       const errorMessage = 'Failed to connect to the server. Please check if the API server is running.';
@@ -93,7 +93,7 @@ export default function BookDetailPage() {
         isInitialLoad.current = false;
       }
     }
-  }, [bookId, logger]);
+  }, [bookId, logger, apiClient]);
 
   useEffect(() => {
     if (bookId) {
@@ -125,22 +125,12 @@ export default function BookDetailPage() {
   const saveEdit = async (paragraphId: string) => {
     setSaving(true);
     try {
-      const response = await fetch(
-        `${apiUrl}/api/books/paragraphs/${paragraphId}`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            content: editContent,
-            generateAudio: false, // Don't generate audio when just saving text
-          }),
-        }
-      );
+      const { data: result, error } = await apiClient.books.updateParagraph(paragraphId, {
+        content: editContent,
+        generateAudio: false, // Don't generate audio when just saving text
+      });
 
-      if (response.ok) {
-        const result = await response.json();
+      if (!error && result) {
         logger.debug('Paragraph update response:', result);
 
         // Check if there are bulk fix suggestions
@@ -176,20 +166,12 @@ export default function BookDetailPage() {
     content: string
   ) => {
     try {
-      const response = await fetch(
-        `${apiUrl}/api/books/paragraphs/${paragraphId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            content,
-            generateAudio: true, // Explicitly request audio generation
-          }),
-        }
-      );
+      const { data: result, error } = await apiClient.books.updateParagraph(paragraphId, {
+        content,
+        generateAudio: true, // Explicitly request audio generation
+      });
 
-      if (response.ok) {
-        const result = await response.json();
+      if (!error && result) {
         
         // Check if there are bulk fix suggestions
         if (result.bulkSuggestions && result.bulkSuggestions.length > 0) {
@@ -232,18 +214,12 @@ export default function BookDetailPage() {
     // Apply the original edit when skipping bulk fixes
     if (pendingBulkFix) {
       // Make the API call to save the original content
-      fetch(`${apiUrl}/api/books/paragraphs/${pendingBulkFix.paragraphId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          content: pendingBulkFix.content,
-          generateAudio: pendingBulkFix.audioRequested,
-        }),
+      apiClient.books.updateParagraph(pendingBulkFix.paragraphId, {
+        content: pendingBulkFix.content,
+        generateAudio: pendingBulkFix.audioRequested,
       })
-      .then(response => {
-        if (response.ok) {
+      .then(({ error }) => {
+        if (!error) {
           // Refresh the book data to show the updated content
           fetchBook();
         }

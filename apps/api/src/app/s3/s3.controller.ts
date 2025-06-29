@@ -1,7 +1,9 @@
 import { Controller, Post, Body, Logger, InternalServerErrorException } from '@nestjs/common';
+import { ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { S3Service } from './s3.service';
 import { BooksService } from '../books/books.service';
 import { QueueService } from '../queue/queue.service';
+import { PresignedUploadResponseDto } from './dto/s3.dto';
 
 @Controller('s3')
 export class S3Controller {
@@ -14,6 +16,19 @@ export class S3Controller {
   ) {}
 
   @Post('presigned-upload')
+  @ApiOperation({ summary: 'Get presigned upload URL', description: 'Generate a presigned URL for uploading files to S3' })
+  @ApiResponse({ status: 200, description: 'Successfully generated presigned upload URL', type: PresignedUploadResponseDto })
+  @ApiBody({
+    description: 'File upload details',
+    schema: {
+      type: 'object',
+      properties: {
+        filename: { type: 'string', description: 'Name of the file to upload' },
+        contentType: { type: 'string', description: 'MIME type of the file' }
+      },
+      required: ['filename', 'contentType']
+    }
+  })
   async getPresignedUploadUrl(
     @Body() body: { filename: string; contentType: string }
   ) {

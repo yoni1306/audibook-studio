@@ -1,7 +1,9 @@
 import { Controller, Post, Get, Delete, Body, Param, Logger, InternalServerErrorException } from '@nestjs/common';
+import { ApiOperation, ApiResponse, ApiParam, ApiBody } from '@nestjs/swagger';
 import { QueueService } from './queue.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { GetJobsByStatusResponseDto } from './dto/queue.dto';
 
 @Controller('queue')
 export class QueueController {
@@ -13,6 +15,19 @@ export class QueueController {
   ) {}
 
   @Post('parse-epub')
+  @ApiOperation({ summary: 'Parse EPUB file', description: 'Add EPUB parsing job to the queue' })
+  @ApiResponse({ status: 200, description: 'EPUB parsing job added successfully' })
+  @ApiBody({
+    description: 'EPUB parsing job data',
+    schema: {
+      type: 'object',
+      properties: {
+        bookId: { type: 'string', description: 'Book ID' },
+        s3Key: { type: 'string', description: 'S3 key for the EPUB file' }
+      },
+      required: ['bookId', 's3Key']
+    }
+  })
   async addEpubParsingJob(@Body() body: { bookId: string; s3Key: string }) {
     try {
       this.logger.log(`🔄 [API] Adding EPUB parsing job for book: ${body.bookId}`);
@@ -36,6 +51,8 @@ export class QueueController {
   }
 
   @Get('status')
+  @ApiOperation({ summary: 'Get queue status', description: 'Get current status of the job queue' })
+  @ApiResponse({ status: 200, description: 'Successfully retrieved queue status' })
   async getQueueStatus() {
     try {
       this.logger.log('📊 [API] Getting queue status');
@@ -70,6 +87,9 @@ export class QueueController {
   }
 
   @Get('jobs/:status')
+  @ApiOperation({ summary: 'Get jobs by status', description: 'Get jobs filtered by their status' })
+  @ApiParam({ name: 'status', description: 'Job status (waiting, active, completed, failed, delayed)' })
+  @ApiResponse({ status: 200, description: 'Successfully retrieved jobs by status', type: GetJobsByStatusResponseDto })
   async getJobsByStatus(@Param('status') status: string) {
     try {
       this.logger.log(`📋 [API] Getting jobs by status: ${status}`);
@@ -134,6 +154,9 @@ export class QueueController {
   }
 
   @Get('job/:id')
+  @ApiOperation({ summary: 'Get job by ID', description: 'Get detailed information about a specific job' })
+  @ApiParam({ name: 'id', description: 'Job ID' })
+  @ApiResponse({ status: 200, description: 'Successfully retrieved job details' })
   async getJob(@Param('id') id: string) {
     try {
       this.logger.log(`🔍 [API] Getting job details for ID: ${id}`);
@@ -185,6 +208,9 @@ export class QueueController {
   }
 
   @Delete('clean/:status')
+  @ApiOperation({ summary: 'Clean jobs by status', description: 'Clean/remove jobs with specified status from the queue' })
+  @ApiParam({ name: 'status', description: 'Job status to clean (completed, failed)' })
+  @ApiResponse({ status: 200, description: 'Successfully cleaned jobs' })
   async cleanJobs(@Param('status') status: string) {
     try {
       this.logger.log(`🧹 [API] Cleaning jobs with status: ${status}`);
@@ -226,6 +252,9 @@ export class QueueController {
   }
 
   @Post('retry/:id')
+  @ApiOperation({ summary: 'Retry job', description: 'Retry a failed job by its ID' })
+  @ApiParam({ name: 'id', description: 'Job ID to retry' })
+  @ApiResponse({ status: 200, description: 'Successfully retried job' })
   async retryJob(@Param('id') id: string) {
     try {
       this.logger.log(`🔄 [API] Retrying job: ${id}`);

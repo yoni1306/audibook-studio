@@ -1,12 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { apiUrl } from '../../utils/api';
+import { useApiClient } from '@hooks/useApiClient';
 
 // Force dynamic rendering to prevent build-time pre-rendering
 export const dynamic = 'force-dynamic';
 
 export default function UploadPage() {
+  // API client
+  const apiClient = useApiClient();
+  
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
@@ -32,23 +35,12 @@ export default function UploadPage() {
 
     try {
       // Get presigned URL from API
-      const response = await fetch(
-        `${apiUrl}/api/s3/presigned-upload`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            filename: file.name,
-            contentType: 'application/epub+zip',
-          }),
-        }
-      );
+      const { data, error } = await apiClient.s3.getPresignedUpload({
+        filename: file.name,
+        contentType: 'application/epub+zip',
+      });
 
-      if (!response.ok) throw new Error('Failed to get upload URL');
-
-      const data = await response.json();
+      if (error || !data) throw new Error('Failed to get upload URL');
       setMessage('Uploading file...');
 
       // Upload file directly to S3

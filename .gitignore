@@ -35,3 +35,10 @@ dist/
 scripts/deploy/
 
 aws-credentials-production.txt
+
+# Generated OpenAPI files
+openapi.json
+
+# NX generated files
+graph.json
+project-graph.json
