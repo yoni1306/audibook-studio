@@ -1,6 +1,7 @@
 import './global.css';
 import Link from 'next/link';
 import Navigation from './components/Navigation';
+import ThemeProvider from './components/ThemeProvider';
 
 export const metadata = {
   title: 'Audibook Studio',
@@ -44,9 +45,11 @@ export default function RootLayout({
             <Navigation />
           </div>
         </header>
-        <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 20px' }}>
-          {children}
-        </main>
+        <ThemeProvider>
+          <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 20px' }}>
+            {children}
+          </main>
+        </ThemeProvider>
       </body>
     </html>
   );
