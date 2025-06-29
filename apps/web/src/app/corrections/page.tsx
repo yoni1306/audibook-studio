@@ -1,6 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { apiUrl } from '../../utils/api';
+
+// Force dynamic rendering to prevent build-time pre-rendering
+export const dynamic = 'force-dynamic';
 import Link from 'next/link';
 import {
   Box,
@@ -18,7 +22,7 @@ import {
   Alert,
   Grid,
 } from '@mui/material';
-import { DataGrid, GridColDef, GridToolbar } from '@mui/x-data-grid';
+import { DataGrid, GridColDef, GridToolbar, GridSortModel } from '@mui/x-data-grid';
 
 interface Correction {
   id: string;
@@ -49,7 +53,7 @@ export default function CorrectionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [totalCorrections, setTotalCorrections] = useState(0);
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 25 });
-  const [sortModel, setSortModel] = useState([{ field: 'createdAt', sort: 'desc' as const }]);
+  const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'createdAt', sort: 'desc' }]);
 
   // Filter states
   const [originalWordFilter, setOriginalWordFilter] = useState('');
@@ -83,7 +87,7 @@ export default function CorrectionsPage() {
     setError(null);
     
     try {
-      const response = await fetch('http://localhost:3333/api/books/all-corrections', {
+      const response = await fetch(`${apiUrl}/api/books/all-corrections`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -127,7 +131,7 @@ export default function CorrectionsPage() {
 
   const fetchFixTypes = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:3333/api/books/fix-types');
+      const response = await fetch(`${apiUrl}/api/books/fix-types`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }

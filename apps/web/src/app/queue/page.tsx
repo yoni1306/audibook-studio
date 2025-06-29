@@ -1,6 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
+import { apiUrl } from '../../utils/api';
+
+// Force dynamic rendering to prevent build-time pre-rendering
+export const dynamic = 'force-dynamic';
 
 interface QueueStatus {
   waiting: number;
@@ -48,7 +52,7 @@ export default function QueuePage() {
 
   const fetchStatus = async () => {
     try {
-      const response = await fetch('http://localhost:3333/api/queue/status');
+      const response = await fetch(`${apiUrl}/api/queue/status`);
       const data = await response.json();
       setStatus(data);
     } catch (error) {
@@ -59,7 +63,7 @@ export default function QueuePage() {
   const fetchJobs = async (status: string) => {
     try {
       const response = await fetch(
-        `http://localhost:3333/api/queue/jobs/${status}`
+        `${apiUrl}/api/queue/jobs/${status}`
       );
       const data = await response.json();
       
@@ -80,7 +84,7 @@ export default function QueuePage() {
 
   const retryJob = async (jobId: string) => {
     try {
-      await fetch(`http://localhost:3333/api/queue/retry/${jobId}`, {
+      await fetch(`${apiUrl}/api/queue/retry/${jobId}`, {
         method: 'POST',
       });
       fetchStatus();
@@ -92,7 +96,7 @@ export default function QueuePage() {
 
   const cleanJobs = async (status: string) => {
     try {
-      await fetch(`http://localhost:3333/api/queue/clean/${status}`, {
+      await fetch(`${apiUrl}/api/queue/clean/${status}`, {
         method: 'DELETE',
       });
       fetchStatus();

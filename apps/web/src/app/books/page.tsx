@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { apiUrl } from '../../utils/api';
+
+// Force dynamic rendering to prevent build-time pre-rendering
+export const dynamic = 'force-dynamic';
 
 interface Book {
   id: string;
@@ -25,7 +29,8 @@ export default function BooksPage() {
         setLoading(true);
         setError(null);
         
-        const res = await fetch('http://localhost:3333/api/books');
+
+        const res = await fetch(`${apiUrl}/api/books`);
         
         if (!res.ok) {
           // This is an actual server error
@@ -51,7 +56,7 @@ export default function BooksPage() {
         
         if (err instanceof TypeError && err.message.includes('fetch')) {
           // Network error - server is likely down
-          errorMessage = 'Cannot connect to server. Please check if the API server is running on localhost:3333';
+          errorMessage = 'Cannot connect to server. Please check if the API server is running.';
         } else if (err instanceof Error) {
           errorMessage = err.message;
         }

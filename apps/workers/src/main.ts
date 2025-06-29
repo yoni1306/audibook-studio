@@ -300,9 +300,29 @@ const worker = new Worker(
     });
   },
   {
-    connection: {
+    connection: process.env['REDIS_URL'] ? {
+      // Parse Redis URL to extract connection details
+      host: new URL(process.env['REDIS_URL']).hostname,
+      port: parseInt(new URL(process.env['REDIS_URL']).port) || 6379,
+      password: new URL(process.env['REDIS_URL']).password || undefined,
+      family: 0, // Enable dual-stack lookup for Railway IPv6 support
+      retryDelayOnFailover: 100,
+      enableReadyCheck: false,
+      maxRetriesPerRequest: null, // BullMQ requirement
+      lazyConnect: true,
+      connectTimeout: 60000,
+      commandTimeout: 30000, // Increased for Railway network conditions
+    } : {
+      // Fallback for local development
       host: process.env['REDIS_HOST'] || 'localhost',
       port: parseInt(process.env['REDIS_PORT'], 10) || 6379,
+      family: 0, // Enable dual-stack lookup for Railway IPv6 support
+      retryDelayOnFailover: 100,
+      enableReadyCheck: false,
+      maxRetriesPerRequest: null, // BullMQ requirement
+      lazyConnect: true,
+      connectTimeout: 60000,
+      commandTimeout: 30000, // Increased for Railway network conditions
     },
     concurrency: parseInt(process.env['WORKER_CONCURRENCY'], 10) || 1,
   }

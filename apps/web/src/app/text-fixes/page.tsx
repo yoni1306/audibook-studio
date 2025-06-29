@@ -1,6 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { apiUrl } from '../../utils/api';
+
+// Force dynamic rendering to prevent build-time pre-rendering
+export const dynamic = 'force-dynamic';
 
 interface WordFix {
   originalWord: string;
@@ -50,8 +54,8 @@ export default function TextFixesPage() {
   const fetchData = async () => {
     try {
       const [wordsResponse, statsResponse] = await Promise.all([
-        fetch('http://localhost:3333/api/text-fixes/words'),
-        fetch('http://localhost:3333/api/text-fixes/statistics'),
+        fetch(`${apiUrl}/api/text-fixes/words`),
+        fetch(`${apiUrl}/api/text-fixes/statistics`),
       ]);
 
       const words = await wordsResponse.json();
@@ -70,7 +74,7 @@ export default function TextFixesPage() {
     if (!bookId) return;
     
     try {
-      const response = await fetch(`http://localhost:3333/api/text-fixes/book/${bookId}`);
+      const response = await fetch(`${apiUrl}/api/text-fixes/book/${bookId}`);
       const fixes = await response.json();
       setBookFixes(fixes);
     } catch (error) {
