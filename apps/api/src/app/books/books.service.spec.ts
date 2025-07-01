@@ -563,7 +563,7 @@ describe('BooksService', () => {
         orderBy: { createdAt: 'desc' },
         include: {
           _count: {
-            select: { pages: true },
+            select: { pages: true, textCorrections: true },
           },
         },
       });

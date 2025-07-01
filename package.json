@@ -5,6 +5,7 @@
     "dev": "nx run-many --target=serve --all --parallel=3",
     "dev:full": "concurrently \"pnpm dev:api\" \"pnpm dev:web\" \"pnpm dev:workers\" \"pnpm generate:api-types:watch\"",
     "dev:api": "nx serve api",
+    "dev:api:debug": "NODE_OPTIONS=\"--inspect=9231\" nx serve api",
     "dev:web": "nx dev web",
     "dev:workers": "nx serve workers",
     "dev:with-client": "concurrently \"pnpm dev:api\" \"pnpm dev:web\" \"pnpm generate:api-client:watch\"",

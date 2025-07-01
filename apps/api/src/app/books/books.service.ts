@@ -56,6 +56,15 @@ export class BooksService {
         content
       );
       
+      // Log all text changes for debugging
+      this.logger.debug('=== TEXT CHANGES DEBUG ===');
+      this.logger.debug(`Paragraph ID: ${paragraphId}`);
+      this.logger.debug(`Original content: ${existingParagraph.content}`);
+      this.logger.debug(`New content: ${content}`);
+      this.logger.debug(`Number of changes: ${textChanges.length}`);
+      this.logger.debug(`Text changes: ${JSON.stringify(textChanges, null, 2)}`);
+      this.logger.debug('=== END TEXT CHANGES DEBUG ===');
+      
       this.logger.log(
         `Detected ${textChanges.length} text changes for paragraph ${paragraphId}`
       );

@@ -13,6 +13,7 @@ import { PageBasedEPUBParser } from './text-processing/page-based-epub-parser';
 import {
   updateBookStatus,
   getParagraph,
+  cleanupDatabase,
 } from './database.service';
 import { 
   saveEPUBParseResult, 
@@ -311,7 +312,8 @@ const worker = new Worker(
       maxRetriesPerRequest: null, // BullMQ requirement
       lazyConnect: true,
       connectTimeout: 60000,
-      commandTimeout: 30000, // Increased for Railway network conditions
+      commandTimeout: 10000, // Reduced timeout for faster shutdown
+      disconnectTimeout: 5000, // Add disconnect timeout
     } : {
       // Fallback for local development
       host: process.env['REDIS_HOST'] || 'localhost',
@@ -322,7 +324,8 @@ const worker = new Worker(
       maxRetriesPerRequest: null, // BullMQ requirement
       lazyConnect: true,
       connectTimeout: 60000,
-      commandTimeout: 30000, // Increased for Railway network conditions
+      commandTimeout: 10000, // Reduced timeout for faster shutdown
+      disconnectTimeout: 5000, // Add disconnect timeout
     },
     concurrency: parseInt(process.env['WORKER_CONCURRENCY'], 10) || 1,
   }
@@ -382,20 +385,50 @@ logger.info('Worker started successfully', {
   redisPort: process.env['REDIS_PORT'] || 6379,
 });
 
-// Graceful shutdown with logging
-process.on('SIGTERM', async () => {
-  logger.info('SIGTERM received, starting graceful shutdown');
-  await worker.close();
-  logger.info('Worker closed successfully');
-  process.exit(0);
-});
+// Graceful shutdown with timeout handling
+let isShuttingDown = false;
 
-process.on('SIGINT', async () => {
-  logger.info('SIGINT received, starting graceful shutdown');
-  await worker.close();
-  logger.info('Worker closed successfully');
-  process.exit(0);
-});
+const gracefulShutdown = async (signal: string) => {
+  if (isShuttingDown) {
+    logger.warn(`${signal} received again, forcing exit`);
+    process.exit(1);
+  }
+  
+  isShuttingDown = true;
+  logger.info(`${signal} received, starting graceful shutdown`);
+  
+  try {
+    // Set a timeout for the shutdown process
+    const shutdownTimeout = setTimeout(() => {
+      logger.error('Graceful shutdown timed out, forcing exit');
+      process.exit(1);
+    }, 15000); // 15 second timeout
+    
+    // Close the worker and cleanup database connections
+    await Promise.race([
+      Promise.all([
+        worker.close(),
+        cleanupDatabase()
+      ]),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Worker close timeout')), 10000)
+      )
+    ]);
+    
+    clearTimeout(shutdownTimeout);
+    logger.info('Worker closed successfully');
+    process.exit(0);
+  } catch (error) {
+    logger.error('Error during graceful shutdown', {
+      error: error.message,
+      stack: error.stack
+    });
+    process.exit(1);
+  }
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Handle uncaught errors
 process.on('uncaughtException', (error) => {

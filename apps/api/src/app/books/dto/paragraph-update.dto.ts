@@ -1,5 +1,6 @@
 import { TextCorrection } from '@prisma/client';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsString, IsNotEmpty, IsOptional, IsBoolean } from 'class-validator';
 
 export class TextChange {
   @ApiProperty({ description: 'Original word that was changed' })
@@ -108,9 +109,13 @@ export class UpdateParagraphResponseDto {
 
 export class UpdateParagraphRequestDto {
   @ApiProperty({ description: 'New paragraph content' })
+  @IsString()
+  @IsNotEmpty()
   content: string;
 
   @ApiProperty({ description: 'Whether to generate audio for updated paragraph', required: false, default: false })
+  @IsOptional()
+  @IsBoolean()
   generateAudio?: boolean;
 }
 
