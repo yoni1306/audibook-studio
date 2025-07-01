@@ -1,0 +1,35 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Attach to API (Port 9231)",
+      "type": "node",
+      "request": "attach",
+      "port": 9231,
+      "address": "localhost",
+      "localRoot": "${workspaceFolder}",
+      "remoteRoot": "${workspaceFolder}",
+      "restart": true,
+      "sourceMaps": true,
+      "resolveSourceMapLocations": [
+        "${workspaceFolder}/**",
+        "!**/node_modules/**",
+        "webpack:///**"
+      ],
+      "sourceMapPathOverrides": {
+        "webpack:///./src/*": "${workspaceFolder}/apps/api/src/*",
+        "webpack:///src/*": "${workspaceFolder}/apps/api/src/*",
+        "webpack:///./*": "${workspaceFolder}/apps/api/*",
+        "webpack:///*": "${workspaceFolder}/*"
+      },
+      "skipFiles": [
+        "<node_internals>/**",
+        "**/node_modules/**"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "smartStep": true
+    }
+  ]
+}

@@ -141,23 +141,25 @@ async function initializeDatabase(): Promise<void> {
   }
 }
 
+/**
+ * Cleanup database connections
+ */
+export async function cleanupDatabase(): Promise<void> {
+  try {
+    logger.info('Closing database connection...');
+    await prisma.$disconnect();
+    logger.info('Database connection closed successfully');
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Error closing database connection: ${errorMessage}`);
+    throw error;
+  }
+}
+
 // Initialize connection
 initializeDatabase().catch((error) => {
   logger.error('Database initialization failed:', error);
   process.exit(1);
-});
-
-// Graceful shutdown
-process.on('SIGINT', async () => {
-  logger.info('Received SIGINT, closing database connection...');
-  await prisma.$disconnect();
-  process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-  logger.info('Received SIGTERM, closing database connection...');
-  await prisma.$disconnect();
-  process.exit(0);
 });
 
 export { prisma };

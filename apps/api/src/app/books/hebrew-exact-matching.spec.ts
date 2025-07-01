@@ -42,7 +42,7 @@ describe('BulkTextFixesService - Hebrew Exact Matching', () => {
   describe('findHebrewWordMatches - Exact Matching', () => {
     // Access private method for testing
     const findHebrewWordMatches = (text: string, word: string) => {
-      return (service as any).findHebrewWordMatches(text, word);
+      return (service as any).findWordMatches(text, word);
     };
 
     it('should match words with identical niqqud exactly', () => {

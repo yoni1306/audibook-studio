@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Patch, Param, Body, NotFoundException, Redirect, Logger, InternalServerErrorException } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Param, Body, NotFoundException, BadRequestException, Redirect, Logger, InternalServerErrorException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody } from '@nestjs/swagger';
 import { BooksService } from './books.service';
 import { BulkTextFixesService } from './bulk-text-fixes.service';
@@ -165,6 +165,11 @@ export class BooksController {
     @Body() body: UpdateParagraphRequestDto
   ): Promise<UpdateParagraphResponseDto> {
     try {
+      // Validate that content is provided
+      if (!body.content || typeof body.content !== 'string') {
+        throw new BadRequestException('Content is required and must be a string');
+      }
+      
       this.logger.debug(`Updating paragraph ${paragraphId} with content: ${body.content.substring(0, 20)}...`);
       // Pass the generateAudio flag to the service, default to false if not specified
       const generateAudio = body.generateAudio !== undefined ? body.generateAudio : false;

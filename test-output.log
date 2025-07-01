@@ -1,0 +1,168 @@
+
+> nx run api:test
+
+[31m[Nest] 26473  - [39m06/30/2025, 7:56:59 PM [31m  ERROR[39m [38;5;3m[TextFixesService] [39m[31mFailed to save text fixes for paragraph test-paragraph-id:[39m
+[31m[Nest] 26473  - [39m06/30/2025, 7:56:59 PM [31m  ERROR[39m [38;5;3m[TextFixesService] [39mError: Database error
+    at [90m/Users/yonica/Dev/audibook-studio/apps/api/[39msrc/app/books/text-fixes.service.spec.ts:235:21
+    at Generator.next (<anonymous>)
+    at /Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/tslib@2.8.1/node_modules/[4mtslib[24m/tslib.js:170:75
+    at new Promise (<anonymous>)
+    at Object.__awaiter (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/tslib@2.8.1/node_modules/[4mtslib[24m/tslib.js:166:16)
+    at Object.<anonymous> [90m(/Users/yonica/Dev/audibook-studio/apps/api/[39msrc/app/books/text-fixes.service.spec.ts:230:60[90m)[39m
+    at Promise.then.completed (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/[4mjest-circus[24m/build/utils.js:298:28)
+    at new Promise (<anonymous>)
+    at callAsyncCircusFn (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/[4mjest-circus[24m/build/utils.js:231:10)
+    at _callCircusTest (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/[4mjest-circus[24m/build/run.js:316:40)
+[90m    at processTicksAndRejections (node:internal/process/task_queues:105:5)[39m
+    at _runTest (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/[4mjest-circus[24m/build/run.js:252:3)
+    at _runTestsForDescribeBlock (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/[4mjest-circus[24m/build/run.js:126:9)
+    at _runTestsForDescribeBlock (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/[4mjest-circus[24m/build/run.js:121:9)
+    at _runTestsForDescribeBlock (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/[4mjest-circus[24m/build/run.js:121:9)
+    at run (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/[4mjest-circus[24m/build/run.js:71:3)
+    at runAndTransformResultsToJestFormat (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/[4mjest-circus[24m/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+    at jestAdapter (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/[4mjest-circus[24m/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+    at runTestInternal (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-runner@29.7.0/node_modules/[4mjest-runner[24m/build/runTest.js:367:16)
+    at runTest (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-runner@29.7.0/node_modules/[4mjest-runner[24m/build/runTest.js:444:34)
+    at Object.worker (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-runner@29.7.0/node_modules/[4mjest-runner[24m/build/testWorker.js:106:12)
+[0m[7m[1m[32m PASS [39m[22m[27m[0m [0m[7m[37m api [39m[27m[0m [2msrc/app/books/[22m[1mbulk-text-fixes.service.spec.ts[22m
+
+DEBUG: Hebrew word boundary issues
+
+Full word: 'ספר' in 'זהו ספר טוב.'
+
+Standard \b: null
+
+Alternative: ["ספר"]
+
+---
+
+As prefix: 'ספר' in 'זהו ספריה גדולה.'
+
+Standard \b: null
+
+Alternative: null
+
+---
+
+As suffix: 'יה' in 'זהו ספריה גדולה.'
+
+Standard \b: null
+
+Alternative: null
+
+---
+
+Before hyphen: 'אות' in 'המילה אות-יד מחוברת.'
+
+Standard \b: null
+
+Alternative: null
+
+---
+
+After hyphen: 'יד' in 'המילה אות-יד מחוברת.'
+
+Standard \b: null
+
+Alternative: null
+
+---
+[0m[7m[1m[32m PASS [39m[22m[27m[0m [0m[7m[37m api [39m[27m[0m [2msrc/app/books/[22m[1mhebrew-exact-matching.spec.ts[22m
+[0m[7m[1m[32m PASS [39m[22m[27m[0m [0m[7m[37m api [39m[27m[0m [2msrc/app/books/[22m[1mtext-fixes.service.spec.ts[22m
+[0m[7m[1m[32m PASS [39m[22m[27m[0m [0m[7m[37m api [39m[27m[0m [2msrc/app/[22m[1mapp.controller.spec.ts[22m
+[0m[7m[1m[32m PASS [39m[22m[27m[0m [0m[7m[37m api [39m[27m[0m [2msrc/app/books/[22m[1mcorrection-learning.service.spec.ts[22m
+[0m[7m[1m[32m PASS [39m[22m[27m[0m [0m[7m[37m api [39m[27m[0m [2msrc/app/health/[22m[1mhealth.controller.spec.ts[22m
+[31m[Nest] 26452  - [39m06/30/2025, 7:56:59 PM [31m  ERROR[39m [38;5;3m[BulkTextFixesService] [39m[31m💥 Error applying bulk fixes:[39m
+[0m[7m[1m[31m FAIL [39m[22m[27m[0m [0m[7m[37m api [39m[27m[0m [2msrc/app/books/[22m[1mbulk-text-fixes-duplicate-records.spec.ts[22m
+[1m[31m  [1m● [22m[1mBulkTextFixesService - Duplicate Records Issue › Duplicate Records Prevention › should create exactly 6 records when fixing 2 words with multiple occurrences[39m[22m
+
+    [2mexpect([22m[31mreceived[39m[2m).[22mtoHaveLength[2m([22m[32mexpected[39m[2m)[22m
+
+    Expected length: [32m6[39m
+    Received length: [31m4[39m
+    Received array:  [31m[{"data": {"bookId": "book-duplicate-test", "correctedWord": "טוֹב", "fixType": "BULK_FIX", "originalWord": "טוב", "paragraphId": "para-multi-1", "sentenceContext": "טוב מאוד טוב ויום נפלא", "ttsModel": undefined, "ttsVoice": undefined}, "type": "textCorrection.create"}, {"data": {"bookId": "book-duplicate-test", "correctedWord": "טוֹב", "fixType": "BULK_FIX", "originalWord": "טוב", "paragraphId": "para-multi-1", "sentenceContext": "טוב מאוד טוב ויום נפלא", "ttsModel": undefined, "ttsVoice": undefined}, "type": "textCorrection.create"}, {"data": {"bookId": "book-duplicate-test", "correctedWord": "טוֹב", "fixType": "BULK_FIX", "originalWord": "טוב", "paragraphId": "para-multi-2", "sentenceContext": "טוב מאוד טוב ויום מעולה", "ttsModel": undefined, "ttsVoice": undefined}, "type": "textCorrection.create"}, {"data": {"bookId": "book-duplicate-test", "correctedWord": "טוֹב", "fixType": "BULK_FIX", "originalWord": "טוב", "paragraphId": "para-multi-2", "sentenceContext": "טוב מאוד טוב ויום מעולה", "ttsModel": undefined, "ttsVoice": undefined}, "type": "textCorrection.create"}][39m
+[2m[22m
+[2m    [0m [90m 238 |[39m[22m
+[2m     [90m 239 |[39m       [90m// ASSERTION: Should create exactly 6 text correction records (one per word per paragraph)[39m[22m
+[2m    [31m[1m>[22m[2m[39m[90m 240 |[39m       expect(textCorrectionCreates)[33m.[39mtoHaveLength([35m6[39m)[33m;[39m[22m
+[2m     [90m     |[39m                                     [31m[1m^[22m[2m[39m[22m
+[2m     [90m 241 |[39m[22m
+[2m     [90m 242 |[39m       [90m// ASSERTION: Should have 4 records for 'טוב' -> 'טוֹב' (one per paragraph)[39m[22m
+[2m     [90m 243 |[39m       [36mconst[39m tovCorrections [33m=[39m textCorrectionCreates[33m.[39mfilter([0m[22m
+[2m[22m
+[2m      [2mat [22m[2m[0m[36msrc/app/books/bulk-text-fixes-duplicate-records.spec.ts[39m[0m[2m:240:37[22m[2m[22m
+[2m      [2mat fulfilled ([22m[2m../../node_modules/.pnpm/tslib@2.8.1/node_modules/tslib/tslib.js[2m:167:62)[22m[2m[22m
+
+[1m[31m  [1m● [22m[1mBulkTextFixesService - Duplicate Records Issue › Duplicate Records Prevention › should handle complex scenario with multiple fix types across different paragraphs[39m[22m
+
+    [2mexpect([22m[31mreceived[39m[2m).[22mtoHaveLength[2m([22m[32mexpected[39m[2m)[22m
+
+    Expected length: [32m3[39m
+    Received length: [31m2[39m
+    Received array:  [31m[{"data": {"bookId": "book-duplicate-test", "correctedWord": "ספרי", "fixType": "BULK_FIX", "originalWord": "ספר", "paragraphId": "para-complex-1", "sentenceContext": "יש לי ספר אחד ו5 עטים", "ttsModel": undefined, "ttsVoice": undefined}, "type": "textCorrection.create"}, {"data": {"bookId": "book-duplicate-test", "correctedWord": "חמש", "fixType": "BULK_FIX", "originalWord": "5", "paragraphId": "para-complex-3", "sentenceContext": "קניתי 5 דברים חדשים", "ttsModel": undefined, "ttsVoice": undefined}, "type": "textCorrection.create"}][39m
+[2m[22m
+[2m    [0m [90m 520 |[39m         (op) [33m=>[39m op[33m.[39mtype [33m===[39m [32m'textCorrection.create'[39m[22m
+[2m     [90m 521 |[39m       )[33m;[39m[22m
+[2m    [31m[1m>[22m[2m[39m[90m 522 |[39m       expect(textCorrectionCreates)[33m.[39mtoHaveLength([35m3[39m)[33m;[39m[22m
+[2m     [90m     |[39m                                     [31m[1m^[22m[2m[39m[22m
+[2m     [90m 523 |[39m[22m
+[2m     [90m 524 |[39m       [90m// ASSERTION: Should have 1 record for 'ספר' -> 'ספרי' (para-complex-1 only)[39m[22m
+[2m     [90m 525 |[39m       [36mconst[39m sefarCorrections [33m=[39m textCorrectionCreates[33m.[39mfilter([0m[22m
+[2m[22m
+[2m      [2mat [22m[2m[0m[36msrc/app/books/bulk-text-fixes-duplicate-records.spec.ts[39m[0m[2m:522:37[22m[2m[22m
+[2m      [2mat fulfilled ([22m[2m../../node_modules/.pnpm/tslib@2.8.1/node_modules/tslib/tslib.js[2m:167:62)[22m[2m[22m
+
+[31m[Nest] 26452  - [39m06/30/2025, 7:56:59 PM [31m  ERROR[39m [38;5;3m[BulkTextFixesService] [39mError: Database error
+    at [90m/Users/yonica/Dev/audibook-studio/apps/api/[39msrc/app/books/bulk-fixes-apply.spec.ts:497:67
+    at Generator.next (<anonymous>)
+    at /Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/tslib@2.8.1/node_modules/[4mtslib[24m/tslib.js:170:75
+    at new Promise (<anonymous>)
+    at Object.__awaiter (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/tslib@2.8.1/node_modules/[4mtslib[24m/tslib.js:166:16)
+    at Object.<anonymous> [90m(/Users/yonica/Dev/audibook-studio/apps/api/[39msrc/app/books/bulk-fixes-apply.spec.ts:487:64[90m)[39m
+    at Promise.then.completed (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/[4mjest-circus[24m/build/utils.js:298:28)
+    at new Promise (<anonymous>)
+    at callAsyncCircusFn (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/[4mjest-circus[24m/build/utils.js:231:10)
+    at _callCircusTest (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/[4mjest-circus[24m/build/run.js:316:40)
+[90m    at processTicksAndRejections (node:internal/process/task_queues:105:5)[39m
+    at _runTest (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/[4mjest-circus[24m/build/run.js:252:3)
+    at _runTestsForDescribeBlock (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/[4mjest-circus[24m/build/run.js:126:9)
+    at _runTestsForDescribeBlock (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/[4mjest-circus[24m/build/run.js:121:9)
+    at _runTestsForDescribeBlock (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/[4mjest-circus[24m/build/run.js:121:9)
+    at run (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/[4mjest-circus[24m/build/run.js:71:3)
+    at runAndTransformResultsToJestFormat (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/[4mjest-circus[24m/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+    at jestAdapter (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/[4mjest-circus[24m/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+    at runTestInternal (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-runner@29.7.0/node_modules/[4mjest-runner[24m/build/runTest.js:367:16)
+    at runTest (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-runner@29.7.0/node_modules/[4mjest-runner[24m/build/runTest.js:444:34)
+    at Object.worker (/Users/yonica/Dev/audibook-studio/node_modules/[4m.pnpm[24m/jest-runner@29.7.0/node_modules/[4mjest-runner[24m/build/testWorker.js:106:12)
+[31m[Nest] 26452  - [39m06/30/2025, 7:56:59 PM [31m  ERROR[39m [38;5;3m[BulkTextFixesService] [39m[31m🔍 Error details:[39m
+[31m[Nest] 26452  - [39m06/30/2025, 7:56:59 PM [31m  ERROR[39m [38;5;3m[BulkTextFixesService] [39mObject(5) {
+  message: [32m'Database error'[39m,
+  stack: [32m'Error: Database error\n    at /Users/yonica/Dev/audibook-studio/apps/api/src/app/books/bulk-fixes-apply.spec.ts:497:67\n    at Generator.next (<anonymous>)\n    at /Users/yonica/Dev/audibook-studio/node_modules/.pnpm/tslib@2.8.1/node_modules/tslib/tslib.js:170:75\n    at new Promise (<anonymous>)\n    at Object.__awaiter (/Users/yonica/Dev/audibook-studio/node_modules/.pnpm/tslib@2.8.1/node_modules/tslib/tslib.js:166:16)\n    at Object.<anonymous> (/Users/yonica/Dev/audibook-studio/apps/api/src/app/books/bulk-fixes-apply.spec.ts:487:64)\n    at Promise.then.completed (/Users/yonica/Dev/audibook-studio/node_modules/.pnpm/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/utils.js:298:28)\n    at new Promise (<anonymous>)\n    at callAsyncCircusFn (/Users/yonica/Dev/audibook-studio/node_modules/.pnpm/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/utils.js:231:10)\n    at _callCircusTest (/Users/yonica/Dev/audibook-studio/node_modules/.pnpm/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/run.js:316:40)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at _runTest (/Users/yonica/Dev/audibook-studio/node_modules/.pnpm/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/run.js:252:3)\n    at _runTestsForDescribeBlock (/Users/yonica/Dev/audibook-studio/node_modules/.pnpm/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/run.js:126:9)\n    at _runTestsForDescribeBlock (/Users/yonica/Dev/audibook-studio/node_modules/.pnpm/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/run.js:121:9)\n    at _runTestsForDescribeBlock (/Users/yonica/Dev/audibook-studio/node_modules/.pnpm/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/run.js:121:9)\n    at run (/Users/yonica/Dev/audibook-studio/node_modules/.pnpm/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/run.js:71:3)\n    at runAndTransformResultsToJestFormat (/Users/yonica/Dev/audibook-studio/node_modules/.pnpm/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)\n    at jestAdapter (/Users/yonica/Dev/audibook-studio/node_modules/.pnpm/jest-circus@29.7.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)\n    at runTestInternal (/Users/yonica/Dev/audibook-studio/node_modules/.pnpm/jest-runner@29.7.0/node_modules/jest-runner/build/runTest.js:367:16)\n    at runTest (/Users/yonica/Dev/audibook-studio/node_modules/.pnpm/jest-runner@29.7.0/node_modules/jest-runner/build/runTest.js:444:34)\n    at Object.worker (/Users/yonica/Dev/audibook-studio/node_modules/.pnpm/jest-runner@29.7.0/node_modules/jest-runner/build/testWorker.js:106:12)'[39m,
+  bookId: [32m'book-123'[39m,
+  fixesCount: [33m1[39m,
+  paragraphCount: [33m1[39m
+}
+[0m[7m[1m[32m PASS [39m[22m[27m[0m [0m[7m[37m api [39m[27m[0m [2msrc/app/books/[22m[1mbulk-fixes-apply.spec.ts[22m
+[0m[7m[1m[32m PASS [39m[22m[27m[0m [0m[7m[37m api [39m[27m[0m [2msrc/app/[22m[1mapp.service.spec.ts[22m
+[31m[Nest] 26456  - [39m06/30/2025, 7:56:59 PM [31m  ERROR[39m [38;5;3m[BooksService] [39m[31mParagraph not found with ID: paragraph-1[39m
+[0m[7m[1m[32m PASS [39m[22m[27m[0m [0m[7m[37m api [39m[27m[0m [2msrc/app/books/[22m[1mbooks.service.spec.ts[22m
+[0m[7m[1m[32m PASS [39m[22m[27m[0m [0m[7m[37m api [39m[27m[0m [2msrc/app/queue/[22m[1mqueue.service.spec.ts[22m
+[0m[7m[1m[32m PASS [39m[22m[27m[0m [0m[7m[37m api [39m[27m[0m [2msrc/app/books/[22m[1mbooks.controller.spec.ts[22m
+
+[1mTest Suites: [22m[1m[31m1 failed[39m[22m, [1m[32m11 passed[39m[22m, 12 total
+[1mTests:       [22m[1m[31m2 failed[39m[22m, [1m[32m161 passed[39m[22m, 163 total
+[1mSnapshots:   [22m0 total
+[1mTime:[22m        5.454 s, estimated 10 s
+[2mRan all test suites[22m[2m.[22m
+
+
+
+ NX   Ran target test for project api (43s)
+
+      With additional flags:
+        --bail=0
+
+   ✖  1/1 failed
+   ✔  0/1 succeeded [0 read from cache]
+
+
