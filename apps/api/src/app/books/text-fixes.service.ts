@@ -63,11 +63,14 @@ export class TextFixesService {
       
       // Word was changed
       if (originalWord && correctedWord && originalWord !== correctedWord) {
+        const fixType = this.classifyChange(originalWord, correctedWord);
+        this.logger.debug(`Creating WordChange: "${originalWord}" → "${correctedWord}" with fixType: ${fixType}`);
+        
         changes.push({
           originalWord,
           correctedWord,
           position: original[i].position,
-          fixType: this.classifyChange(originalWord, correctedWord)
+          fixType
         });
       }
     }
@@ -79,6 +82,8 @@ export class TextFixesService {
    * Attempts to classify the type of change made
    */
   private classifyChange(originalWord: string, correctedWord: string): string {
+    this.logger.debug(`Classifying change: "${originalWord}" → "${correctedWord}"`);
+    
     // Hebrew niqqud detection - vowel marks (U+05B0-U+05BD, U+05BF, U+05C1-U+05C2, U+05C4-U+05C7)
     const niqqudPattern = /[\u05B0-\u05BD\u05BF\u05C1\u05C2\u05C4-\u05C7]/g;
     
@@ -92,11 +97,18 @@ export class TextFixesService {
       const correctedNiqqud = correctedWord.match(niqqudPattern) || [];
       
       if (originalNiqqud.length === 0 && correctedNiqqud.length > 0) {
+        this.logger.debug(`Classified as niqqud_addition`);
         return 'niqqud_addition'; // Added vowel marks
       } else if (originalNiqqud.length > 0 && correctedNiqqud.length === 0) {
+        this.logger.debug(`Classified as niqqud_removal`);
         return 'niqqud_removal'; // Removed vowel marks
       } else if (originalNiqqud.length > 0 && correctedNiqqud.length > 0) {
+        this.logger.debug(`Classified as niqqud_correction`);
         return 'niqqud_correction'; // Changed vowel marks
+      } else {
+        // Base letters identical, no niqqud changes - this is likely a no-op or identical words
+        this.logger.debug(`Base letters identical, no niqqud changes - classified as no_change`);
+        return 'no_change';
       }
     }
     
@@ -113,7 +125,7 @@ export class TextFixesService {
       if (originalLetters.length === correctedLetters.length) {
         return 'hebrew_spelling'; // Same number of letters, likely spelling correction
       } else if (Math.abs(originalLetters.length - correctedLetters.length) === 1) {
-        return 'hebrew_letter_fix'; // Added or removed one Hebrew letter
+        return 'letter_fix'; // Added or removed one letter
       }
     }
     
@@ -140,6 +152,7 @@ export class TextFixesService {
       return 'expansion_contraction'; // One word contains the other
     }
     
+    this.logger.debug(`Classified as substitution (fallback)`);
     return 'substitution'; // Complete word replacement
   }
 

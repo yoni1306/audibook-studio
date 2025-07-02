@@ -34,47 +34,7 @@ export class CorrectionLearningService {
 
   constructor(private prisma: PrismaService) {}
 
-  /**
-   * Record a text correction for learning purposes
-   */
-  async recordCorrection(data: {
-    originalWord: string;
-    correctedWord: string;
-    contextSentence: string;
-    paragraphId: string;
-    fixType?: string;
-  }): Promise<TextCorrection> {
-    this.logger.log(`Recording correction: ${data.originalWord} → ${data.correctedWord}`);
 
-    try {
-      // Get the paragraph to find the bookId
-      const paragraph = await this.prisma.paragraph.findUnique({
-        where: { id: data.paragraphId },
-        select: { bookId: true },
-      });
-
-      if (!paragraph) {
-        throw new Error(`Paragraph ${data.paragraphId} not found`);
-      }
-
-      const correction = await this.prisma.textCorrection.create({
-        data: {
-          paragraphId: data.paragraphId,
-          bookId: paragraph.bookId,
-          originalWord: data.originalWord,
-          correctedWord: data.correctedWord,
-          sentenceContext: data.contextSentence,
-          fixType: data.fixType,
-        },
-      });
-
-      this.logger.log(`Recorded correction with ID: ${correction.id}`);
-      return correction;
-    } catch (error) {
-      this.logger.error(`Error recording correction: ${error.message}`, error.stack);
-      throw error;
-    }
-  }
 
   /**
    * Get correction suggestions for a given text based on learned patterns

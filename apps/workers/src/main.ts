@@ -14,6 +14,7 @@ import {
   updateBookStatus,
   getParagraph,
   cleanupDatabase,
+  checkDatabaseHealth,
 } from './database.service';
 import { 
   saveEPUBParseResult, 
@@ -385,6 +386,73 @@ logger.info('Worker started successfully', {
   redisPort: process.env['REDIS_PORT'] || 6379,
 });
 
+// Add Redis connection monitoring
+const redis = worker.opts.connection;
+if (redis && typeof redis === 'object' && 'on' in redis) {
+  redis.on('connect', () => {
+    logger.info('Redis connected successfully');
+  });
+  
+  redis.on('ready', () => {
+    logger.info('Redis connection ready');
+  });
+  
+  redis.on('error', (error) => {
+    logger.error('Redis connection error', {
+      error: error.message,
+      stack: error.stack
+    });
+  });
+  
+  redis.on('close', () => {
+    logger.warn('Redis connection closed');
+  });
+  
+  redis.on('reconnecting', () => {
+    logger.info('Redis reconnecting...');
+  });
+}
+
+// Add periodic health check
+const healthCheckInterval = setInterval(async () => {
+  try {
+    // Check if worker is still processing jobs
+    const isActive = worker.isRunning();
+    const memoryUsage = process.memoryUsage();
+    
+    // Check database connection health
+    const dbHealthy = await checkDatabaseHealth();
+    
+    logger.debug('Worker health check', {
+      isActive,
+      dbHealthy,
+      memoryUsage: {
+        rss: Math.round(memoryUsage.rss / 1024 / 1024) + 'MB',
+        heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024) + 'MB',
+        heapTotal: Math.round(memoryUsage.heapTotal / 1024 / 1024) + 'MB'
+      },
+      uptime: Math.round(process.uptime()) + 's'
+    });
+    
+    // Log warning if database is unhealthy
+    if (!dbHealthy) {
+      logger.warn('Database connection is unhealthy - worker may stop processing jobs');
+    }
+    
+    // Force garbage collection if memory usage is high
+    if (memoryUsage.heapUsed > 500 * 1024 * 1024) { // 500MB threshold
+      if (global.gc) {
+        global.gc();
+        logger.info('Forced garbage collection due to high memory usage');
+      }
+    }
+  } catch (error) {
+    logger.error('Health check failed', {
+      error: error.message
+    });
+  }
+}, 30000); // Check every 30 seconds
+
 // Graceful shutdown with timeout handling
 let isShuttingDown = false;
 
@@ -403,6 +471,12 @@ const gracefulShutdown = async (signal: string) => {
       logger.error('Graceful shutdown timed out, forcing exit');
       process.exit(1);
     }, 15000); // 15 second timeout
+    
+    // Clear health check interval
+    if (healthCheckInterval) {
+      clearInterval(healthCheckInterval);
+      logger.debug('Health check interval cleared');
+    }
     
     // Close the worker and cleanup database connections
     await Promise.race([

@@ -15,28 +15,7 @@ export class GetCorrectionSuggestionsDto {
   minOccurrences?: number = 2;
 }
 
-export class RecordCorrectionDto {
-  @ApiProperty({ description: 'Original word that was corrected' })
-  @IsString()
-  originalWord: string;
 
-  @ApiProperty({ description: 'Corrected word' })
-  @IsString()
-  correctedWord: string;
-
-  @ApiProperty({ description: 'Sentence context where the correction occurred' })
-  @IsString()
-  contextSentence: string;
-
-  @ApiProperty({ description: 'ID of the paragraph where the correction occurred' })
-  @IsString()
-  paragraphId: string;
-
-  @ApiPropertyOptional({ description: 'Type of fix applied' })
-  @IsOptional()
-  @IsString()
-  fixType?: string;
-}
 
 export class GetWordCorrectionsDto {
   @ApiProperty({ description: 'Original word to get corrections for' })
@@ -141,23 +120,7 @@ export class CorrectionSuggestionsResponseDto {
   timestamp?: string;
 }
 
-export class RecordCorrectionResponseDto {
-  @IsString()
-  id: string;
 
-  @IsString()
-  originalWord: string;
-
-  @IsString()
-  correctedWord: string;
-
-  @IsString()
-  message: string;
-
-  @IsOptional()
-  @IsString()
-  timestamp?: string;
-}
 
 export class CorrectionWithContextDto {
   @ApiProperty({ description: 'Correction ID' })
