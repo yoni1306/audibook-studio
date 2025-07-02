@@ -53,7 +53,7 @@ export class BooksController {
       return {
         originalWord: suggestion.originalWord,
         correctedWord: suggestion.correctedWord,
-        fixType: 'spelling', // Default fix type
+        fixType: suggestion.fixType || 'spelling', // Use original fix type or default to spelling
         paragraphIds,
         count: suggestion.paragraphs.reduce((sum, p) => sum + p.occurrences, 0),
         previewBefore,
@@ -242,6 +242,7 @@ export class BooksController {
         originalWord: string;
         correctedWord: string;
         paragraphIds: string[];
+        fixType?: string;
       }>;
     }
   ) {

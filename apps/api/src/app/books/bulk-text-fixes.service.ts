@@ -5,6 +5,7 @@ import { TextFixesService, WordChange } from './text-fixes.service';
 export interface BulkFixSuggestion {
   originalWord: string;
   correctedWord: string;
+  fixType?: string;
   paragraphs: Array<{
     id: string;
     pageId: string;
@@ -59,18 +60,46 @@ export class BulkTextFixesService {
       return [];
     }
 
-    // Get all paragraphs in the book except the one just edited
-    const bookParagraphs = await this.fetchBookParagraphs(
-      bookId,
-      excludeParagraphId
+    // Filter out word changes with identical original and corrected words
+    // and ensure fix type is always set
+    const validWordChanges = wordChanges.filter((change) => {
+      // Skip changes where original and corrected words are identical
+      if (change.originalWord === change.correctedWord) {
+        this.logger.debug(
+          `Skipping identical word change: '${change.originalWord}' -> '${change.correctedWord}'`
+        );
+        return false;
+      }
+
+      // Skip changes without a fix type
+      if (!change.fixType) {
+        this.logger.debug(
+          `Skipping word change without fix type: '${change.originalWord}' -> '${change.correctedWord}'`
+        );
+        return false;
+      }
+
+      return true;
+    });
+
+    if (validWordChanges.length === 0) {
+      this.logger.debug(`No valid word changes after filtering, returning empty array`);
+      return [];
+    }
+
+    this.logger.debug(
+      `Filtered to ${validWordChanges.length} valid word changes from ${wordChanges.length} original changes`
     );
+
+    // Get all paragraphs in the book except the one just edited
+    const bookParagraphs = await this.fetchBookParagraphs(bookId, excludeParagraphId);
     this.logger.debug(
       `Found ${bookParagraphs.length} paragraphs to check for similar fixes`
     );
 
     // Process each word change to find similar fixes
     const suggestions = await this.processBulkFixSuggestions(
-      wordChanges,
+      validWordChanges,
       bookParagraphs
     );
 
@@ -131,6 +160,7 @@ export class BulkTextFixesService {
         suggestions.push({
           originalWord: change.originalWord,
           correctedWord: change.correctedWord,
+          fixType: change.fixType,
           paragraphs: matchingParagraphs,
         });
       } else {
@@ -221,6 +251,7 @@ export class BulkTextFixesService {
       originalWord: string;
       correctedWord: string;
       paragraphIds: string[];
+      fixType?: string;
     }>,
     ttsModel?: string,
     ttsVoice?: string
@@ -238,7 +269,7 @@ export class BulkTextFixesService {
     // Group fixes by paragraph ID
     const paragraphFixes = new Map<
       string,
-      Array<{ originalWord: string; correctedWord: string }>
+      Array<{ originalWord: string; correctedWord: string; fixType?: string }>
     >();
 
     fixes.forEach((fix) => {
@@ -256,6 +287,7 @@ export class BulkTextFixesService {
           fixesForParagraph.push({
             originalWord: fix.originalWord,
             correctedWord: fix.correctedWord,
+            fixType: fix.fixType,
           });
         }
       });
@@ -374,7 +406,7 @@ export class BulkTextFixesService {
                       originalWord: fix.originalWord,
                       correctedWord: fix.correctedWord,
                       sentenceContext,
-                      fixType: 'BULK_FIX',
+                      fixType: fix.fixType,
                       ttsModel,
                       ttsVoice,
                     },
@@ -387,7 +419,7 @@ export class BulkTextFixesService {
                     originalWord: fix.originalWord,
                     correctedWord: fix.correctedWord,
                     position: matchPosition,
-                    fixType: 'BULK_FIX',
+                    fixType: fix.fixType,
                   });
                 } catch (error) {
                   this.logger.error(
@@ -655,7 +687,8 @@ export class BulkTextFixesService {
     } else if (isNumber) {
       // Number boundary detection - prevent matching digits that are part of larger numbers
       // This includes decimal numbers with dots (.) or commas (,) as separators
-      pattern = `(?<![\\d.,])(${escapedWord})(?![\\d.,])`;
+      // Also excludes Hebrew hyphen (־) to prevent matching numbers in compound expressions like "ב־2"
+      pattern = `(?<![\\d.,־])(${escapedWord})(?![\\d.,])`;
     } else {
       // Non-Hebrew, non-number words (English, etc.) - use standard word boundaries
       // Prevent matching inside other words
@@ -734,7 +767,8 @@ export class BulkTextFixesService {
     } else if (isNumber) {
       // Number boundary detection - prevent matching digits that are part of larger numbers
       // This includes decimal numbers with dots (.) or commas (,) as separators
-      pattern = `(?<![\\d.,])(${escapedWord})(?![\\d.,])`;
+      // Also excludes Hebrew hyphen (־) to prevent matching numbers in compound expressions like "ב־2"
+      pattern = `(?<![\\d.,־])(${escapedWord})(?![\\d.,])`;
     } else {
       // Non-Hebrew, non-number words (English, etc.) - use standard word boundaries
       // Prevent matching inside other words
@@ -804,7 +838,8 @@ export class BulkTextFixesService {
     } else if (isNumber) {
       // Number boundary detection - prevent matching digits that are part of larger numbers
       // This includes decimal numbers with dots (.) or commas (,) as separators
-      pattern = `(?<![\\d.,])(${escapedWord})(?![\\d.,])`;
+      // Also excludes Hebrew hyphen (־) to prevent matching numbers in compound expressions like "ב־2"
+      pattern = `(?<![\\d.,־])(${escapedWord})(?![\\d.,])`;
     } else {
       // Non-Hebrew, non-number words (English, etc.) - use standard word boundaries
       // Prevent matching inside other words

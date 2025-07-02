@@ -263,11 +263,13 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
           originalWord: 'ראשון',
           correctedWord: 'רִאשׁוֹן',
           paragraphIds: ['para-sequential'],
+          fixType: 'niqqud',
         },
         {
           originalWord: 'שני',
           correctedWord: 'שֵׁנִי',
           paragraphIds: ['para-sequential'],
+          fixType: 'pronunciation',
         },
       ];
 
@@ -322,9 +324,16 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
       );
       expect(sheniCorrections).toHaveLength(1);
 
-      // ASSERTION: All records should have fixType 'BULK_FIX'
-      textCorrectionCreates.forEach((op) => {
-        expect(op.data.fixType).toBe('BULK_FIX');
+      // ASSERTION: Records should have their original fix types
+      const niqqudCorrections = textCorrectionCreates.filter(op => op.data.originalWord === 'ראשון');
+      const pronunciationCorrections = textCorrectionCreates.filter(op => op.data.originalWord === 'שני');
+      
+      niqqudCorrections.forEach((op) => {
+        expect(op.data.fixType).toBe('niqqud');
+      });
+      
+      pronunciationCorrections.forEach((op) => {
+        expect(op.data.fixType).toBe('pronunciation');
       });
     });
 
@@ -336,6 +345,7 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
           originalWord: 'בית',
           correctedWord: 'בַּיִת',
           paragraphIds: ['para-forms'],
+          fixType: 'niqqud',
         },
       ];
 
@@ -383,7 +393,7 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
       textCorrectionCreates.forEach((op) => {
         expect(op.data.originalWord).toBe('בית');
         expect(op.data.correctedWord).toBe('בַּיִת');
-        expect(op.data.fixType).toBe('BULK_FIX');
+        expect(op.data.fixType).toBe('niqqud');
       });
     });
 
@@ -450,11 +460,13 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
           originalWord: 'ספר',
           correctedWord: 'ספרי',
           paragraphIds: ['para-complex-1', 'para-complex-2'],
+          fixType: 'grammar',
         },
         {
           originalWord: '5',
           correctedWord: 'חמש',
           paragraphIds: ['para-complex-1', 'para-complex-3'],
+          fixType: 'number_to_word',
         },
       ];
 
@@ -543,9 +555,16 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
       expect(numberParagraphIds).toContain('para-complex-1');
       expect(numberParagraphIds).toContain('para-complex-3');
 
-      // ASSERTION: All records should have fixType 'BULK_FIX'
-      textCorrectionCreates.forEach((op) => {
-        expect(op.data.fixType).toBe('BULK_FIX');
+      // ASSERTION: Records should have their original fix types
+      const grammarCorrections = textCorrectionCreates.filter(op => op.data.originalWord === 'ספר');
+      const numberToWordCorrections = textCorrectionCreates.filter(op => op.data.originalWord === '5');
+      
+      grammarCorrections.forEach((op) => {
+        expect(op.data.fixType).toBe('grammar');
+      });
+      
+      numberToWordCorrections.forEach((op) => {
+        expect(op.data.fixType).toBe('number_to_word');
       });
 
       // ASSERTION: No duplicate records (each combination should be unique)
