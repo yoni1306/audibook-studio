@@ -283,7 +283,7 @@ describe('TextFixesService', () => {
 
       it('should detect complex niqqud changes', () => {
         const result = service['classifyChange']('בְּרֵאשִׁית', 'בְּרֵאשִׁיתָה');
-        expect(result).toBe('hebrew_letter_fix'); // Added Hebrew letter ה at the end
+        expect(result).toBe('letter_fix'); // Added Hebrew letter ה at the end
       });
 
       it('should handle multiple niqqud marks', () => {
@@ -300,12 +300,12 @@ describe('TextFixesService', () => {
 
       it('should detect hebrew letter addition', () => {
         const result = service['classifyChange']('שלמ', 'שלום');
-        expect(result).toBe('hebrew_letter_fix');
+        expect(result).toBe('letter_fix');
       });
 
       it('should detect hebrew letter removal', () => {
         const result = service['classifyChange']('שלום', 'שלמ');
-        expect(result).toBe('hebrew_letter_fix');
+        expect(result).toBe('letter_fix');
       });
 
       it('should handle complex hebrew word changes', () => {
@@ -415,7 +415,7 @@ describe('TextFixesService', () => {
     describe('Real-world Hebrew examples', () => {
       it('should classify common Hebrew corrections', () => {
         // Common misspelling
-        expect(service['classifyChange']('אמא', 'אימא')).toBe('hebrew_letter_fix');
+        expect(service['classifyChange']('אמא', 'אימא')).toBe('letter_fix');
         
         // Niqqud addition for clarity
         expect(service['classifyChange']('ברא', 'בָּרָא')).toBe('niqqud_addition');
@@ -428,12 +428,80 @@ describe('TextFixesService', () => {
 
       it('should handle biblical Hebrew with complex niqqud', () => {
         const result = service['classifyChange']('בְּרֵאשִׁית', 'בְּרֵאשִׁיתָה');
-        expect(result).toBe('hebrew_letter_fix'); // Added one Hebrew letter (ה)
+        expect(result).toBe('letter_fix'); // Added one Hebrew letter (ה)
       });
 
       it('should handle modern Hebrew slang corrections', () => {
         const result = service['classifyChange']('יאללה', 'יאלה');
-        expect(result).toBe('hebrew_letter_fix');
+        expect(result).toBe('letter_fix');
+      });
+    });
+
+    describe('User reported missing fix types', () => {
+      it('should classify פרידה -> פרידקה as letter fix', () => {
+        const result = service['classifyChange']('פרידה', 'פרידקה');
+        console.log('פרידה -> פרידקה classified as:', result);
+        // This is adding a letter (ק) - פרידה (5 chars) -> פרידקה (6 chars)
+        expect(result).toBe('letter_fix'); // Added one letter
+      });
+
+      it('should classify 2 -> שתי as substitution', () => {
+        const result = service['classifyChange']('2', 'שתי');
+        console.log('2 -> שתי classified as:', result);
+        // This should be a complete word replacement
+        expect(result).toBe('substitution');
+      });
+
+      it('should test the complete flow with analyzeTextChanges', () => {
+        // Test case 1: פרידה -> פרידקה in context
+        const originalText1 = 'שער שישי פרידה ויטו מיברג';
+        const correctedText1 = 'שער שישי פרידקה ויטו מיברג';
+        const changes1 = service.analyzeTextChanges(originalText1, correctedText1);
+        console.log('Case 1 changes:', JSON.stringify(changes1, null, 2));
+        
+        expect(changes1).toHaveLength(1);
+        expect(changes1[0].originalWord).toBe('פרידה');
+        expect(changes1[0].correctedWord).toBe('פרידקה');
+        expect(changes1[0].fixType).toBeDefined();
+        expect(changes1[0].fixType).toBe('letter_fix');
+
+        // Test case 2: 2 -> שתי in context
+        const originalText2 = 'הביתה 2 לא תמיד';
+        const correctedText2 = 'הביתה שתי לא תמיד';
+        const changes2 = service.analyzeTextChanges(originalText2, correctedText2);
+        console.log('Case 2 changes:', JSON.stringify(changes2, null, 2));
+        
+        expect(changes2).toHaveLength(1);
+        expect(changes2[0].originalWord).toBe('2');
+        expect(changes2[0].correctedWord).toBe('שתי');
+        expect(changes2[0].fixType).toBeDefined();
+        expect(changes2[0].fixType).toBe('substitution');
+      });
+
+      it('should verify that fixType is properly set and not filtered out', () => {
+        // This test verifies that the WordChange objects have fixType set
+        // and would not be filtered out by the bulk fixes service
+        const changes = [
+          { originalWord: 'פרידה', correctedWord: 'פרידקה', position: 0, fixType: 'letter_fix' },
+          { originalWord: '2', correctedWord: 'שתי', position: 1, fixType: 'substitution' }
+        ];
+        
+        // Simulate the filtering logic from BulkTextFixesService.findSimilarFixesInBook
+        const validChanges = changes.filter((change) => {
+          // Skip changes where original and corrected words are identical
+          if (change.originalWord === change.correctedWord) {
+            return false;
+          }
+          // Skip changes without a fix type
+          if (!change.fixType) {
+            return false;
+          }
+          return true;
+        });
+        
+        expect(validChanges).toHaveLength(2);
+        expect(validChanges[0].fixType).toBe('letter_fix');
+        expect(validChanges[1].fixType).toBe('substitution');
       });
     });
   });

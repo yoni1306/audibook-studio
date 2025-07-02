@@ -6,12 +6,10 @@ import { CorrectionLearningService } from './correction-learning.service';
 import { UpdateParagraphRequestDto, UpdateParagraphResponseDto, BulkFixSuggestion as DtoBulkFixSuggestion, SuggestedFixesResponseDto } from './dto/paragraph-update.dto';
 import { 
   GetCorrectionSuggestionsDto, 
-  RecordCorrectionDto, 
   GetWordCorrectionsDto,
   GetAllCorrectionsDto,
   CorrectionSuggestionsResponseDto,
   LearningStatsResponseDto,
-  RecordCorrectionResponseDto,
   GetAllCorrectionsResponseDto,
   GetFixTypesResponseDto
 } from './dto/correction-learning.dto';
@@ -422,41 +420,7 @@ export class BooksController {
     }
   }
 
-  /**
-   * Record a manual correction for learning
-   */
-  @Post('record-correction')
-  async recordCorrection(@Body() dto: RecordCorrectionDto): Promise<RecordCorrectionResponseDto> {
-    this.logger.log(`Recording correction: ${dto.originalWord} → ${dto.correctedWord}`);
-    
-    try {
-      const correction = await this.correctionLearningService.recordCorrection({
-        originalWord: dto.originalWord,
-        correctedWord: dto.correctedWord,
-        contextSentence: dto.contextSentence,
-        paragraphId: dto.paragraphId,
-        fixType: dto.fixType,
-      });
-      
-      this.logger.log(`Successfully recorded correction with ID: ${correction.id}`);
-      
-      return {
-        id: correction.id,
-        originalWord: correction.originalWord,
-        correctedWord: correction.correctedWord,
-        message: 'Correction recorded successfully',
-        timestamp: new Date().toISOString(),
-      };
-    } catch (error) {
-      this.logger.error(`Error recording correction: ${error.message}`, error.stack);
-      throw new InternalServerErrorException({
-        error: 'Internal Server Error',
-        message: 'Failed to record correction',
-        statusCode: 500,
-        timestamp: new Date().toISOString(),
-      });
-    }
-  }
+
 
   /**
    * Get learning system statistics

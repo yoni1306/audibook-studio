@@ -7,9 +7,7 @@ import { BulkTextFixesService } from './bulk-text-fixes.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
 import { 
-  RecordCorrectionDto, 
-  GetAllCorrectionsDto,
-  CorrectionWithContextDto
+  GetAllCorrectionsDto
 } from './dto/correction-learning.dto';
 
 describe('BooksController', () => {
@@ -17,7 +15,6 @@ describe('BooksController', () => {
 
   const mockCorrectionLearningService = {
     getFixTypes: jest.fn(),
-    recordCorrection: jest.fn(),
     getAllCorrections: jest.fn(),
   };
 
@@ -108,138 +105,7 @@ describe('BooksController', () => {
     });
   });
 
-  describe('recordCorrection', () => {
-    const mockCorrectionRequest: RecordCorrectionDto = {
-      originalWord: 'שגיאה',
-      correctedWord: 'תיקון',
-      contextSentence: 'זה המשפט עם שגיאה בתוכו.',
-      paragraphId: 'test-paragraph-id',
-      fixType: 'substitution',
-    };
 
-    const mockCreatedCorrection: CorrectionWithContextDto = {
-      id: 'test-correction-id',
-      originalWord: 'שגיאה',
-      correctedWord: 'תיקון',
-      sentenceContext: 'זה המשפט עם שגיאה בתוכו.',
-      location: {
-        paragraphId: 'test-paragraph-id',
-        paragraphIndex: 1,
-        pageNumber: 1,
-        pageId: 'test-page-id',
-      },
-      fixType: 'substitution',
-      createdAt: new Date('2025-06-22T10:00:00.000Z'),
-      updatedAt: new Date('2025-06-22T10:00:00.000Z'),
-      bookTitle: 'Test Book',
-      bookId: 'test-book-id',
-    };
-
-    it('should record correction with complete input data', async () => {
-      mockCorrectionLearningService.recordCorrection.mockResolvedValue(mockCreatedCorrection);
-
-      const result = await controller.recordCorrection(mockCorrectionRequest);
-
-      expect(mockCorrectionLearningService.recordCorrection).toHaveBeenCalledWith(mockCorrectionRequest);
-
-      expect(result).toEqual({
-        id: 'test-correction-id',
-        originalWord: 'שגיאה',
-        correctedWord: 'תיקון',
-        message: 'Correction recorded successfully',
-        timestamp: expect.any(String),
-      });
-    });
-
-    it('should handle correction without fixType', async () => {
-      const dtoWithoutFixType: RecordCorrectionDto = {
-        originalWord: 'שגיאה',
-        correctedWord: 'תיקון',
-        contextSentence: 'זה המשפט עם שגיאה בתוכו.',
-        paragraphId: 'test-paragraph-id',
-      };
-
-      const correctionWithoutFixType: CorrectionWithContextDto = {
-        ...mockCreatedCorrection,
-        fixType: undefined,
-      };
-
-      mockCorrectionLearningService.recordCorrection.mockResolvedValue(correctionWithoutFixType);
-
-      const result = await controller.recordCorrection(dtoWithoutFixType);
-
-      expect(mockCorrectionLearningService.recordCorrection).toHaveBeenCalledWith(dtoWithoutFixType);
-
-      expect(result.id).toBe('test-correction-id');
-      expect(result.message).toBe('Correction recorded successfully');
-      expect(result.timestamp).toBeDefined();
-    });
-
-    it('should validate required fields are passed through', async () => {
-      mockCorrectionLearningService.recordCorrection.mockResolvedValue(mockCreatedCorrection);
-
-      await controller.recordCorrection(mockCorrectionRequest);
-
-      const serviceCall = mockCorrectionLearningService.recordCorrection.mock.calls[0][0];
-      
-      expect(serviceCall).toHaveProperty('originalWord');
-      expect(serviceCall).toHaveProperty('correctedWord');
-      expect(serviceCall).toHaveProperty('contextSentence');
-      expect(serviceCall).toHaveProperty('paragraphId');
-      expect(serviceCall.originalWord).toBe('שגיאה');
-      expect(serviceCall.correctedWord).toBe('תיקון');
-      expect(serviceCall.contextSentence).toBe('זה המשפט עם שגיאה בתוכו.');
-      expect(serviceCall.paragraphId).toBe('test-paragraph-id');
-    });
-
-    it('should handle empty context sentence', async () => {
-      const dtoWithEmptyContext: RecordCorrectionDto = {
-        ...mockCorrectionRequest,
-        contextSentence: '',
-      };
-
-      const correctionWithEmptyContext: CorrectionWithContextDto = {
-        ...mockCreatedCorrection,
-        sentenceContext: '',
-      };
-
-      mockCorrectionLearningService.recordCorrection.mockResolvedValue(correctionWithEmptyContext);
-
-      const result = await controller.recordCorrection(dtoWithEmptyContext);
-
-      expect(mockCorrectionLearningService.recordCorrection).toHaveBeenCalledWith(dtoWithEmptyContext);
-
-      expect(result.id).toBe('test-correction-id');
-      expect(result.timestamp).toBeDefined();
-    });
-
-    it('should handle service errors and rethrow them', async () => {
-      const mockError = new Error('Database connection failed');
-      mockCorrectionLearningService.recordCorrection.mockRejectedValue(mockError);
-
-      await expect(controller.recordCorrection(mockCorrectionRequest)).rejects.toThrow(
-        'Failed to record correction'
-      );
-    });
-
-    it('should return proper response structure', async () => {
-      mockCorrectionLearningService.recordCorrection.mockResolvedValue(mockCreatedCorrection);
-
-      const result = await controller.recordCorrection(mockCorrectionRequest);
-
-      // Verify response structure matches RecordCorrectionResponseDto
-      expect(result).toHaveProperty('id');
-      expect(result).toHaveProperty('originalWord');
-      expect(result).toHaveProperty('correctedWord');
-      expect(result).toHaveProperty('message');
-      expect(result).toHaveProperty('timestamp');
-      expect(typeof result.id).toBe('string');
-      expect(typeof result.originalWord).toBe('string');
-      expect(typeof result.correctedWord).toBe('string');
-      expect(typeof result.message).toBe('string');
-      expect(typeof result.timestamp).toBe('string');
-    });
-  });
 
   describe('getAllCorrections', () => {
     const mockCorrectionsResponse = {

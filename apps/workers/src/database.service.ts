@@ -5,6 +5,11 @@ const logger = createLogger('DatabaseService');
 
 const prisma = new PrismaClient({
   log: ['error', 'warn'],
+  datasources: {
+    db: {
+      url: process.env.DATABASE_URL,
+    },
+  },
 });
 
 export interface ParagraphData {
@@ -138,6 +143,20 @@ async function initializeDatabase(): Promise<void> {
       error: errorMessage
     });
     throw error;
+  }
+}
+
+/**
+ * Check database connection health
+ */
+export async function checkDatabaseHealth(): Promise<boolean> {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    return true;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Database health check failed: ${errorMessage}`);
+    return false;
   }
 }
 
