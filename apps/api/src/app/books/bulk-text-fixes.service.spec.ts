@@ -1791,5 +1791,32 @@ describe('BulkTextFixesService', () => {
       // Currently returns null - this is a separate issue to investigate
       expect(yearMatches).toBeNull();
     });
+
+    it('should correctly classify number expansion as expansion not disambiguation', async () => {
+      // Test the specific bug: "2" → "שתי" should be classified as expansion, not disambiguation
+      // This test uses the real FixTypeHandlerRegistry to validate our fix
+      
+      // Import the real registry for this test
+      const { FixTypeHandlerRegistry } = await import('./fix-type-handlers/fix-type-handler-registry');
+      const realRegistry = new FixTypeHandlerRegistry();
+      
+      // Test the actual classification
+      const classification = realRegistry.classifyCorrection('2', 'שתי');
+      
+      // The classification should return expansion, not disambiguation
+      expect(classification.fixType).toBe(FixType.expansion);
+      expect(classification.fixType).not.toBe(FixType.disambiguation);
+      expect(classification.reason).toContain('Expanded number');
+      expect(classification.confidence).toBeGreaterThan(0.9);
+      
+      // Verify that expansion handler was the one that matched
+      expect(classification.matches).toBeDefined();
+      expect(classification.matches.length).toBeGreaterThan(0);
+      expect(classification.matches[0].fixType).toBe(FixType.expansion);
+      
+      // Test that disambiguation handler correctly excludes numeric patterns
+      const disambiguationMatches = classification.matches.filter(match => match.fixType === FixType.disambiguation);
+      expect(disambiguationMatches.length).toBe(0); // Should be 0 because disambiguation excludes numbers
+    });
   });
 });

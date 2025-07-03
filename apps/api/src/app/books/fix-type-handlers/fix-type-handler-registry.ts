@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { FixType } from '@prisma/client';
 import { BaseFixTypeHandler, FixTypeMatch } from './base-fix-type-handler';
 import { VowelizationHandler } from './vowelization-handler';
 import { DisambiguationHandler } from './disambiguation-handler';
@@ -8,7 +9,7 @@ import { DialogueMarkingHandler } from './dialogue-marking-handler';
 import { ExpansionHandler } from './expansion-handler';
 
 export interface FixTypeClassificationResult {
-  fixType: string | null;
+  fixType: FixType | null;
   confidence: number;
   reason: string;
   matches: FixTypeMatch[];
@@ -113,7 +114,7 @@ export class FixTypeHandlerRegistry {
   /**
    * Get information about all available fix type handlers
    */
-  getHandlerInfo(): Array<{ fixType: string; description: string }> {
+  getHandlerInfo(): Array<{ fixType: FixType; description: string }> {
     return this.handlers.map(handler => ({
       fixType: handler.fixType,
       description: handler.description

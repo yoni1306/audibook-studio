@@ -1,3 +1,4 @@
+import { FixType } from '@prisma/client';
 import { BaseFixTypeHandler, FixTypeMatch } from './base-fix-type-handler';
 
 /**
@@ -20,7 +21,7 @@ import { BaseFixTypeHandler, FixTypeMatch } from './base-fix-type-handler';
  * - Hebrew vowel marks: U+05B0-U+05BD, U+05BF, U+05C1-U+05C2, U+05C4-U+05C7
  */
 export class VowelizationHandler extends BaseFixTypeHandler {
-  readonly fixType = 'vowelization';
+  readonly fixType = FixType.vowelization;
   readonly description = 'Adding/correcting Hebrew niqqud (vowel marks) for proper pronunciation';
   
   // Hebrew niqqud pattern - vowel marks (U+05B0-U+05BD, U+05BF, U+05C1-U+05C2, U+05C4-U+05C7)

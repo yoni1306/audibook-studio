@@ -1,12 +1,13 @@
 import { Logger } from '@nestjs/common';
+import { FixType } from '@prisma/client';
 
 /**
  * Interface representing a match result from a fix type handler.
  * Contains all information needed to classify and understand a text correction.
  */
 export interface FixTypeMatch {
-  /** The fix type identifier (matches FixType enum values) */
-  fixType: string;
+  /** The fix type identifier using the FixType enum */
+  fixType: FixType;
   /** Confidence score from 0-1, indicating how certain this handler is about the match */
   confidence: number;
   /** Human-readable explanation of why this fix type was chosen */
@@ -37,7 +38,7 @@ export abstract class BaseFixTypeHandler {
    */
   protected readonly logger = new Logger(this.constructor.name);
   
-  abstract readonly fixType: string;
+  abstract readonly fixType: FixType;
   abstract readonly description: string;
   
   /**

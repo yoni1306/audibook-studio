@@ -1,3 +1,4 @@
+import { FixType } from '@prisma/client';
 import { BaseFixTypeHandler, FixTypeMatch } from './base-fix-type-handler';
 
 /**
@@ -39,7 +40,7 @@ import { BaseFixTypeHandler, FixTypeMatch } from './base-fix-type-handler';
  * - Making dialogue and questions more distinct
  */
 export class SentenceBreakHandler extends BaseFixTypeHandler {
-  readonly fixType = 'sentence_break';
+  readonly fixType = FixType.sentence_break;
   readonly description = 'Breaking long/nested sentences into clear chunks for better narration';
   
   // Patterns for detecting sentence breaks
