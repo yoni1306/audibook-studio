@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { TextCorrectionRepository, CreateTextCorrectionData } from './text-correction.repository';
 import { TextCorrection } from '@prisma/client';
 
 export interface CorrectionSuggestion {
@@ -32,9 +32,23 @@ export interface LearningStats {
 export class CorrectionLearningService {
   private readonly logger = new Logger(CorrectionLearningService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(private textCorrectionRepository: TextCorrectionRepository) {}
 
-
+  /**
+   * Record a single text correction for learning purposes
+   */
+  async recordCorrection(correctionData: CreateTextCorrectionData): Promise<TextCorrection> {
+    this.logger.log(`Recording correction: "${correctionData.originalWord}" → "${correctionData.correctedWord}"`);
+    
+    try {
+      const correction = await this.textCorrectionRepository.create(correctionData);
+      this.logger.log(`Successfully recorded correction with ID: ${correction.id}`);
+      return correction;
+    } catch (error) {
+      this.logger.error(`Failed to record correction:`, error);
+      throw error;
+    }
+  }
 
   /**
    * Get correction suggestions for a given text based on learned patterns
@@ -52,52 +66,30 @@ export class CorrectionLearningService {
       // For each word in the text, check if we have learned corrections
       for (const word of words) {
         // Get all corrections for this word, grouped by correction
-        const corrections = await this.prisma.textCorrection.groupBy({
-          by: ['originalWord', 'correctedWord', 'fixType'],
-          where: {
-            originalWord: word,
-          },
-          _count: {
-            id: true,
-          },
-          _max: {
-            createdAt: true,
-          },
-          having: {
-            id: {
-              _count: {
-                gte: minOccurrences,
-              },
-            },
-          },
-          orderBy: {
-            _count: {
-              id: 'desc',
-            },
-          },
+        const groupedCorrections = await this.textCorrectionRepository.findGroupedCorrections({
+          originalWord: word,
+          minOccurrences,
         });
 
         // Convert to suggestions format
-        for (const correction of corrections) {
-          // Get a recent example for context
-          const recentCorrection = await this.prisma.textCorrection.findFirst({
-            where: {
-              originalWord: correction.originalWord,
-              correctedWord: correction.correctedWord,
-            },
-            orderBy: {
-              createdAt: 'desc',
-            },
+        for (const correction of groupedCorrections) {
+          // Get a recent correction for context
+          const recentCorrections = await this.textCorrectionRepository.findMany({
+            originalWord: correction.originalWord,
+            correctedWord: correction.correctedWord,
+            limit: 1,
+            orderBy: 'desc',
           });
+          const recentCorrection = recentCorrections[0];
 
           if (recentCorrection) {
             suggestions.push({
               originalWord: word, // Use the actual word from text
               suggestedWord: correction.correctedWord,
               contextSentence: recentCorrection.sentenceContext,
-              occurrenceCount: correction._count.id,
+              occurrenceCount: correction.occurrenceCount,
               fixType: correction.fixType,
-              lastUsed: correction._max.createdAt || new Date(),
+              lastUsed: recentCorrection.updatedAt || new Date(),
             });
           }
         }
@@ -116,44 +108,29 @@ export class CorrectionLearningService {
    */
   async getLearningStats(): Promise<LearningStats> {
     try {
-      const [totalCorrections, uniqueWords, recentCorrections] = await Promise.all([
-        this.prisma.textCorrection.count(),
-        this.prisma.textCorrection.groupBy({
-          by: ['originalWord'],
-        }).then(groups => groups.length),
-        this.prisma.textCorrection.findMany({
-          orderBy: { createdAt: 'desc' },
-          take: 5,
-          select: {
-            originalWord: true,
-            correctedWord: true,
-            fixType: true,
-            createdAt: true,
-          },
-        }),
-      ]);
+      const stats = await this.textCorrectionRepository.getStats();
+      const recentCorrections = await this.textCorrectionRepository.findMany({
+        limit: 5,
+        orderBy: 'desc',
+      });
 
-      const topCorrections = await this.prisma.textCorrection.groupBy({
-        by: ['originalWord', 'correctedWord', 'fixType'],
-        _count: {
-          id: true,
-        },
-        orderBy: {
-          _count: {
-            id: 'desc',
-          },
-        },
+      const topCorrections = await this.textCorrectionRepository.getTopCorrections({
         take: 10,
       });
 
       return {
-        totalCorrections,
-        uniqueWords,
-        recentCorrections,
+        totalCorrections: stats.totalCorrections,
+        uniqueWords: stats.uniqueWords,
+        recentCorrections: recentCorrections.map(correction => ({
+          originalWord: correction.originalWord,
+          correctedWord: correction.correctedWord,
+          fixType: correction.fixType,
+          createdAt: correction.createdAt,
+        })),
         topCorrections: topCorrections.map(correction => ({
           originalWord: correction.originalWord,
           correctedWord: correction.correctedWord,
-          occurrenceCount: correction._count.id,
+          occurrenceCount: correction.occurrenceCount,
           fixType: correction.fixType,
         })),
       };
@@ -169,45 +146,29 @@ export class CorrectionLearningService {
   async getWordCorrections(originalWord: string): Promise<CorrectionSuggestion[]> {
     try {
       // Get all corrections for this word, grouped by correction
-      const corrections = await this.prisma.textCorrection.groupBy({
-        by: ['originalWord', 'correctedWord', 'fixType'],
-        where: {
-          originalWord,
-        },
-        _count: {
-          id: true,
-        },
-        _max: {
-          createdAt: true,
-        },
-        orderBy: {
-          _count: {
-            id: 'desc',
-          },
-        },
+      const corrections = await this.textCorrectionRepository.findGroupedCorrections({
+        originalWord,
       });
 
       const suggestions: CorrectionSuggestion[] = [];
 
       for (const correction of corrections) {
-        const recentCorrection = await this.prisma.textCorrection.findFirst({
-          where: {
-            originalWord: correction.originalWord,
-            correctedWord: correction.correctedWord,
-          },
-          orderBy: {
-            createdAt: 'desc',
-          },
+        const recentCorrections = await this.textCorrectionRepository.findMany({
+          originalWord: correction.originalWord,
+          correctedWord: correction.correctedWord,
+          limit: 1,
+          orderBy: 'desc',
         });
 
+        const recentCorrection = recentCorrections[0];
         if (recentCorrection) {
           suggestions.push({
             originalWord: originalWord, // Use the input word
             suggestedWord: correction.correctedWord,
             contextSentence: recentCorrection.sentenceContext,
-            occurrenceCount: correction._count.id,
+            occurrenceCount: correction.occurrenceCount,
             fixType: correction.fixType,
-            lastUsed: correction._max.createdAt || new Date(),
+            lastUsed: recentCorrection.updatedAt || new Date(),
           });
         }
       }
@@ -219,203 +180,7 @@ export class CorrectionLearningService {
     }
   }
 
-  /**
-   * Get all corrections with filtering and pagination
-   */
-  async getAllCorrections(filters: {
-    originalWord?: string;
-    correctedWord?: string;
-    fixType?: string;
-    bookId?: string;
-    bookTitle?: string;
-    page?: number;
-    limit?: number;
-    sortBy?: 'createdAt' | 'originalWord' | 'correctedWord';
-    sortOrder?: 'asc' | 'desc';
-  } = {}): Promise<{
-    corrections: (TextCorrection & {
-      bookTitle: string;
-      location: {
-        pageId: string;
-        pageNumber: number;
-        paragraphId: string;
-        paragraphIndex: number;
-      };
-    })[];
-    total: number;
-    page: number;
-    totalPages: number;
-  }> {
-    try {
-      const {
-        originalWord,
-        correctedWord,
-        fixType,
-        bookId,
-        bookTitle,
-        page = 1,
-        limit = 50,
-        sortBy = 'createdAt',
-        sortOrder = 'desc',
-      } = filters;
 
-      // Build where clause with support for both bookId and bookTitle filtering
-      const where: {
-        originalWord?: { contains: string; mode: 'insensitive' };
-        correctedWord?: { contains: string; mode: 'insensitive' };
-        fixType?: string;
-        bookId?: string;
-        book?: { title?: { contains: string; mode: 'insensitive' } };
-      } = {};
-      
-      if (originalWord) {
-        where.originalWord = {
-          contains: originalWord,
-          mode: 'insensitive',
-        };
-      }
-      
-      if (correctedWord) {
-        where.correctedWord = {
-          contains: correctedWord,
-          mode: 'insensitive',
-        };
-      }
-      
-      if (fixType) {
-        where.fixType = fixType;
-      }
-      
-      if (bookId) {
-        where.bookId = bookId;
-      }
-      
-      if (bookTitle) {
-        where.book = {
-          title: {
-            contains: bookTitle,
-            mode: 'insensitive',
-          },
-        };
-      }
-
-      // Calculate pagination
-      const skip = (page - 1) * limit;
-
-      // Get total count for pagination
-      const total = await this.prisma.textCorrection.count({ where });
-
-      // Get corrections with related data
-      const rawCorrections: (TextCorrection & {
-        book: {
-          title: string;
-        };
-        paragraph: {
-          id: string;
-          orderIndex: number;
-          pageId: string;
-          page: {
-            pageNumber: number;
-          };
-        };
-      })[] = await this.prisma.textCorrection.findMany({
-        where,
-        include: {
-          book: {
-            select: {
-              title: true,
-            },
-          },
-          paragraph: {
-            include: {
-              page: {
-                select: {
-                  pageNumber: true,
-                },
-              },
-            },
-          },
-        },
-        orderBy: {
-          [sortBy]: sortOrder,
-        },
-        skip,
-        take: limit,
-      });
-
-      // Map the data to use bookTitle instead of nested book object
-      const corrections = rawCorrections.map(correction => ({
-        id: correction.id,
-        paragraphId: correction.paragraphId,
-        bookId: correction.bookId,
-        originalWord: correction.originalWord,
-        correctedWord: correction.correctedWord,
-        sentenceContext: correction.sentenceContext,
-        fixType: correction.fixType,
-        ttsModel: correction.ttsModel,
-        ttsVoice: correction.ttsVoice,
-        createdAt: correction.createdAt,
-        updatedAt: correction.updatedAt,
-        bookTitle: correction.book.title,
-        location: {
-          pageId: correction.paragraph.pageId,
-          pageNumber: correction.paragraph.page.pageNumber,
-          paragraphId: correction.paragraph.id,
-          paragraphIndex: correction.paragraph.orderIndex,
-        },
-      }));
-
-      const totalPages = Math.ceil(total / limit);
-
-      this.logger.log(`Found ${corrections.length} corrections (page ${page}/${totalPages}, total: ${total})`);
-
-      return {
-        corrections,
-        total,
-        page,
-        totalPages,
-      };
-    } catch (error) {
-      this.logger.error(`Error getting all corrections: ${error.message}`, error.stack);
-      throw error;
-    }
-  }
-
-  /**
-   * Get unique fix types for filtering
-   */
-  async getFixTypes(): Promise<{ fixTypes: string[] }> {
-    this.logger.log('🔧 [SERVICE] Getting fix types - START');
-    
-    try {
-      this.logger.log('📊 [SERVICE] Querying database for fix types...');
-      
-      const fixTypes = await this.prisma.textCorrection.findMany({
-        where: {
-          fixType: {
-            not: null,
-          },
-        },
-        select: {
-          fixType: true,
-        },
-        distinct: ['fixType'],
-      });
-
-      this.logger.log(`📊 [SERVICE] Raw query result: ${JSON.stringify(fixTypes)}`);
-
-      const result = fixTypes
-        .map(item => item.fixType)
-        .filter(Boolean) as string[];
-        
-      this.logger.log(`🎯 [SERVICE] Processed fix types: ${JSON.stringify(result)}`);
-      
-      return { fixTypes: result };
-    } catch (error) {
-      this.logger.error(`💥 [SERVICE] Error getting fix types: ${error.message}`, error.stack);
-      throw error;
-    }
-  }
 
   private extractWords(text: string): string[] {
     // Extract Hebrew words, handling niqqud and punctuation

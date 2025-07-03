@@ -1,11 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TextFixesService, WordChange } from './text-fixes.service';
+import { FixType } from '@prisma/client';
+import { FixTypeHandlerRegistry } from './fix-type-handlers/fix-type-handler-registry';
+import { TextCorrectionRepository } from './text-correction.repository';
 
 export interface BulkFixSuggestion {
   originalWord: string;
   correctedWord: string;
-  fixType?: string;
   paragraphs: Array<{
     id: string;
     pageId: string;
@@ -37,7 +39,9 @@ export class BulkTextFixesService {
 
   constructor(
     private prisma: PrismaService,
-    private textFixesService: TextFixesService
+    private textFixesService: TextFixesService,
+    private fixTypeHandlerRegistry: FixTypeHandlerRegistry,
+    private textCorrectionRepository: TextCorrectionRepository
   ) {}
 
   /**
@@ -160,7 +164,6 @@ export class BulkTextFixesService {
         suggestions.push({
           originalWord: change.originalWord,
           correctedWord: change.correctedWord,
-          fixType: change.fixType,
           paragraphs: matchingParagraphs,
         });
       } else {
@@ -251,7 +254,6 @@ export class BulkTextFixesService {
       originalWord: string;
       correctedWord: string;
       paragraphIds: string[];
-      fixType?: string;
     }>,
     ttsModel?: string,
     ttsVoice?: string
@@ -269,7 +271,7 @@ export class BulkTextFixesService {
     // Group fixes by paragraph ID
     const paragraphFixes = new Map<
       string,
-      Array<{ originalWord: string; correctedWord: string; fixType?: string }>
+      Array<{ originalWord: string; correctedWord: string }>
     >();
 
     fixes.forEach((fix) => {
@@ -287,7 +289,6 @@ export class BulkTextFixesService {
           fixesForParagraph.push({
             originalWord: fix.originalWord,
             correctedWord: fix.correctedWord,
-            fixType: fix.fixType,
           });
         }
       });
@@ -391,35 +392,37 @@ export class BulkTextFixesService {
                 }"`
               );
 
+              // Classify the fix type automatically
+              const classification = this.fixTypeHandlerRegistry.classifyCorrection(
+                fix.originalWord,
+                fix.correctedWord
+              );
+
+              // Use the classified fix type or default to vowelization if no match
+              const fixType = (classification.fixType as FixType) || FixType.vowelization;
+
               // Record each individual correction that was actually applied
               for (const matchPosition of matchPositions) {
                 try {
-                  const sentenceContext = this.extractSentenceContext(
-                    paragraph.content,
-                    fix.originalWord,
-                    matchPosition
-                  );
-                  await tx.textCorrection.create({
-                    data: {
-                      bookId,
-                      paragraphId,
-                      originalWord: fix.originalWord,
-                      correctedWord: fix.correctedWord,
-                      sentenceContext,
-                      fixType: fix.fixType,
-                      ttsModel,
-                      ttsVoice,
-                    },
+                  await this.textCorrectionRepository.create({
+                    bookId,
+                    paragraphId,
+                    originalWord: fix.originalWord,
+                    correctedWord: fix.correctedWord,
+                    sentenceContext: this.extractSentenceContext(paragraph.content, fix.originalWord, matchPosition),
+                    fixType: fixType,
                   });
+                  
                   this.logger.log(
                     `📝 Recorded correction: "${fix.originalWord}" → "${fix.correctedWord}" in paragraph ${paragraphId} (at position ${matchPosition})`
                   );
+                  
                   // Add to applied changes for response
                   appliedChanges.push({
                     originalWord: fix.originalWord,
                     correctedWord: fix.correctedWord,
                     position: matchPosition,
-                    fixType: fix.fixType,
+                    fixType: fixType,
                   });
                 } catch (error) {
                   this.logger.error(

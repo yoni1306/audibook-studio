@@ -2,11 +2,15 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BulkTextFixesService } from './bulk-text-fixes.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TextFixesService } from './text-fixes.service';
+import { FixTypeHandlerRegistry } from './fix-type-handlers/fix-type-handler-registry';
+import { TextCorrectionRepository } from './text-correction.repository';
 import { Logger } from '@nestjs/common';
+import { FixType } from '@prisma/client';
 
 describe('BulkTextFixesService - Duplicate Records Issue', () => {
   let service: BulkTextFixesService;
   let textFixesService: TextFixesService;
+  let textCorrectionRepository: TextCorrectionRepository;
 
   const mockBookId = 'book-duplicate-test';
 
@@ -53,11 +57,66 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
             analyzeTextChanges: jest.fn(),
           },
         },
+        {
+          provide: FixTypeHandlerRegistry,
+          useValue: {
+            classifyCorrection: jest.fn().mockImplementation((originalWord: string, correctedWord: string) => {
+              // Return different fix types based on the words being corrected
+              let fixType: FixType = FixType.vowelization; // default
+
+              if (originalWord === 'ספר' && correctedWord === 'ספרי') {
+                fixType = FixType.disambiguation;
+              } else if (originalWord === '5' && correctedWord === 'חמש') {
+                fixType = FixType.expansion;
+              } else if (originalWord === 'בית' && correctedWord === 'בַּיִת') {
+                fixType = FixType.vowelization;
+              } else if (originalWord === 'יום' && correctedWord === 'יוֹם') {
+                fixType = FixType.vowelization;
+              } else if (originalWord === 'טוב' && correctedWord === 'טוֹב') {
+                fixType = FixType.vowelization;
+              } else if (originalWord === 'ראשון' && correctedWord === 'רִאשׁוֹן') {
+                fixType = FixType.vowelization;
+              } else if (originalWord === 'שני' && correctedWord === 'שֵׁנִי') {
+                fixType = FixType.vowelization;
+              }
+
+              return {
+                fixType,
+                confidence: 0.8,
+                reason: 'Mock classification',
+                matches: [],
+                debugInfo: {
+                  totalHandlers: 1,
+                  matchingHandlers: 1,
+                  allMatches: [],
+                  validationPassed: true
+                }
+              };
+            }),
+          },
+        },
+        {
+          provide: TextCorrectionRepository,
+          useValue: {
+            create: jest.fn().mockResolvedValue({
+              id: 'mock-correction-id',
+              bookId: 'mock-book-id',
+              paragraphId: 'mock-paragraph-id',
+              originalWord: 'mock-original',
+              correctedWord: 'mock-corrected',
+              sentenceContext: 'mock context',
+              fixType: FixType.vowelization,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            }),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<BulkTextFixesService>(BulkTextFixesService);
     textFixesService = module.get<TextFixesService>(TextFixesService);
+    textCorrectionRepository = module.get<TextCorrectionRepository>(TextCorrectionRepository);
 
     // Suppress console logs during tests
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
@@ -106,8 +165,7 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
         },
       ];
 
-      // Mock the transaction to capture all database operations
-      const capturedOperations: MockOperation[] = [];
+      // Mock the transaction to handle paragraph operations
       mockTransaction.mockImplementation(async (callback) => {
         const mockTx = {
           paragraph: {
@@ -119,17 +177,6 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
             }),
             update: jest.fn().mockResolvedValue({}),
           },
-          textCorrection: {
-            create: jest.fn().mockImplementation((data) => {
-              capturedOperations.push({
-                type: 'textCorrection.create',
-                data: data.data,
-              });
-              return Promise.resolve({
-                id: `correction-${capturedOperations.length}`,
-              });
-            }),
-          },
         };
         return callback(mockTx);
       });
@@ -138,30 +185,30 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
       await service.applyBulkFixes(mockBookId, fixes);
 
       // ASSERTION: Should create exactly 4 text correction records (one per word per paragraph)
-      const textCorrectionCreates = capturedOperations.filter(
-        (op) => op.type === 'textCorrection.create'
-      );
-      expect(textCorrectionCreates).toHaveLength(4);
+      expect(textCorrectionRepository.create).toHaveBeenCalledTimes(4);
+
+      // Get all the calls to textCorrectionRepository.create
+      const createCalls = (textCorrectionRepository.create as jest.Mock).mock.calls;
 
       // ASSERTION: Should have 2 records for 'שלום' -> 'שָׁלוֹם' (one per paragraph)
-      const shalomCorrections = textCorrectionCreates.filter(
-        (op) =>
-          op.data.originalWord === 'שלום' && op.data.correctedWord === 'שָׁלוֹם'
+      const shalomCorrections = createCalls.filter(
+        (call) =>
+          call[0].originalWord === 'שלום' && call[0].correctedWord === 'שָׁלוֹם'
       );
       expect(shalomCorrections).toHaveLength(2);
 
       // ASSERTION: Should have 2 records for 'עולם' -> 'עוֹלָם' (one per paragraph)
-      const olamCorrections = textCorrectionCreates.filter(
-        (op) =>
-          op.data.originalWord === 'עולם' && op.data.correctedWord === 'עוֹלָם'
+      const olamCorrections = createCalls.filter(
+        (call) =>
+          call[0].originalWord === 'עולם' && call[0].correctedWord === 'עוֹלָם'
       );
       expect(olamCorrections).toHaveLength(2);
 
       // ASSERTION: No duplicate records (each combination should be unique)
       const uniqueRecords = new Set(
-        textCorrectionCreates.map(
-          (op) =>
-            `${op.data.paragraphId}-${op.data.originalWord}-${op.data.correctedWord}`
+        createCalls.map(
+          (call) =>
+            `${call[0].paragraphId}-${call[0].originalWord}-${call[0].correctedWord}`
         )
       );
       expect(uniqueRecords.size).toBe(4);
@@ -232,24 +279,23 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
 
       await service.applyBulkFixes(mockBookId, fixes);
 
-      const textCorrectionCreates = capturedOperations.filter(
-        (op) => op.type === 'textCorrection.create'
-      );
+      // Extract repository create calls
+      const createCalls = (textCorrectionRepository.create as jest.MockedFunction<typeof textCorrectionRepository.create>).mock.calls;
 
       // ASSERTION: Should create exactly 4 text correction records (2 for טוב per paragraph + 1 for יום per paragraph)
-      expect(textCorrectionCreates).toHaveLength(4);
+      expect(createCalls).toHaveLength(4);
 
       // ASSERTION: Should have 4 records for 'טוב' -> 'טוֹב' (2 occurrences per paragraph)
-      const tovCorrections = textCorrectionCreates.filter(
-        (op) =>
-          op.data.originalWord === 'טוב' && op.data.correctedWord === 'טוֹב'
+      const tovCorrections = createCalls.filter(
+        (call) =>
+          call[0].originalWord === 'טוב' && call[0].correctedWord === 'טוֹב'
       );
       expect(tovCorrections).toHaveLength(4);
 
       // ASSERTION: Should have 0 records for 'יום' -> 'יוֹם' (appears as ויום with prefix, not matched)
-      const yomCorrections = textCorrectionCreates.filter(
-        (op) =>
-          op.data.originalWord === 'יום' && op.data.correctedWord === 'יוֹם'
+      const yomCorrections = createCalls.filter(
+        (call) =>
+          call[0].originalWord === 'יום' && call[0].correctedWord === 'יוֹם'
       );
       expect(yomCorrections).toHaveLength(0);
     });
@@ -263,13 +309,11 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
           originalWord: 'ראשון',
           correctedWord: 'רִאשׁוֹן',
           paragraphIds: ['para-sequential'],
-          fixType: 'niqqud',
         },
         {
           originalWord: 'שני',
           correctedWord: 'שֵׁנִי',
           paragraphIds: ['para-sequential'],
-          fixType: 'pronunciation',
         },
       ];
 
@@ -306,34 +350,33 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
 
       await service.applyBulkFixes(mockBookId, fixes);
 
-      const textCorrectionCreates = capturedOperations.filter(
-        (op) => op.type === 'textCorrection.create'
-      );
+      // Extract repository create calls
+      const createCalls = (textCorrectionRepository.create as jest.MockedFunction<typeof textCorrectionRepository.create>).mock.calls;
 
       // ASSERTION: Should create exactly 2 text correction records (one per word per paragraph)
-      expect(textCorrectionCreates).toHaveLength(2);
+      expect(createCalls).toHaveLength(2);
 
       // ASSERTION: Should have exactly 1 record for each word
-      const rishonCorrections = textCorrectionCreates.filter(
-        (op) => op.data.originalWord === 'ראשון'
+      const rishonCorrections = createCalls.filter(
+        (call) => call[0].originalWord === 'ראשון'
       );
       expect(rishonCorrections).toHaveLength(1);
 
-      const sheniCorrections = textCorrectionCreates.filter(
-        (op) => op.data.originalWord === 'שני'
+      const sheniCorrections = createCalls.filter(
+        (call) => call[0].originalWord === 'שני'
       );
       expect(sheniCorrections).toHaveLength(1);
 
       // ASSERTION: Records should have their original fix types
-      const niqqudCorrections = textCorrectionCreates.filter(op => op.data.originalWord === 'ראשון');
-      const pronunciationCorrections = textCorrectionCreates.filter(op => op.data.originalWord === 'שני');
+      const niqqudCorrections = createCalls.filter(call => call[0].originalWord === 'ראשון');
+      const vowelizationCorrections = createCalls.filter(call => call[0].originalWord === 'שני');
       
-      niqqudCorrections.forEach((op) => {
-        expect(op.data.fixType).toBe('niqqud');
+      niqqudCorrections.forEach((call) => {
+        expect(call[0].fixType).toBe(FixType.vowelization);
       });
       
-      pronunciationCorrections.forEach((op) => {
-        expect(op.data.fixType).toBe('pronunciation');
+      vowelizationCorrections.forEach((call) => {
+        expect(call[0].fixType).toBe(FixType.vowelization);
       });
     });
 
@@ -382,18 +425,17 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
 
       await service.applyBulkFixes(mockBookId, fixes);
 
-      const textCorrectionCreates = capturedOperations.filter(
-        (op) => op.type === 'textCorrection.create'
-      );
+      // Extract repository create calls
+      const createCalls = (textCorrectionRepository.create as jest.MockedFunction<typeof textCorrectionRepository.create>).mock.calls;
 
       // ASSERTION: Should create records for standalone 'בית' but not 'בית-ספר'
       // This tests the Hebrew word boundary logic
-      expect(textCorrectionCreates.length).toBeGreaterThan(0);
+      expect(createCalls.length).toBeGreaterThan(0);
 
-      textCorrectionCreates.forEach((op) => {
-        expect(op.data.originalWord).toBe('בית');
-        expect(op.data.correctedWord).toBe('בַּיִת');
-        expect(op.data.fixType).toBe('niqqud');
+      createCalls.forEach((call) => {
+        expect(call[0].originalWord).toBe('בית');
+        expect(call[0].correctedWord).toBe('בַּיִת');
+        expect(call[0].fixType).toBe(FixType.vowelization);
       });
     });
 
@@ -441,12 +483,11 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
 
       await service.applyBulkFixes(mockBookId, fixes);
 
-      const textCorrectionCreates = capturedOperations.filter(
-        (op) => op.type === 'textCorrection.create'
-      );
+      // Extract repository create calls
+      const createCalls = (textCorrectionRepository.create as jest.MockedFunction<typeof textCorrectionRepository.create>).mock.calls;
 
       // ASSERTION: Should create no records when no matches found
-      expect(textCorrectionCreates).toHaveLength(0);
+      expect(createCalls).toHaveLength(0);
     });
 
     it('should handle complex scenario with multiple fix types across different paragraphs', async () => {
@@ -527,59 +568,59 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
       // Execute the bulk fix
       await service.applyBulkFixes(mockBookId, fixes);
 
+      // Extract repository create calls
+      const createCalls = (textCorrectionRepository.create as jest.MockedFunction<typeof textCorrectionRepository.create>).mock.calls;
+
       // ASSERTION: Should create exactly 3 text correction records (standalone matches only)
-      const textCorrectionCreates = capturedOperations.filter(
-        (op) => op.type === 'textCorrection.create'
-      );
-      expect(textCorrectionCreates).toHaveLength(3);
+      expect(createCalls).toHaveLength(3);
 
       // ASSERTION: Should have 1 record for 'ספר' -> 'ספרי' (para-complex-1 only)
-      const sefarCorrections = textCorrectionCreates.filter(
-        (op) =>
-          op.data.originalWord === 'ספר' && op.data.correctedWord === 'ספרי'
+      const sefarCorrections = createCalls.filter(
+        (call) =>
+          call[0].originalWord === 'ספר' && call[0].correctedWord === 'ספרי'
       );
       expect(sefarCorrections).toHaveLength(1);
       const sefarParagraphIds = sefarCorrections.map(
-        (op) => op.data.paragraphId
+        (call) => call[0].paragraphId
       );
       expect(sefarParagraphIds).toContain('para-complex-1');
 
       // ASSERTION: Should have 2 records for '5' -> 'חמש' (para-complex-1 and para-complex-3)
-      const numberCorrections = textCorrectionCreates.filter(
-        (op) => op.data.originalWord === '5' && op.data.correctedWord === 'חמש'
+      const numberCorrections = createCalls.filter(
+        (call) => call[0].originalWord === '5' && call[0].correctedWord === 'חמש'
       );
       expect(numberCorrections).toHaveLength(2);
       const numberParagraphIds = numberCorrections.map(
-        (op) => op.data.paragraphId
+        (call) => call[0].paragraphId
       );
       expect(numberParagraphIds).toContain('para-complex-1');
       expect(numberParagraphIds).toContain('para-complex-3');
 
       // ASSERTION: Records should have their original fix types
-      const grammarCorrections = textCorrectionCreates.filter(op => op.data.originalWord === 'ספר');
-      const numberToWordCorrections = textCorrectionCreates.filter(op => op.data.originalWord === '5');
+      const grammarCorrections = createCalls.filter(call => call[0].originalWord === 'ספר');
+      const numberToWordCorrections = createCalls.filter(call => call[0].originalWord === '5');
       
-      grammarCorrections.forEach((op) => {
-        expect(op.data.fixType).toBe('grammar');
+      grammarCorrections.forEach((call) => {
+        expect(call[0].fixType).toBe(FixType.disambiguation);
       });
       
-      numberToWordCorrections.forEach((op) => {
-        expect(op.data.fixType).toBe('number_to_word');
+      numberToWordCorrections.forEach((call) => {
+        expect(call[0].fixType).toBe(FixType.expansion);
       });
 
       // ASSERTION: No duplicate records (each combination should be unique)
       const uniqueRecords = new Set(
-        textCorrectionCreates.map(
-          (op) =>
-            `${op.data.paragraphId}-${op.data.originalWord}-${op.data.correctedWord}`
+        createCalls.map(
+          (call) =>
+            `${call[0].paragraphId}-${call[0].originalWord}-${call[0].correctedWord}`
         )
       );
       expect(uniqueRecords.size).toBe(3);
 
       // ASSERTION: Verify specific combinations exist
-      const recordCombinations = textCorrectionCreates.map(
-        (op) =>
-          `${op.data.paragraphId}-${op.data.originalWord}-${op.data.correctedWord}`
+      const recordCombinations = createCalls.map(
+        (call) =>
+          `${call[0].paragraphId}-${call[0].originalWord}-${call[0].correctedWord}`
       );
       expect(recordCombinations).toContain('para-complex-1-ספר-ספרי');
       expect(recordCombinations).toContain('para-complex-1-5-חמש');

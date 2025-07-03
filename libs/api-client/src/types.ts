@@ -225,22 +225,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/books/record-correction': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations['BooksController_recordCorrection'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/books/correction-learning/stats': {
     parameters: {
       query?: never;
@@ -721,18 +705,6 @@ export interface components {
       /** @description Timestamp when suggestions were generated */
       timestamp?: string;
     };
-    RecordCorrectionDto: {
-      /** @description Original word that was corrected */
-      originalWord: string;
-      /** @description Corrected word */
-      correctedWord: string;
-      /** @description Sentence context where the correction occurred */
-      contextSentence: string;
-      /** @description ID of the paragraph where the correction occurred */
-      paragraphId: string;
-      /** @description Type of fix applied */
-      fixType?: string;
-    };
     GetWordCorrectionsDto: {
       /** @description Original word to get corrections for */
       originalWord: string;
@@ -1130,27 +1102,6 @@ export interface operations {
         content: {
           'application/json': components['schemas']['CorrectionSuggestionsResponseDto'];
         };
-      };
-    };
-  };
-  BooksController_recordCorrection: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['RecordCorrectionDto'];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
       };
     };
   };

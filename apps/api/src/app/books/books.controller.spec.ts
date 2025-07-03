@@ -4,18 +4,18 @@ import { BooksController } from './books.controller';
 import { BooksService } from './books.service';
 import { CorrectionLearningService } from './correction-learning.service';
 import { BulkTextFixesService } from './bulk-text-fixes.service';
+import { TextCorrectionRepository } from './text-correction.repository';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
-import { 
-  GetAllCorrectionsDto
-} from './dto/correction-learning.dto';
+import { FixType } from '@prisma/client';
+
 
 describe('BooksController', () => {
   let controller: BooksController;
+  let textCorrectionRepository: jest.Mocked<TextCorrectionRepository>;
 
   const mockCorrectionLearningService = {
-    getFixTypes: jest.fn(),
-    getAllCorrections: jest.fn(),
+    // Add mock methods as needed for existing endpoints
   };
 
   const mockBooksService = {
@@ -24,6 +24,17 @@ describe('BooksController', () => {
 
   const mockBulkTextFixesService = {
     // Add mock methods as needed
+  };
+
+  const mockTextCorrectionRepository = {
+    findMany: jest.fn(),
+    create: jest.fn(),
+    findGroupedCorrections: jest.fn(),
+    getStats: jest.fn(),
+    getTopCorrections: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+    deleteMany: jest.fn(),
   };
 
   const mockPrismaService = {
@@ -55,6 +66,10 @@ describe('BooksController', () => {
           useValue: mockPrismaService,
         },
         {
+          provide: TextCorrectionRepository,
+          useValue: mockTextCorrectionRepository,
+        },
+        {
           provide: S3Service,
           useValue: mockS3Service,
         },
@@ -62,6 +77,7 @@ describe('BooksController', () => {
     }).compile();
 
     controller = module.get<BooksController>(BooksController);
+    textCorrectionRepository = module.get(TextCorrectionRepository);
 
     // Suppress logger output during tests
     jest.spyOn(Logger.prototype, 'log').mockImplementation();
@@ -72,470 +88,171 @@ describe('BooksController', () => {
     jest.clearAllMocks();
   });
 
-  describe('getFixTypes', () => {
-    it('should return fix types successfully', async () => {
-      const mockFixTypes = ['substitution', 'insertion', 'deletion', 'manual'];
-      mockCorrectionLearningService.getFixTypes.mockResolvedValue({ fixTypes: mockFixTypes });
-
-      const result = await controller.getFixTypes();
-
-      expect(result).toEqual({
-        fixTypes: mockFixTypes,
-        timestamp: expect.any(String),
-      });
-      expect(mockCorrectionLearningService.getFixTypes).toHaveBeenCalledTimes(1);
-    });
-
-    it('should handle empty fix types', async () => {
-      mockCorrectionLearningService.getFixTypes.mockResolvedValue({ fixTypes: [] });
-
-      const result = await controller.getFixTypes();
-
-      expect(result).toEqual({
-        fixTypes: [],
-        timestamp: expect.any(String),
-      });
-    });
-
-    it('should handle service errors', async () => {
-      const mockError = new Error('Database error');
-      mockCorrectionLearningService.getFixTypes.mockRejectedValue(mockError);
-
-      await expect(controller.getFixTypes()).rejects.toThrow('Failed to get fix types');
-    });
+  it('should be defined', () => {
+    expect(controller).toBeDefined();
   });
 
-
-
   describe('getAllCorrections', () => {
-    const mockCorrectionsResponse = {
-      corrections: [
+    it('should return all corrections with default parameters', async () => {
+      const mockCorrections = [
         {
           id: 'correction-1',
-          originalWord: 'שגיאה1',
-          correctedWord: 'תיקון1',
-          sentenceContext: 'משפט עם שגיאה1.',
-          fixType: 'substitution',
-          createdAt: new Date('2025-06-22T10:00:00.000Z'),
-          updatedAt: new Date('2025-06-22T10:00:00.000Z'),
-          location: {
-            paragraphId: 'paragraph-1',
-            paragraphIndex: 1,
-            pageNumber: 1,
-            pageId: 'page-1',
-          },
-          bookTitle: 'Test Book',
-        },
-        {
-          id: 'correction-2',
-          originalWord: 'שגיאה2',
-          correctedWord: 'תיקון2',
-          sentenceContext: 'משפט עם שגיאה2.',
-          fixType: 'insertion',
-          createdAt: new Date('2025-06-22T11:00:00.000Z'),
-          updatedAt: new Date('2025-06-22T11:00:00.000Z'),
-          location: {
-            paragraphId: 'paragraph-2',
-            paragraphIndex: 2,
-            pageNumber: 2,
-            pageId: 'page-2',
-          },
-          bookTitle: 'Test Book',
-        },
-      ],
-      total: 2,
-      page: 1,
-      totalPages: 1,
-    };
-
-    it('should return paginated corrections with complete data structure', async () => {
-      const dto: GetAllCorrectionsDto = {
-        page: 1,
-        limit: 10,
-        sortBy: 'createdAt',
-        sortOrder: 'desc',
-      };
-
-      mockCorrectionLearningService.getAllCorrections.mockResolvedValue(mockCorrectionsResponse);
-
-      const result = await controller.getAllCorrections(dto);
-
-      expect(mockCorrectionLearningService.getAllCorrections).toHaveBeenCalledWith(dto);
-      expect(result).toEqual({
-        ...mockCorrectionsResponse,
-        timestamp: expect.any(String),
-      });
-    });
-
-    it('should pass through all filter parameters', async () => {
-      const dto: GetAllCorrectionsDto = {
-        page: 2,
-        limit: 5,
-        bookId: 'book-1',
-        fixType: 'substitution',
-        sortBy: 'originalWord',
-        sortOrder: 'asc',
-      };
-
-      mockCorrectionLearningService.getAllCorrections.mockResolvedValue({
-        ...mockCorrectionsResponse,
-        page: 2,
-        corrections: [mockCorrectionsResponse.corrections[0]],
-      });
-
-      const result = await controller.getAllCorrections(dto);
-
-      expect(mockCorrectionLearningService.getAllCorrections).toHaveBeenCalledWith({
-        page: 2,
-        limit: 5,
-        bookId: 'book-1',
-        fixType: 'substitution',
-        sortBy: 'originalWord',
-        sortOrder: 'asc',
-      });
-
-      expect(result.page).toBe(2);
-      expect(result.timestamp).toBeDefined();
-    });
-
-    it('should verify complete correction data structure in response', async () => {
-      const dto: GetAllCorrectionsDto = {
-        page: 1,
-        limit: 10,
-        sortBy: 'createdAt',
-        sortOrder: 'desc',
-      };
-
-      mockCorrectionLearningService.getAllCorrections.mockResolvedValue(mockCorrectionsResponse);
-
-      const result = await controller.getAllCorrections(dto);
-
-      // Verify response structure
-      expect(result).toHaveProperty('corrections');
-      expect(result).toHaveProperty('total');
-      expect(result).toHaveProperty('page');
-      expect(result).toHaveProperty('totalPages');
-      expect(result).toHaveProperty('timestamp');
-
-      // Verify each correction has complete structure
-      result.corrections.forEach(correction => {
-        expect(correction).toHaveProperty('id');
-        expect(correction).toHaveProperty('originalWord');
-        expect(correction).toHaveProperty('correctedWord');
-        expect(correction).toHaveProperty('sentenceContext');
-        expect(correction).toHaveProperty('fixType');
-        expect(correction).toHaveProperty('createdAt');
-        expect(correction).toHaveProperty('updatedAt');
-        
-        // Verify location structure includes paragraphIndex
-        expect(correction.location).toHaveProperty('paragraphId');
-        expect(correction.location).toHaveProperty('paragraphIndex');
-        expect(correction.location).toHaveProperty('pageNumber');
-        expect(correction.location).toHaveProperty('pageId');
-        expect(correction).toHaveProperty('bookTitle');
-        expect(typeof correction.bookTitle).toBe('string');
-      });
-    });
-
-    it('should handle empty results', async () => {
-      const dto: GetAllCorrectionsDto = {
-        page: 1,
-        limit: 10,
-        sortBy: 'createdAt',
-        sortOrder: 'desc',
-      };
-
-      const emptyResponse = {
-        corrections: [],
-        total: 0,
-        page: 1,
-        totalPages: 0,
-      };
-
-      mockCorrectionLearningService.getAllCorrections.mockResolvedValue(emptyResponse);
-
-      const result = await controller.getAllCorrections(dto);
-
-      expect(result).toEqual({
-        ...emptyResponse,
-        timestamp: expect.any(String),
-      });
-      expect(result.corrections).toHaveLength(0);
-    });
-
-    it('should handle service errors', async () => {
-      const dto: GetAllCorrectionsDto = {
-        page: 1,
-        limit: 10,
-        sortBy: 'createdAt',
-        sortOrder: 'desc',
-      };
-
-      const mockError = new Error('Database query failed');
-      mockCorrectionLearningService.getAllCorrections.mockRejectedValue(mockError);
-
-      await expect(controller.getAllCorrections(dto)).rejects.toThrow(
-        'Failed to get corrections'
-      );
-    });
-
-    it('should validate sentence context is included in response', async () => {
-      const dto: GetAllCorrectionsDto = {
-        page: 1,
-        limit: 10,
-        sortBy: 'createdAt',
-        sortOrder: 'desc',
-      };
-
-      mockCorrectionLearningService.getAllCorrections.mockResolvedValue(mockCorrectionsResponse);
-
-      const result = await controller.getAllCorrections(dto);
-
-      result.corrections.forEach(correction => {
-        expect(correction).toHaveProperty('sentenceContext');
-        expect(typeof correction.sentenceContext).toBe('string');
-        // Verify sentence context is not undefined or null
-        expect(correction.sentenceContext).toBeDefined();
-      });
-    });
-
-    describe('API Response Structure Tests', () => {
-      it('should return corrections with exact structure expected by frontend', async () => {
-        const mockServiceResponse = {
-          corrections: [
-            {
-              id: 'correction-1',
-              bookId: 'book-1',
-              originalWord: 'שגיאה',
-              correctedWord: 'תיקון',
-              sentenceContext: 'זה המשפט עם שגיאה בתוכו.',
-              fixType: 'substitution',
-              createdAt: new Date('2025-06-22T10:00:00.000Z'),
-              updatedAt: new Date('2025-06-22T10:00:00.000Z'),
-              bookTitle: 'ספר בדיקה',
-              location: {
-                paragraphId: 'paragraph-1',
-                paragraphIndex: 5,
-                pageNumber: 3,
-                pageId: 'page-1',
-              },
-            },
-          ],
-          total: 1,
-          page: 1,
-          totalPages: 1,
-        };
-
-        mockCorrectionLearningService.getAllCorrections.mockResolvedValue(mockServiceResponse);
-
-        const dto: GetAllCorrectionsDto = { page: 1, limit: 10 };
-        const result = await controller.getAllCorrections(dto);
-
-        // Verify top-level response structure
-        expect(result).toHaveProperty('corrections');
-        expect(result).toHaveProperty('total');
-        expect(result).toHaveProperty('page');
-        expect(result).toHaveProperty('totalPages');
-        expect(result).toHaveProperty('timestamp');
-
-        // Verify correction structure matches frontend Correction interface
-        const correction = result.corrections[0];
-        expect(correction).toEqual({
-          id: 'correction-1',
+          paragraphId: 'paragraph-1',
           bookId: 'book-1',
           originalWord: 'שגיאה',
           correctedWord: 'תיקון',
-          sentenceContext: 'זה המשפט עם שגיאה בתוכו.',
-          fixType: 'substitution',
-          createdAt: new Date('2025-06-22T10:00:00.000Z'),
-          updatedAt: new Date('2025-06-22T10:00:00.000Z'),
-          bookTitle: 'ספר בדיקה', // Direct property, not nested
-          location: {
-            paragraphId: 'paragraph-1',
-            paragraphIndex: 5,
-            pageNumber: 3, // Flattened from nested structure
-            pageId: 'page-1',
+          sentenceContext: 'זה משפט עם שגיאה',
+          fixType: FixType.vowelization,
+          ttsModel: 'test-model',
+          ttsVoice: 'test-voice',
+          createdAt: new Date('2023-01-01'),
+          updatedAt: new Date('2023-01-01'),
+        },
+        {
+          id: 'correction-2',
+          paragraphId: 'paragraph-2',
+          bookId: 'book-2',
+          originalWord: 'טעות',
+          correctedWord: 'נכון',
+          sentenceContext: 'זה משפט עם טעות',
+          fixType: FixType.disambiguation,
+          ttsModel: 'test-model',
+          ttsVoice: 'test-voice',
+          createdAt: new Date('2023-01-02'),
+          updatedAt: new Date('2023-01-02'),
+        },
+      ];
+
+      textCorrectionRepository.findMany.mockResolvedValue(mockCorrections);
+
+      const result = await controller.getAllCorrections({});
+
+      expect(textCorrectionRepository.findMany).toHaveBeenCalledWith({
+        bookId: undefined,
+        fixType: undefined,
+        originalWord: undefined,
+        limit: 100,
+        orderBy: 'desc',
+      });
+
+      expect(result).toEqual({
+        corrections: [
+          {
+            id: 'correction-1',
+            originalWord: 'שגיאה',
+            correctedWord: 'תיקון',
+            sentenceContext: 'זה משפט עם שגיאה',
+            fixType: FixType.vowelization,
+            createdAt: new Date('2023-01-01'),
+            updatedAt: new Date('2023-01-01'),
+            bookId: 'book-1',
+            bookTitle: 'book-1',
+            book: {
+              id: 'book-1',
+              title: 'book-1',
+            },
+            location: {
+              pageNumber: 1,
+              paragraphIndex: 1,
+            },
           },
-        });
-
-        // Ensure no nested book object exists
-        expect(correction).not.toHaveProperty('book');
-        expect(correction.location).not.toHaveProperty('page');
-      });
-
-      it('should preserve all required fields for frontend table display', async () => {
-        const mockServiceResponse = {
-          corrections: [
-            {
-              id: 'correction-1',
-              bookId: 'book-1',
-              originalWord: 'שגיאה',
-              correctedWord: 'תיקון',
-              sentenceContext: 'זה המשפט עם שגיאה בתוכו.',
-              fixType: 'substitution',
-              createdAt: new Date('2025-06-22T10:00:00.000Z'),
-              updatedAt: new Date('2025-06-22T10:00:00.000Z'),
-              bookTitle: 'ספר בדיקה',
-              location: {
-                paragraphId: 'paragraph-1',
-                paragraphIndex: 5,
-                pageNumber: 3,
-                pageId: 'page-1',
-              },
+          {
+            id: 'correction-2',
+            originalWord: 'טעות',
+            correctedWord: 'נכון',
+            sentenceContext: 'זה משפט עם טעות',
+            fixType: FixType.disambiguation,
+            createdAt: new Date('2023-01-02'),
+            updatedAt: new Date('2023-01-02'),
+            bookId: 'book-2',
+            bookTitle: 'book-2',
+            book: {
+              id: 'book-2',
+              title: 'book-2',
             },
-          ],
-          total: 1,
-          page: 1,
-          totalPages: 1,
-        };
-
-        mockCorrectionLearningService.getAllCorrections.mockResolvedValue(mockServiceResponse);
-
-        const result = await controller.getAllCorrections({ page: 1, limit: 10 });
-        const correction = result.corrections[0];
-
-        // Fields required for DataGrid columns
-        expect(correction).toHaveProperty('originalWord');
-        expect(correction).toHaveProperty('correctedWord');
-        expect(correction).toHaveProperty('sentenceContext');
-        expect(correction).toHaveProperty('bookTitle'); // For book column
-        expect(correction).toHaveProperty('bookId'); // For navigation links
-        expect(correction).toHaveProperty('createdAt');
-
-        // Fields required for location column and navigation
-        expect(correction.location).toHaveProperty('pageId'); // For page navigation
-        expect(correction.location).toHaveProperty('pageNumber'); // For display
-        expect(correction.location).toHaveProperty('paragraphIndex'); // For paragraph navigation
-
-        // Verify data types match frontend expectations
-        expect(typeof correction.bookTitle).toBe('string');
-        expect(typeof correction.bookId).toBe('string');
-        expect(typeof correction.location.pageNumber).toBe('number');
-        expect(typeof correction.location.paragraphIndex).toBe('number');
-      });
-
-      it('should handle null fixType correctly for frontend display', async () => {
-        const mockServiceResponse = {
-          corrections: [
-            {
-              id: 'correction-1',
-              bookId: 'book-1',
-              originalWord: 'שגיאה',
-              correctedWord: 'תיקון',
-              sentenceContext: 'זה המשפט עם שגיאה בתוכו.',
-              fixType: null, // Test null fixType
-              createdAt: new Date('2025-06-22T10:00:00.000Z'),
-              updatedAt: new Date('2025-06-22T10:00:00.000Z'),
-              bookTitle: 'ספר בדיקה',
-              location: {
-                paragraphId: 'paragraph-1',
-                paragraphIndex: 5,
-                pageNumber: 3,
-                pageId: 'page-1',
-              },
+            location: {
+              pageNumber: 1,
+              paragraphIndex: 1,
             },
-          ],
-          total: 1,
-          page: 1,
-          totalPages: 1,
-        };
-
-        mockCorrectionLearningService.getAllCorrections.mockResolvedValue(mockServiceResponse);
-
-        const result = await controller.getAllCorrections({ page: 1, limit: 10 });
-        const correction = result.corrections[0];
-
-        expect(correction.fixType).toBeNull();
-        expect(correction).toHaveProperty('fixType'); // Property should exist
+          },
+        ],
+        total: 2,
+        timestamp: expect.any(String),
       });
+    });
 
-      it('should maintain consistent response structure across multiple corrections', async () => {
-        const mockServiceResponse = {
-          corrections: [
-            {
-              id: 'correction-1',
-              bookId: 'book-1',
-              originalWord: 'שגיאה',
-              correctedWord: 'תיקון',
-              sentenceContext: 'משפט ראשון',
-              fixType: 'substitution',
-              createdAt: new Date('2025-06-22T10:00:00.000Z'),
-              updatedAt: new Date('2025-06-22T10:00:00.000Z'),
-              bookTitle: 'ספר ראשון',
-              location: {
-                paragraphId: 'paragraph-1',
-                paragraphIndex: 1,
-                pageNumber: 1,
-                pageId: 'page-1',
-              },
-            },
-            {
-              id: 'correction-2',
-              bookId: 'book-2',
-              originalWord: 'טעות',
-              correctedWord: 'נכון',
-              sentenceContext: 'משפט שני',
-              fixType: 'manual',
-              createdAt: new Date('2025-06-22T11:00:00.000Z'),
-              updatedAt: new Date('2025-06-22T11:00:00.000Z'),
-              bookTitle: 'ספר שני',
-              location: {
-                paragraphId: 'paragraph-2',
-                paragraphIndex: 3,
-                pageNumber: 2,
-                pageId: 'page-2',
-              },
-            },
-          ],
-          total: 2,
-          page: 1,
-          totalPages: 1,
-        };
+    it('should apply filters correctly', async () => {
+      const mockCorrections = [
+        {
+          id: 'correction-1',
+          paragraphId: 'paragraph-1',
+          bookId: 'book-1',
+          originalWord: 'שגיאה',
+          correctedWord: 'תיקון',
+          sentenceContext: 'זה משפט עם שגיאה',
+          fixType: FixType.vowelization,
+          ttsModel: 'test-model',
+          ttsVoice: 'test-voice',
+          createdAt: new Date('2023-01-01'),
+          updatedAt: new Date('2023-01-01'),
+        },
+      ];
 
-        mockCorrectionLearningService.getAllCorrections.mockResolvedValue(mockServiceResponse);
+      textCorrectionRepository.findMany.mockResolvedValue(mockCorrections);
 
-        const result = await controller.getAllCorrections({ page: 1, limit: 10 });
+      const filters = {
+        filters: {
+          bookId: 'book-1',
+          fixType: FixType.vowelization,
+          originalWord: 'שגיאה',
+        },
+        limit: 50,
+        sortOrder: 'asc',
+      };
 
-        expect(result.corrections).toHaveLength(2);
+      await controller.getAllCorrections(filters);
 
-        // Verify each correction has consistent structure
-        result.corrections.forEach((correction, index) => {
-          const expectedBookTitles = ['ספר ראשון', 'ספר שני'];
-          const expectedPageNumbers = [1, 2];
-
-          expect(correction.bookTitle).toBe(expectedBookTitles[index]);
-          expect(correction.location.pageNumber).toBe(expectedPageNumbers[index]);
-
-          // Verify structure consistency
-          expect(correction).toHaveProperty('id');
-          expect(correction).toHaveProperty('bookId');
-          expect(correction).toHaveProperty('bookTitle');
-          expect(correction.location).toHaveProperty('paragraphId');
-          expect(correction.location).toHaveProperty('paragraphIndex');
-          expect(correction.location).toHaveProperty('pageNumber');
-          expect(correction.location).toHaveProperty('pageId');
-
-          // Ensure no nested objects
-          expect(correction).not.toHaveProperty('book');
-          expect(correction.location).not.toHaveProperty('page');
-        });
+      expect(textCorrectionRepository.findMany).toHaveBeenCalledWith({
+        bookId: 'book-1',
+        fixType: FixType.vowelization,
+        originalWord: 'שגיאה',
+        limit: 50,
+        orderBy: 'asc',
       });
+    });
 
-      it('should add timestamp to response for frontend logging', async () => {
-        const mockServiceResponse = {
-          corrections: [],
-          total: 0,
-          page: 1,
-          totalPages: 0,
-        };
+    it('should handle repository errors gracefully', async () => {
+      const error = new Error('Database connection failed');
+      textCorrectionRepository.findMany.mockRejectedValue(error);
 
-        mockCorrectionLearningService.getAllCorrections.mockResolvedValue(mockServiceResponse);
+      await expect(controller.getAllCorrections({})).rejects.toThrow('Failed to get all corrections');
 
-        const result = await controller.getAllCorrections({ page: 1, limit: 10 });
+      expect(textCorrectionRepository.findMany).toHaveBeenCalled();
+    });
 
-        expect(result).toHaveProperty('timestamp');
-        expect(typeof result.timestamp).toBe('string');
-        expect(new Date(result.timestamp)).toBeInstanceOf(Date);
+    it('should return empty array when no corrections found', async () => {
+      textCorrectionRepository.findMany.mockResolvedValue([]);
+
+      const result = await controller.getAllCorrections({});
+
+      expect(result).toEqual({
+        corrections: [],
+        total: 0,
+        timestamp: expect.any(String),
+      });
+    });
+
+    it('should use default limit when not provided', async () => {
+      textCorrectionRepository.findMany.mockResolvedValue([]);
+
+      await controller.getAllCorrections({ filters: {} });
+
+      expect(textCorrectionRepository.findMany).toHaveBeenCalledWith({
+        bookId: undefined,
+        fixType: undefined,
+        originalWord: undefined,
+        limit: 100,
+        orderBy: 'desc',
       });
     });
   });
