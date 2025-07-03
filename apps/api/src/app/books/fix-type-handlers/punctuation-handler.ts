@@ -1,3 +1,4 @@
+import { FixType } from '@prisma/client';
 import { BaseFixTypeHandler, FixTypeMatch } from './base-fix-type-handler';
 
 /**
@@ -32,7 +33,7 @@ import { BaseFixTypeHandler, FixTypeMatch } from './base-fix-type-handler';
  * - Standardizing punctuation for consistent audio flow
  */
 export class PunctuationHandler extends BaseFixTypeHandler {
-  readonly fixType = 'punctuation';
+  readonly fixType = FixType.punctuation;
   readonly description = 'Adding pauses and rhythm marks (commas, dashes, ellipses) for better narration flow';
   
   // Punctuation patterns
@@ -46,16 +47,20 @@ export class PunctuationHandler extends BaseFixTypeHandler {
     const originalPunctuation = originalWord.match(this.punctuationPattern) || [];
     const correctedPunctuation = correctedWord.match(this.punctuationPattern) || [];
     
-    // Remove all punctuation to compare base text
-    const originalWithoutPunctuation = originalWord.replace(this.punctuationPattern, '');
-    const correctedWithoutPunctuation = correctedWord.replace(this.punctuationPattern, '');
+    // Remove all punctuation and normalize spaces to compare base text
+    // This handles cases like "כן לא" → "כן-לא" where space is replaced by dash
+    // We replace punctuation with spaces first, then normalize all whitespace
+    const originalWithoutPunctuation = originalWord.replace(this.punctuationPattern, ' ').replace(/\s+/g, ' ').trim();
+    const correctedWithoutPunctuation = correctedWord.replace(this.punctuationPattern, ' ').replace(/\s+/g, ' ').trim();
     
     const debugInfo = {
       originalPunctuation: originalPunctuation.join(''),
       correctedPunctuation: correctedPunctuation.join(''),
       originalPunctuationCount: originalPunctuation.length,
       correctedPunctuationCount: correctedPunctuation.length,
-      baseTextChanged: originalWithoutPunctuation !== correctedWithoutPunctuation
+      baseTextChanged: originalWithoutPunctuation !== correctedWithoutPunctuation,
+      originalBaseText: originalWithoutPunctuation,
+      correctedBaseText: correctedWithoutPunctuation
     };
     
     // If base text changed, this is not just a punctuation fix
@@ -110,6 +115,23 @@ export class PunctuationHandler extends BaseFixTypeHandler {
         debugInfo: { ...debugInfo, sentenceEndingChanged: true }
       };
     }
+    
+    // TODO: Re-enable semicolon support when ready
+    // Check for specific punctuation types to determine confidence
+    // const originalSemicolons = (originalWord.match(/;/g) || []).length;
+    // const correctedSemicolons = (correctedWord.match(/;/g) || []).length;
+    // 
+    // if (originalSemicolons !== correctedSemicolons) {
+    //   // Semicolon changes get specific confidence of 0.80
+    //   const reason = 'Modified punctuation for narration improvement';
+    //   this.logMatch(originalWord, correctedWord, reason, 0.80);
+    //   return {
+    //     fixType: this.fixType,
+    //     confidence: 0.80,
+    //     reason,
+    //     debugInfo
+    //   };
+    // }
     
     // General punctuation change
     const reason = 'Modified punctuation for narration improvement';

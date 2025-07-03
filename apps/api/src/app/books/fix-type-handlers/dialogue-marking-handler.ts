@@ -1,7 +1,8 @@
+import { FixType } from '@prisma/client';
 import { BaseFixTypeHandler, FixTypeMatch } from './base-fix-type-handler';
 
 export class DialogueMarkingHandler extends BaseFixTypeHandler {
-  readonly fixType = 'dialogue_marking';
+  readonly fixType = FixType.dialogue_marking;
   readonly description = 'Adding quotation marks and dialogue indicators for character speech';
   
   // Dialogue patterns

@@ -14,8 +14,7 @@ import { BaseFixTypeHandler, FixTypeMatch } from './base-fix-type-handler';
  * This handler detects and validates expansions of:
  * 
  * 1. **NUMBERS & NUMERALS**
- *    - Arabic numerals: "5" → "חמש", "100" → "מאה"
- *    - Hebrew numerals: "ה׳" → "חמש", "ק׳" → "מאה"
+ *    - Hebrew numerals: "5" → "חמש", "100" → "מאה"
  *    - Roman numerals: "V" → "חמש", "X" → "עשר"
  *    - Decimal numbers: "3.14" → "שלוש נקודה אחת ארבע"
  * 
@@ -52,7 +51,8 @@ export class ExpansionHandler extends BaseFixTypeHandler {
   
   // Number patterns
   private readonly numberPattern = /\b\d+(?:[.,]\d+)?\b/g;
-  private readonly hebrewNumbers = /[א-ת](?:׳|״)?/g;
+  // Hebrew numerals use specific letters with geresh (׳) or gershayim (״) marks
+  private readonly hebrewNumbers = /\b[א-ת]+[׳״]\b/g;
   private readonly romanNumerals = /\b[IVXLCDM]+\b/g;
   
   // Currency patterns
@@ -174,25 +174,25 @@ export class ExpansionHandler extends BaseFixTypeHandler {
       originalNumbers: originalNumbers.join(', '),
       correctedNumbers: correctedNumbers.join(', '),
       originalHebrewNumbers: originalHebrewNumbers.join(', '),
-      correctedHebrewNumbers: correctedHebrewNumbers.join(', ')
+      correctedHebrewNumbers: correctedHebrewNumbers.join(', '),
+      isOriginalNumber: originalNumbers.length > 0 || originalHebrewNumbers.length > 0,
+      isCorrectedNumber: correctedNumbers.length > 0 || correctedHebrewNumbers.length > 0
     };
     
-    // Check if numbers were expanded to words
-    if (originalNumbers.length > 0 && correctedNumbers.length === 0) {
-      // Likely expanded to words
-      const hasNumberWords = /\b(?:אחד|שניים|שלושה|ארבעה|חמישה|ששה|שבעה|שמונה|תשעה|עשרה|אחת|שתיים|מאה|אלף|מיליון)\b/.test(correctedWord);
-      
-      if (hasNumberWords) {
-        return {
-          hasExpansion: true,
-          confidence: 0.95,
-          reason: `Expanded number(s) ${originalNumbers.join(', ')} to written form`,
-          debugInfo: { ...debugInfo, expandedToWords: true }
-        };
-      }
+    // Simple logic: if original word is a number and corrected word is not a number, it's an expansion
+    const isOriginalNumber = originalNumbers.length > 0 || originalHebrewNumbers.length > 0;
+    const isCorrectedNumber = correctedNumbers.length > 0 || correctedHebrewNumbers.length > 0;
+    
+    if (isOriginalNumber && !isCorrectedNumber) {
+      return {
+        hasExpansion: true,
+        confidence: 0.95,
+        reason: `Expanded number '${originalWord}' to written form '${correctedWord}'`,
+        debugInfo: { ...debugInfo, expandedToWords: true }
+      };
     }
     
-    // Check for Hebrew number expansion
+    // Check for Hebrew number expansion (Hebrew numbers to Hebrew text)
     if (originalHebrewNumbers.length > 0 && this.hasHebrewNumberExpansion(originalWord, correctedWord)) {
       return {
         hasExpansion: true,
