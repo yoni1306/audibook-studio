@@ -3,15 +3,13 @@ import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody } from '@nestjs/s
 import { BooksService } from './books.service';
 import { BulkTextFixesService } from './bulk-text-fixes.service';
 import { CorrectionLearningService } from './correction-learning.service';
+import { TextCorrectionRepository } from './text-correction.repository';
 import { UpdateParagraphRequestDto, UpdateParagraphResponseDto, BulkFixSuggestion as DtoBulkFixSuggestion, SuggestedFixesResponseDto } from './dto/paragraph-update.dto';
 import { 
   GetCorrectionSuggestionsDto, 
   GetWordCorrectionsDto,
-  GetAllCorrectionsDto,
   CorrectionSuggestionsResponseDto,
-  LearningStatsResponseDto,
-  GetAllCorrectionsResponseDto,
-  GetFixTypesResponseDto
+  LearningStatsResponseDto
 } from './dto/correction-learning.dto';
 import { BulkFixSuggestion as ServiceBulkFixSuggestion } from './bulk-text-fixes.service';
 import { S3Service } from '../s3/s3.service';
@@ -25,6 +23,7 @@ export class BooksController {
     private booksService: BooksService,
     private bulkTextFixesService: BulkTextFixesService,
     private correctionLearningService: CorrectionLearningService,
+    private textCorrectionRepository: TextCorrectionRepository,
     private s3Service: S3Service
   ) {}
   
@@ -51,7 +50,6 @@ export class BooksController {
       return {
         originalWord: suggestion.originalWord,
         correctedWord: suggestion.correctedWord,
-        fixType: suggestion.fixType || 'spelling', // Use original fix type or default to spelling
         paragraphIds,
         count: suggestion.paragraphs.reduce((sum, p) => sum + p.occurrences, 0),
         previewBefore,
@@ -240,7 +238,6 @@ export class BooksController {
         originalWord: string;
         correctedWord: string;
         paragraphIds: string[];
-        fixType?: string;
       }>;
     }
   ) {
@@ -451,6 +448,63 @@ export class BooksController {
   }
 
   /**
+   * Get all corrections with optional filtering and pagination
+   */
+  @Post('all-corrections')
+  @ApiOperation({ summary: 'Get all corrections', description: 'Get all text corrections with optional filtering and pagination' })
+  @ApiResponse({ status: 200, description: 'All corrections retrieved successfully' })
+  async getAllCorrections(@Body() dto: any = {}): Promise<any> {
+    this.logger.log('Getting all corrections with filters:', dto);
+    
+    try {
+      // Use the text correction repository to get corrections
+      const corrections = await this.textCorrectionRepository.findMany({
+        bookId: dto.filters?.bookId,
+        fixType: dto.filters?.fixType,
+        originalWord: dto.filters?.originalWord,
+        limit: dto.limit || 100,
+        orderBy: dto.sortOrder === 'asc' ? 'asc' : 'desc',
+      });
+      
+      // Transform to include book information if needed
+      const transformedCorrections = corrections.map(correction => ({
+        id: correction.id,
+        originalWord: correction.originalWord,
+        correctedWord: correction.correctedWord,
+        sentenceContext: correction.sentenceContext,
+        fixType: correction.fixType,
+        createdAt: correction.createdAt,
+        updatedAt: correction.updatedAt,
+        bookId: correction.bookId,
+        bookTitle: correction.bookId, // This would need to be joined from book table in a real implementation
+        book: {
+          id: correction.bookId,
+          title: correction.bookId, // This would need to be joined from book table
+        },
+        location: {
+          pageNumber: 1, // This would need to be determined from paragraph context
+          paragraphIndex: 1,
+        },
+      }));
+      
+      this.logger.log(`Found ${transformedCorrections.length} corrections`);
+      return {
+        corrections: transformedCorrections,
+        total: transformedCorrections.length,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      this.logger.error(`Error getting all corrections: ${error.message}`, error.stack);
+      throw new InternalServerErrorException({
+        error: 'Internal Server Error',
+        message: 'Failed to get all corrections',
+        statusCode: 500,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  /**
    * Get corrections for a specific word
    */
   @Post('word-corrections')
@@ -477,34 +531,7 @@ export class BooksController {
     }
   }
 
-  /**
-   * Get all corrections with filtering and pagination
-   */
-  @Post('all-corrections')
-  @ApiOperation({ summary: 'Get all corrections', description: 'Retrieve all corrections with filtering and pagination' })
-  @ApiBody({ type: GetAllCorrectionsDto })
-  @ApiResponse({ status: 200, description: 'Successfully retrieved corrections', type: GetAllCorrectionsResponseDto })
-  async getAllCorrections(@Body() dto: GetAllCorrectionsDto): Promise<GetAllCorrectionsResponseDto> {
-    this.logger.log(`Getting all corrections with filters: ${JSON.stringify(dto)}`);
-    
-    try {
-      const result = await this.correctionLearningService.getAllCorrections(dto);
-      this.logger.log(`Found ${result.corrections.length} corrections (page ${result.page}/${result.totalPages}, total: ${result.total})`);
-      
-      return {
-        ...result,
-        timestamp: new Date().toISOString(),
-      };
-    } catch (error) {
-      this.logger.error(`Error getting all corrections: ${error.message}`, error.stack);
-      throw new InternalServerErrorException({
-        error: 'Internal Server Error',
-        message: 'Failed to get corrections',
-        statusCode: 500,
-        timestamp: new Date().toISOString(),
-      });
-    }
-  }
+
 
   /**
    * Test endpoint to verify routing
@@ -517,35 +544,5 @@ export class BooksController {
     return { message: 'Test endpoint working', timestamp: new Date().toISOString() };
   }
 
-  /**
-   * Get available fix types for filtering
-   */
-  @Get('fix-types')
-  @ApiOperation({ summary: 'Get fix types', description: 'Get available fix types for filtering corrections' })
-  @ApiResponse({ status: 200, description: 'Successfully retrieved fix types', type: GetFixTypesResponseDto })
-  async getFixTypes() {
-    this.logger.log('🔧 [API] Getting available fix types - START');
-    
-    try {
-      const result = await this.correctionLearningService.getFixTypes();
-      this.logger.log(`📊 [API] Found ${result.fixTypes.length} fix types: ${JSON.stringify(result.fixTypes)}`);
-      
-      const response = {
-        ...result,
-        timestamp: new Date().toISOString(),
-      };
-      
-      this.logger.log(`🎯 [API] Returning response: ${JSON.stringify(response)}`);
-      
-      return response;
-    } catch (error) {
-      this.logger.error(`💥 [API] Error getting fix types: ${error.message}`, error.stack);
-      throw new InternalServerErrorException({
-        error: 'Internal Server Error',
-        message: 'Failed to get fix types',
-        statusCode: 500,
-        timestamp: new Date().toISOString(),
-      });
-    }
-  }
+
 }

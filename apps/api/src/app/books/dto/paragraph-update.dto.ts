@@ -23,9 +23,6 @@ export class BulkFixSuggestion {
   @ApiProperty({ description: 'Suggested corrected word' })
   correctedWord: string;
 
-  @ApiProperty({ description: 'Type of fix suggested' })
-  fixType: string;
-
   @ApiProperty({ description: 'Array of paragraph IDs where this fix applies', type: [String] })
   paragraphIds: string[];
 

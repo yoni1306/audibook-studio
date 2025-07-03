@@ -80,7 +80,7 @@ model TextCorrection {
   originalWord    String    // The specific word that was changed (e.g., "שלום")
   correctedWord   String    // What the word was changed to (e.g., "שָׁלוֹם")
   sentenceContext String    @db.Text // The full sentence context for better matching
-  fixType         String?   // Optional categorization like 'niqqud', 'pronunciation', etc.
+  fixType         FixType   // Categorization of the text correction type
   ttsModel        String?   // TTS model used (e.g., "openai", "elevenlabs", "azure")
   ttsVoice        String?   // Voice used for TTS (e.g., "alloy", "echo", "fable")
   createdAt       DateTime  @default(now())
@@ -106,4 +106,13 @@ enum AudioStatus {
   GENERATING
   READY
   ERROR
+}
+
+enum FixType {
+  vowelization      // Adding/removing/changing Hebrew niqqud (vowel marks)
+  disambiguation    // Clarifying ambiguous Hebrew words with context
+  punctuation       // Adding pauses and rhythm marks for better narration flow
+  sentence_break    // Breaking long/nested sentences into clear chunks
+  dialogue_marking  // Adding quotation marks and dialogue indicators
+  expansion         // Expanding numbers, currency, and acronyms into readable form
 }

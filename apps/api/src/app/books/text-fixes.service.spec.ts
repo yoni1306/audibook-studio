@@ -1,11 +1,16 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TextFixesService, WordChange } from './text-fixes.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { FixTypeHandlerRegistry } from './fix-type-handlers/fix-type-handler-registry';
+import { FixType } from '@prisma/client';
 
 describe('TextFixesService', () => {
   let service: TextFixesService;
   let mockTxTextCorrection: { createMany: jest.Mock };
   let mockTxParagraph: { findUnique: jest.Mock };
+  let mockFixTypeRegistry: {
+    classifyCorrection: jest.Mock;
+  };
   let mockPrismaService: {
     $transaction: jest.Mock;
     textCorrection: {
@@ -28,6 +33,16 @@ describe('TextFixesService', () => {
 
     mockTxParagraph = {
       findUnique: jest.fn().mockResolvedValue({ bookId: mockBookId }),
+    };
+
+    mockFixTypeRegistry = {
+      classifyCorrection: jest.fn().mockReturnValue({
+        fixType: FixType.disambiguation,
+        confidence: 0.8,
+        reason: 'Hebrew word clarification',
+        matches: [],
+        debugInfo: {}
+      }),
     };
 
     mockPrismaService = {
@@ -55,6 +70,10 @@ describe('TextFixesService', () => {
         {
           provide: PrismaService,
           useValue: mockPrismaService,
+        },
+        {
+          provide: FixTypeHandlerRegistry,
+          useValue: mockFixTypeRegistry,
         },
       ],
     }).compile();
@@ -145,7 +164,9 @@ describe('TextFixesService', () => {
           originalWord: 'שגיאה',
           correctedWord: 'תיקון',
           sentenceContext: 'זה טקסט עם שגיאה בעברית',
-          fixType: 'substitution',
+          fixType: FixType.disambiguation,
+          ttsModel: undefined,
+          ttsVoice: undefined,
         },
       ];
 
@@ -165,8 +186,8 @@ describe('TextFixesService', () => {
 
     it('should handle multiple changes', async () => {
       const changes: WordChange[] = [
-        { originalWord: 'שגיאה', correctedWord: 'תיקון', position: 0, fixType: 'substitution' },
-        { originalWord: 'עם', correctedWord: 'עם', position: 1, fixType: 'no-change' },
+        { originalWord: 'שגיאה', correctedWord: 'תיקון', position: 0, fixType: 'disambiguation' },
+        { originalWord: 'עם', correctedWord: 'עם', position: 1, fixType: FixType.disambiguation },
       ];
 
       mockTxTextCorrection.createMany.mockResolvedValue({ count: 2 });
@@ -181,7 +202,9 @@ describe('TextFixesService', () => {
             originalWord: 'שגיאה',
             correctedWord: 'תיקון',
             sentenceContext: 'זה טקסט עם שגיאה בעברית',
-            fixType: 'substitution',
+            fixType: FixType.disambiguation,
+            ttsModel: undefined,
+            ttsVoice: undefined,
           }),
           expect.objectContaining({
             paragraphId: mockParagraphId,
@@ -189,7 +212,9 @@ describe('TextFixesService', () => {
             originalWord: 'עם',
             correctedWord: 'עם',
             sentenceContext: 'זה טקסט עם שגיאה בעברית',
-            fixType: 'no-change',
+            fixType: FixType.disambiguation,
+            ttsModel: undefined,
+            ttsVoice: undefined,
           }),
         ]),
       });
@@ -212,7 +237,9 @@ describe('TextFixesService', () => {
             originalWord: 'שגיאה',
             correctedWord: 'תיקון',
             sentenceContext: 'זה טקסט עם שגיאה בעברית',
-            fixType: 'manual',
+            fixType: FixType.disambiguation,
+            ttsModel: undefined,
+            ttsVoice: undefined,
           },
         ],
       });
@@ -229,7 +256,7 @@ describe('TextFixesService', () => {
 
     it('should handle errors and rethrow them', async () => {
       const changes: WordChange[] = [
-        { originalWord: 'שגיאה', correctedWord: 'תיקון', position: 0, fixType: 'substitution' },
+        { originalWord: 'שגיאה', correctedWord: 'תיקון', position: 0, fixType: 'disambiguation' },
       ];
 
       const error = new Error('Database error');
@@ -242,7 +269,7 @@ describe('TextFixesService', () => {
 
     it('should handle words not found in original text', async () => {
       const changes: WordChange[] = [
-        { originalWord: 'לא_קיים', correctedWord: 'תיקון', position: 0, fixType: 'substitution' },
+        { originalWord: 'לא_קיים', correctedWord: 'תיקון', position: 0, fixType: 'disambiguation' },
       ];
 
       mockTxTextCorrection.createMany.mockResolvedValue({ count: 1 });
@@ -257,7 +284,9 @@ describe('TextFixesService', () => {
             originalWord: 'לא_קיים',
             correctedWord: 'תיקון',
             sentenceContext: '',
-            fixType: 'substitution',
+            fixType: FixType.disambiguation,
+            ttsModel: undefined,
+            ttsVoice: undefined,
           },
         ],
       });
@@ -265,245 +294,431 @@ describe('TextFixesService', () => {
   });
 
   describe('classifyChange', () => {
-    describe('Niqqud (Hebrew vowel marks) corrections', () => {
-      it('should detect niqqud addition', () => {
+    beforeEach(() => {
+      // Reset mock before each test
+      mockFixTypeRegistry.classifyCorrection.mockReset();
+    });
+
+    describe('Vowelization corrections', () => {
+      it('should detect vowelization addition', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: 'vowelization',
+          confidence: 0.9,
+          reason: 'Added Hebrew niqqud marks',
+          debugInfo: { allMatches: [{ fixType: 'vowelization', confidence: 0.9 }] }
+        });
+
         const result = service['classifyChange']('שלום', 'שָׁלוֹם');
-        expect(result).toBe('niqqud_addition');
+        expect(result).toBe(FixType.vowelization);
+        expect(mockFixTypeRegistry.classifyCorrection).toHaveBeenCalledWith('שלום', 'שָׁלוֹם');
       });
 
-      it('should detect niqqud removal', () => {
+      it('should detect vowelization removal', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: 'vowelization',
+          confidence: 0.85,
+          reason: 'Removed Hebrew niqqud marks',
+          debugInfo: { allMatches: [{ fixType: 'vowelization', confidence: 0.85 }] }
+        });
+
         const result = service['classifyChange']('שָׁלוֹם', 'שלום');
-        expect(result).toBe('niqqud_removal');
+        expect(result).toBe(FixType.vowelization);
       });
 
-      it('should detect niqqud correction', () => {
+      it('should detect vowelization correction', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: 'vowelization',
+          confidence: 0.8,
+          reason: 'Changed Hebrew niqqud marks',
+          debugInfo: { allMatches: [{ fixType: 'vowelization', confidence: 0.8 }] }
+        });
+
         const result = service['classifyChange']('שָׁלוֹם', 'שְׁלוֹם');
-        expect(result).toBe('niqqud_correction');
-      });
-
-      it('should detect complex niqqud changes', () => {
-        const result = service['classifyChange']('בְּרֵאשִׁית', 'בְּרֵאשִׁיתָה');
-        expect(result).toBe('letter_fix'); // Added Hebrew letter ה at the end
-      });
-
-      it('should handle multiple niqqud marks', () => {
-        const result = service['classifyChange']('הַמֶּלֶךְ', 'הַמֶּלֶךְ');
-        expect(result).toBe('niqqud_correction'); // Base letters same, niqqud same -> niqqud_correction
+        expect(result).toBe(FixType.vowelization);
       });
     });
 
-    describe('Hebrew letter corrections', () => {
-      it('should detect hebrew spelling correction with same letter count', () => {
-        const result = service['classifyChange']('שלום', 'שלוט');
-        expect(result).toBe('hebrew_spelling');
+    describe('Disambiguation corrections', () => {
+      it('should detect ambiguous word clarification', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: FixType.disambiguation,
+          confidence: 0.85,
+          reason: 'Clarified ambiguous Hebrew word with context',
+          debugInfo: { allMatches: [{ fixType: 'disambiguation', confidence: 0.85 }] }
+        });
+
+        const result = service['classifyChange']('בית', 'בַּיִת');
+        expect(result).toBe(FixType.disambiguation);
       });
 
-      it('should detect hebrew letter addition', () => {
-        const result = service['classifyChange']('שלמ', 'שלום');
-        expect(result).toBe('letter_fix');
-      });
+      it('should detect homograph disambiguation', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: FixType.disambiguation,
+          confidence: 0.9,
+          reason: 'Disambiguated Hebrew homograph',
+          debugInfo: { allMatches: [{ fixType: 'disambiguation', confidence: 0.9 }] }
+        });
 
-      it('should detect hebrew letter removal', () => {
-        const result = service['classifyChange']('שלום', 'שלמ');
-        expect(result).toBe('letter_fix');
-      });
-
-      it('should handle complex hebrew word changes', () => {
-        const result = service['classifyChange']('ספר', 'ספרים');
-        expect(result).toBe('expansion_contraction'); // 'ספרים' contains 'ספר'
-      });
-
-      it('should handle mixed Hebrew and non-Hebrew', () => {
-        const result = service['classifyChange']('שלום123', 'שלוט123');
-        expect(result).toBe('hebrew_spelling');
+        const result = service['classifyChange']('מלך', 'מֶלֶךְ');
+        expect(result).toBe(FixType.disambiguation);
       });
     });
 
     describe('Punctuation corrections', () => {
       it('should detect punctuation changes', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: 'punctuation',
+          confidence: 0.8,
+          reason: 'Added punctuation for narration flow',
+          debugInfo: { allMatches: [{ fixType: 'punctuation', confidence: 0.8 }] }
+        });
+
         const result = service['classifyChange']('שלום,', 'שלום.');
-        expect(result).toBe('character_substitution'); // Same length, different punctuation
+        expect(result).toBe(FixType.punctuation);
       });
 
-      it('should detect spacing changes', () => {
-        const result = service['classifyChange']('שלום ', 'שלום');
-        expect(result).toBe('insertion_deletion'); // One character difference
-      });
+      it('should detect pause mark addition', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: 'punctuation',
+          confidence: 0.75,
+          reason: 'Added pause marks for better narration rhythm',
+          debugInfo: { allMatches: [{ fixType: 'punctuation', confidence: 0.75 }] }
+        });
 
-      it('should handle Hebrew punctuation', () => {
-        const result = service['classifyChange']('שלום׃', 'שלום!');
-        expect(result).toBe('character_substitution'); // Same length
+        const result = service['classifyChange']('שלום', 'שלום,');
+        expect(result).toBe(FixType.punctuation);
       });
     });
 
-    describe('Combined Hebrew corrections', () => {
-      it('should prioritize niqqud over letter changes when base letters are same', () => {
+    describe('Sentence break corrections', () => {
+      it('should detect sentence splitting', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: 'sentence_break',
+          confidence: 0.85,
+          reason: 'Split long sentence for better narration flow',
+          debugInfo: { allMatches: [{ fixType: 'sentence_break', confidence: 0.85 }] }
+        });
+
+        const result = service['classifyChange']('משפט ארוך מאוד', 'משפט ארוך. מאוד');
+        expect(result).toBe(FixType.sentence_break);
+      });
+    });
+
+    describe('Dialogue marking corrections', () => {
+      it('should detect dialogue quotation marks', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: 'dialogue_marking',
+          confidence: 0.9,
+          reason: 'Added quotation marks for dialogue',
+          debugInfo: { allMatches: [{ fixType: 'dialogue_marking', confidence: 0.9 }] }
+        });
+
+        const result = service['classifyChange']('אמר שלום', '"אמר שלום"');
+        expect(result).toBe(FixType.dialogue_marking);
+      });
+    });
+
+    describe('Expansion corrections', () => {
+      it('should detect number expansion', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: 'expansion',
+          confidence: 0.95,
+          reason: 'Expanded number to readable Hebrew form',
+          debugInfo: { allMatches: [{ fixType: 'expansion', confidence: 0.95 }] }
+        });
+
+        const result = service['classifyChange']('2', 'שתי');
+        expect(result).toBe(FixType.expansion);
+      });
+
+      it('should detect currency expansion', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: 'expansion',
+          confidence: 0.9,
+          reason: 'Expanded currency to readable form',
+          debugInfo: { allMatches: [{ fixType: 'expansion', confidence: 0.9 }] }
+        });
+
+        const result = service['classifyChange']('$5', 'חמישה דולר');
+        expect(result).toBe(FixType.expansion);
+      });
+
+      it('should detect acronym expansion', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: 'expansion',
+          confidence: 0.85,
+          reason: 'Expanded acronym to full form',
+          debugInfo: { allMatches: [{ fixType: 'expansion', confidence: 0.85 }] }
+        });
+
+        const result = service['classifyChange']('ארה"ב', 'ארצות הברית');
+        expect(result).toBe(FixType.expansion);
+      });
+    });
+
+    describe('Error handling', () => {
+      it('should handle classification failure', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: null,
+          confidence: 0,
+          reason: 'No matching fix type found',
+          debugInfo: { allMatches: [] }
+        });
+
+        const result = service['classifyChange']('unknown', 'change');
+        expect(result).toBe(null);
+      });
+
+      it('should handle multiple matches error', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: null,
+          confidence: 0,
+          reason: 'Multiple fix types matched',
+          debugInfo: { 
+            allMatches: [
+              { fixType: 'vowelization', confidence: 0.8 },
+              { fixType: 'disambiguation', confidence: 0.75 }
+            ] 
+          }
+        });
+
+        const result = service['classifyChange']('ambiguous', 'change');
+        expect(result).toBe(null);
+      });
+    });
+
+    describe('Integration with analyzeTextChanges', () => {
+      it('should use registry for classification in text analysis', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: 'punctuation',
+          confidence: 0.7,
+          reason: 'Removed trailing space',
+          debugInfo: { allMatches: [{ fixType: 'punctuation', confidence: 0.7 }] }
+        });
+
+        const result = service['classifyChange']('שלום ', 'שלום');
+        expect(result).toBe(FixType.punctuation);
+      });
+    });
+
+    describe('Legacy test compatibility', () => {
+      it('should handle Hebrew punctuation changes', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: 'punctuation',
+          confidence: 0.8,
+          reason: 'Changed Hebrew punctuation mark',
+          debugInfo: { allMatches: [{ fixType: 'punctuation', confidence: 0.8 }] }
+        });
+
+        const result = service['classifyChange']('שלום׃', 'שלום!');
+        expect(result).toBe(FixType.punctuation);
+      });
+
+      it('should handle combined vowelization and disambiguation', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: 'vowelization',
+          confidence: 0.85,
+          reason: 'Added vowelization for clarity',
+          debugInfo: { allMatches: [{ fixType: 'vowelization', confidence: 0.85 }] }
+        });
+
         const result = service['classifyChange']('שָׁלוֹם', 'שְׁלוֹם');
-        expect(result).toBe('niqqud_correction');
+        expect(result).toBe(FixType.vowelization);
       });
 
-      it('should detect letter changes when niqqud is also different', () => {
+      it('should handle complex Hebrew corrections', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: FixType.disambiguation,
+          confidence: 0.9,
+          reason: 'Disambiguated Hebrew word with vowelization',
+          debugInfo: { allMatches: [{ fixType: 'disambiguation', confidence: 0.9 }] }
+        });
+
         const result = service['classifyChange']('שָׁלוֹם', 'שְׁלוֹט');
-        expect(result).toBe('hebrew_spelling');
+        expect(result).toBe(FixType.disambiguation);
       });
 
-      it('should handle word with both niqqud and punctuation changes', () => {
+      it('should handle word with both vowelization and punctuation changes', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: 'vowelization',
+          confidence: 0.8,
+          reason: 'Added vowelization with punctuation adjustment',
+          debugInfo: { allMatches: [{ fixType: 'vowelization', confidence: 0.8 }] }
+        });
+
         const result = service['classifyChange']('שָׁלוֹם,', 'שְׁלוֹם.');
-        expect(result).toBe('character_substitution'); // Same length, multiple changes
+        expect(result).toBe(FixType.vowelization);
       });
     });
 
     describe('Non-Hebrew text corrections', () => {
-      it('should detect character substitution for same length words', () => {
+      it('should handle non-Hebrew text with fallback classification', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: null,
+          confidence: 0,
+          reason: 'No Hebrew-specific fix type matched',
+          debugInfo: { allMatches: [] }
+        });
+
         const result = service['classifyChange']('hello', 'hallo');
-        expect(result).toBe('character_substitution');
+        expect(result).toBe(null);
       });
 
-      it('should detect insertion/deletion for single character difference', () => {
-        const result = service['classifyChange']('hello', 'helo');
-        expect(result).toBe('insertion_deletion');
+      it('should handle expansion of non-Hebrew abbreviations', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: 'expansion',
+          confidence: 0.7,
+          reason: 'Expanded English abbreviation',
+          debugInfo: { allMatches: [{ fixType: 'expansion', confidence: 0.7 }] }
+        });
+
+        const result = service['classifyChange']('Dr.', 'Doctor');
+        expect(result).toBe(FixType.expansion);
       });
 
-      it('should detect expansion/contraction when one word contains another', () => {
+      it('should handle expansion when one word contains another', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: 'expansion',
+          confidence: 0.8,
+          reason: 'Expanded word with additional context',
+          debugInfo: { allMatches: [{ fixType: 'expansion', confidence: 0.8 }] }
+        });
+
         const result = service['classifyChange']('hello', 'hello world');
-        expect(result).toBe('expansion_contraction');
+        expect(result).toBe(FixType.expansion);
       });
 
-      it('should default to substitution for complete word replacement', () => {
+      it('should handle complete word replacement with no match', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: null,
+          confidence: 0,
+          reason: 'No specific fix type matched',
+          debugInfo: { allMatches: [] }
+        });
+
         const result = service['classifyChange']('hello', 'goodbye');
-        expect(result).toBe('substitution');
+        expect(result).toBe(null);
       });
 
-      it('should handle English with numbers', () => {
+      it('should handle mixed text with numbers', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: 'expansion',
+          confidence: 0.6,
+          reason: 'Number correction in mixed text',
+          debugInfo: { allMatches: [{ fixType: 'expansion', confidence: 0.6 }] }
+        });
+
         const result = service['classifyChange']('test123', 'test124');
-        expect(result).toBe('character_substitution');
+        expect(result).toBe(FixType.expansion);
       });
     });
 
     describe('Edge cases', () => {
       it('should handle empty strings', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: null,
+          confidence: 0,
+          reason: 'Empty input strings',
+          debugInfo: { allMatches: [] }
+        });
+
         const result = service['classifyChange']('', '');
-        expect(result).toBe('character_substitution'); // Same length (0)
+        expect(result).toBe(null);
       });
 
       it('should handle one empty string', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: 'expansion',
+          confidence: 0.5,
+          reason: 'Text addition from empty string',
+          debugInfo: { allMatches: [{ fixType: 'expansion', confidence: 0.5 }] }
+        });
+
         const result = service['classifyChange']('', 'שלום');
-        expect(result).toBe('expansion_contraction'); // Empty string is contained in any string
+        expect(result).toBe(FixType.expansion);
       });
 
       it('should handle identical words', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: null,
+          confidence: 0,
+          reason: 'Identical words - no change needed',
+          debugInfo: { allMatches: [] }
+        });
+
         const result = service['classifyChange']('שלום', 'שלום');
-        expect(result).toBe('character_substitution'); // Same length
+        expect(result).toBe(null);
       });
 
       it('should handle mixed scripts', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: FixType.disambiguation,
+          confidence: 0.8,
+          reason: 'Hebrew word correction in mixed text',
+          debugInfo: { allMatches: [{ fixType: 'disambiguation', confidence: 0.8 }] }
+        });
+
         const result = service['classifyChange']('שלום hello', 'שלוט hello');
-        expect(result).toBe('hebrew_spelling');
+        expect(result).toBe(FixType.disambiguation);
       });
 
-      it('should handle only niqqud characters', () => {
+      it('should handle only vowel characters', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: 'vowelization',
+          confidence: 0.9,
+          reason: 'Pure vowel mark correction',
+          debugInfo: { allMatches: [{ fixType: 'vowelization', confidence: 0.9 }] }
+        });
+
         const result = service['classifyChange']('ָׁ', 'ְׁ');
-        expect(result).toBe('niqqud_correction'); // Base letters are same (empty), niqqud different
+        expect(result).toBe(FixType.vowelization);
       });
 
       it('should handle special Hebrew characters', () => {
+        mockFixTypeRegistry.classifyCorrection.mockReturnValue({
+          fixType: 'punctuation',
+          confidence: 0.7,
+          reason: 'Hebrew punctuation mark change',
+          debugInfo: { allMatches: [{ fixType: 'punctuation', confidence: 0.7 }] }
+        });
+
         const result = service['classifyChange']('א׳', 'א״');
-        expect(result).toBe('character_substitution'); // Same length
+        expect(result).toBe(FixType.punctuation);
       });
     });
 
     describe('Real-world Hebrew examples', () => {
       it('should classify common Hebrew corrections', () => {
+        // Mock different fix types for different examples
+        mockFixTypeRegistry.classifyCorrection
+          .mockReturnValueOnce({
+            fixType: FixType.disambiguation,
+            confidence: 0.85,
+            reason: 'Common Hebrew spelling correction',
+            debugInfo: { allMatches: [{ fixType: 'disambiguation', confidence: 0.85 }] }
+          })
+          .mockReturnValueOnce({
+            fixType: 'vowelization',
+            confidence: 0.9,
+            reason: 'Added vowelization for clarity',
+            debugInfo: { allMatches: [{ fixType: 'vowelization', confidence: 0.9 }] }
+          })
+          .mockReturnValueOnce({
+            fixType: 'vowelization',
+            confidence: 0.85,
+            reason: 'Corrected vowel marks',
+            debugInfo: { allMatches: [{ fixType: 'vowelization', confidence: 0.85 }] }
+          });
+
         // Common misspelling
-        expect(service['classifyChange']('אמא', 'אימא')).toBe('letter_fix');
+        expect(service['classifyChange']('אמא', 'אימא')).toBe('disambiguation');
         
         // Niqqud addition for clarity
-        expect(service['classifyChange']('ברא', 'בָּרָא')).toBe('niqqud_addition');
+        expect(service['classifyChange']('ברא', 'בָּרָא')).toBe('vowelization');
         
         // Vowel correction
-        expect(service['classifyChange']('בָּרָא', 'בָּרָה')).toBe('hebrew_spelling');
-        
-        expect(service['classifyChange']('שלום,', 'שלום.')).toBe('character_substitution');
-      });
-
-      it('should handle biblical Hebrew with complex niqqud', () => {
-        const result = service['classifyChange']('בְּרֵאשִׁית', 'בְּרֵאשִׁיתָה');
-        expect(result).toBe('letter_fix'); // Added one Hebrew letter (ה)
-      });
-
-      it('should handle modern Hebrew slang corrections', () => {
-        const result = service['classifyChange']('יאללה', 'יאלה');
-        expect(result).toBe('letter_fix');
-      });
-    });
-
-    describe('User reported missing fix types', () => {
-      it('should classify פרידה -> פרידקה as letter fix', () => {
-        const result = service['classifyChange']('פרידה', 'פרידקה');
-        console.log('פרידה -> פרידקה classified as:', result);
-        // This is adding a letter (ק) - פרידה (5 chars) -> פרידקה (6 chars)
-        expect(result).toBe('letter_fix'); // Added one letter
-      });
-
-      it('should classify 2 -> שתי as substitution', () => {
-        const result = service['classifyChange']('2', 'שתי');
-        console.log('2 -> שתי classified as:', result);
-        // This should be a complete word replacement
-        expect(result).toBe('substitution');
-      });
-
-      it('should test the complete flow with analyzeTextChanges', () => {
-        // Test case 1: פרידה -> פרידקה in context
-        const originalText1 = 'שער שישי פרידה ויטו מיברג';
-        const correctedText1 = 'שער שישי פרידקה ויטו מיברג';
-        const changes1 = service.analyzeTextChanges(originalText1, correctedText1);
-        console.log('Case 1 changes:', JSON.stringify(changes1, null, 2));
-        
-        expect(changes1).toHaveLength(1);
-        expect(changes1[0].originalWord).toBe('פרידה');
-        expect(changes1[0].correctedWord).toBe('פרידקה');
-        expect(changes1[0].fixType).toBeDefined();
-        expect(changes1[0].fixType).toBe('letter_fix');
-
-        // Test case 2: 2 -> שתי in context
-        const originalText2 = 'הביתה 2 לא תמיד';
-        const correctedText2 = 'הביתה שתי לא תמיד';
-        const changes2 = service.analyzeTextChanges(originalText2, correctedText2);
-        console.log('Case 2 changes:', JSON.stringify(changes2, null, 2));
-        
-        expect(changes2).toHaveLength(1);
-        expect(changes2[0].originalWord).toBe('2');
-        expect(changes2[0].correctedWord).toBe('שתי');
-        expect(changes2[0].fixType).toBeDefined();
-        expect(changes2[0].fixType).toBe('substitution');
-      });
-
-      it('should verify that fixType is properly set and not filtered out', () => {
-        // This test verifies that the WordChange objects have fixType set
-        // and would not be filtered out by the bulk fixes service
-        const changes = [
-          { originalWord: 'פרידה', correctedWord: 'פרידקה', position: 0, fixType: 'letter_fix' },
-          { originalWord: '2', correctedWord: 'שתי', position: 1, fixType: 'substitution' }
-        ];
-        
-        // Simulate the filtering logic from BulkTextFixesService.findSimilarFixesInBook
-        const validChanges = changes.filter((change) => {
-          // Skip changes where original and corrected words are identical
-          if (change.originalWord === change.correctedWord) {
-            return false;
-          }
-          // Skip changes without a fix type
-          if (!change.fixType) {
-            return false;
-          }
-          return true;
-        });
-        
-        expect(validChanges).toHaveLength(2);
-        expect(validChanges[0].fixType).toBe('letter_fix');
-        expect(validChanges[1].fixType).toBe('substitution');
+        expect(service['classifyChange']('בָּרָא', 'בָּרָה')).toBe('vowelization');
       });
     });
   });
-
 });

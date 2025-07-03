@@ -2,7 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BulkTextFixesService } from './bulk-text-fixes.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TextFixesService } from './text-fixes.service';
+import { FixTypeHandlerRegistry } from './fix-type-handlers/fix-type-handler-registry';
+import { TextCorrectionRepository } from './text-correction.repository';
 import { Logger } from '@nestjs/common';
+import { FixType } from '@prisma/client';
 
 describe('BulkTextFixesService - Hebrew Exact Matching', () => {
   let service: BulkTextFixesService;
@@ -23,6 +26,39 @@ describe('BulkTextFixesService - Hebrew Exact Matching', () => {
           useValue: {
             analyzeTextChanges: jest.fn()
           }
+        },
+        {
+          provide: FixTypeHandlerRegistry,
+          useValue: {
+            classifyCorrection: jest.fn().mockReturnValue({
+              fixType: FixType.vowelization,
+              confidence: 0.8,
+              reason: 'Mock classification',
+              matches: [],
+              debugInfo: {
+                totalHandlers: 1,
+                matchingHandlers: 1,
+                allMatches: [],
+                validationPassed: true
+              }
+            }),
+          },
+        },
+        {
+          provide: TextCorrectionRepository,
+          useValue: {
+            create: jest.fn().mockResolvedValue({
+              id: 'mock-correction-id',
+              bookId: 'mock-book-id',
+              paragraphId: 'mock-paragraph-id',
+              originalWord: 'mock-original',
+              correctedWord: 'mock-corrected',
+              sentenceContext: 'mock context',
+              fixType: FixType.vowelization,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            }),
+          },
         }
       ]
     }).compile();
