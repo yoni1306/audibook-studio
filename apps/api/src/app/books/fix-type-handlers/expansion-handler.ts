@@ -60,7 +60,7 @@ export class ExpansionHandler extends BaseFixTypeHandler {
   private readonly currencyWords = /\b(?:שקל|שקלים|דולר|דולרים|יורו|לירה|לירות|אגורה|אגורות)\b/g;
   
   // Acronym patterns (Hebrew and English)
-  private readonly hebrewAcronyms = /\b[א-ת]{2,}(?:״|׳)\b/g;
+  private readonly hebrewAcronyms = /[א-ת]{2,}(?:״|׳)/g;
   private readonly englishAcronyms = /\b[A-Z]{2,}\b/g;
   
   // Time and date patterns
@@ -102,15 +102,15 @@ export class ExpansionHandler extends BaseFixTypeHandler {
       expansionRatio: correctedWord.length / originalWord.length
     };
     
-    // Check for number expansion
-    const numberExpansion = this.checkNumberExpansion(originalWord, correctedWord);
-    if (numberExpansion.hasExpansion) {
+    // Check for time/date expansion first (before number expansion to avoid misclassification)
+    const timeExpansion = this.checkTimeExpansion(originalWord, correctedWord);
+    if (timeExpansion.hasExpansion) {
       return {
         hasExpansion: true,
-        expansionType: 'number',
-        confidence: numberExpansion.confidence,
-        reason: numberExpansion.reason,
-        debugInfo: { ...debugInfo, ...numberExpansion.debugInfo }
+        expansionType: 'time',
+        confidence: timeExpansion.confidence,
+        reason: timeExpansion.reason,
+        debugInfo: { ...debugInfo, ...timeExpansion.debugInfo }
       };
     }
     
@@ -138,15 +138,15 @@ export class ExpansionHandler extends BaseFixTypeHandler {
       };
     }
     
-    // Check for time/date expansion
-    const timeExpansion = this.checkTimeExpansion(originalWord, correctedWord);
-    if (timeExpansion.hasExpansion) {
+    // Check for number expansion (after more specific patterns)
+    const numberExpansion = this.checkNumberExpansion(originalWord, correctedWord);
+    if (numberExpansion.hasExpansion) {
       return {
         hasExpansion: true,
-        expansionType: 'time',
-        confidence: timeExpansion.confidence,
-        reason: timeExpansion.reason,
-        debugInfo: { ...debugInfo, ...timeExpansion.debugInfo }
+        expansionType: 'number',
+        confidence: numberExpansion.confidence,
+        reason: numberExpansion.reason,
+        debugInfo: { ...debugInfo, ...numberExpansion.debugInfo }
       };
     }
     
@@ -224,7 +224,17 @@ export class ExpansionHandler extends BaseFixTypeHandler {
       correctedCurrencyWords: correctedCurrencyWords.join(', ')
     };
     
-    // Check if currency symbols were expanded to words
+    // Check if currency symbols were expanded to words (₪ → שקל)
+    if (originalCurrencySymbols.length > 0 && correctedCurrencyWords.length > 0) {
+      return {
+        hasExpansion: true,
+        confidence: 0.92,
+        reason: `Expanded currency symbol(s) ${originalCurrencySymbols.join('')} to words`,
+        debugInfo: { ...debugInfo, currencyExpanded: true }
+      };
+    }
+    
+    // Check if currency symbols were expanded to words (even if original had no currency words)
     if (originalCurrencySymbols.length > 0 && correctedCurrencyWords.length > originalCurrencyWords.length) {
       return {
         hasExpansion: true,
@@ -294,7 +304,7 @@ export class ExpansionHandler extends BaseFixTypeHandler {
       return {
         hasExpansion: true,
         confidence: 0.85,
-        reason: `Expanded time format ${originalTimes.join(', ')} to readable form`,
+        reason: `Expanded time ${originalTimes.join(', ')} to readable form`,
         debugInfo: { ...debugInfo, timeExpanded: true }
       };
     }
@@ -304,7 +314,7 @@ export class ExpansionHandler extends BaseFixTypeHandler {
       return {
         hasExpansion: true,
         confidence: 0.85,
-        reason: `Expanded date format ${originalDates.join(', ')} to readable form`,
+        reason: `Expanded date ${originalDates.join(', ')} to readable form`,
         debugInfo: { ...debugInfo, dateExpanded: true }
       };
     }
