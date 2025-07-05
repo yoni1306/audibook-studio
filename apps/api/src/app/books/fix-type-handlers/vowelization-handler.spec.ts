@@ -162,26 +162,12 @@ describe('VowelizationHandler', () => {
         { original: 'קול', corrected: 'קֻל', name: 'kubutz' }
       ];
 
-      testCases.forEach(({ original, corrected, name }) => {
-        console.log(`\n=== Debug ${name} case: ${original} → ${corrected} ===`);
-        console.log('Original chars:', [...original].map(c => `${c} (U+${c.charCodeAt(0).toString(16).toUpperCase()})`).join(', '));
-        console.log('Corrected chars:', [...corrected].map(c => `${c} (U+${c.charCodeAt(0).toString(16).toUpperCase()})`).join(', '));
-        
-        const niqqudPattern = /[\u05B0-\u05BD\u05BF\u05C1\u05C2\u05C4-\u05C7]/g;
-        const originalWithoutNiqqud = original.replace(niqqudPattern, '');
-        const correctedWithoutNiqqud = corrected.replace(niqqudPattern, '');
-        
-        console.log('Original without niqqud:', originalWithoutNiqqud, '(chars:', [...originalWithoutNiqqud].map(c => `${c} (U+${c.charCodeAt(0).toString(16).toUpperCase()})`).join(', '), ')');
-        console.log('Corrected without niqqud:', correctedWithoutNiqqud, '(chars:', [...correctedWithoutNiqqud].map(c => `${c} (U+${c.charCodeAt(0).toString(16).toUpperCase()})`).join(', '), ')');
-        console.log('Base letters match:', originalWithoutNiqqud === correctedWithoutNiqqud);
-        
-        const originalNiqqud = original.match(niqqudPattern) || [];
-        const correctedNiqqud = corrected.match(niqqudPattern) || [];
-        console.log('Original niqqud:', originalNiqqud.map(c => `${c} (U+${c.charCodeAt(0).toString(16).toUpperCase()})`).join(', '));
-        console.log('Corrected niqqud:', correctedNiqqud.map(c => `${c} (U+${c.charCodeAt(0).toString(16).toUpperCase()})`).join(', '));
-        
+      testCases.forEach(({ original, corrected }) => {
+        // Test vowelization cases where vowel marks replace vowel letters
         const result = handler.canHandle(original, corrected);
-        console.log('Handler result:', result ? 'MATCH' : 'NO MATCH');
+        // Verify the handler correctly identifies these as vowelization changes
+        expect(result).not.toBeNull();
+        expect(result?.fixType).toBe(FixType.vowelization);
       });
       
       // This test is for debugging only, always pass
@@ -199,7 +185,7 @@ describe('VowelizationHandler', () => {
         { original: 'שוב', corrected: 'שֻב', description: 'vav replaced by kubutz' }
       ];
 
-      testCases.forEach(({ original, corrected, description }) => {
+      testCases.forEach(({ original, corrected }) => {
         const result = handler.canHandle(original, corrected);
         
         expect(result).not.toBeNull();
@@ -208,8 +194,7 @@ describe('VowelizationHandler', () => {
         expect(result?.reason).toContain('Added');
         expect(result?.reason).toContain('vowel marks');
         
-        // Log for debugging
-        console.log(`✓ ${description}: "${original}" → "${corrected}" - ${result?.reason}`);
+        // Test passed - vowelization correctly detected
       });
     });
 
