@@ -34,23 +34,36 @@ export class VowelizationHandler extends BaseFixTypeHandler {
     const originalWithoutNiqqud = originalWord.replace(this.niqqudPattern, '');
     const correctedWithoutNiqqud = correctedWord.replace(this.niqqudPattern, '');
     
+    const originalNiqqud = originalWord.match(this.niqqudPattern) || [];
+    const correctedNiqqud = correctedWord.match(this.niqqudPattern) || [];
+    
     const debugInfo = {
       originalWithoutNiqqud,
       correctedWithoutNiqqud,
-      originalNiqqudCount: (originalWord.match(this.niqqudPattern) || []).length,
-      correctedNiqqudCount: (correctedWord.match(this.niqqudPattern) || []).length
+      originalNiqqudCount: originalNiqqud.length,
+      correctedNiqqudCount: correctedNiqqud.length
     };
     
-    // If base letters are not identical, this is not a vowelization change
+    // Special case: If original has no vowel marks and corrected has vowel marks,
+    // classify as vowelization even if base letters differ (niqqud replacing vowel letters)
+    if (originalNiqqud.length === 0 && correctedNiqqud.length > 0) {
+      const reason = `Added ${correctedNiqqud.length} vowel marks`;
+      this.logMatch(originalWord, correctedWord, reason, 0.95);
+      return {
+        fixType: this.fixType,
+        confidence: 0.95,
+        reason,
+        debugInfo
+      };
+    }
+    
+    // If base letters are not identical and both have niqqud, this is not a vowelization change
     if (originalWithoutNiqqud !== correctedWithoutNiqqud) {
       this.logNoMatch(originalWord, correctedWord, 'Base letters differ - not a vowelization change');
       return null;
     }
     
-    const originalNiqqud = originalWord.match(this.niqqudPattern) || [];
-    const correctedNiqqud = correctedWord.match(this.niqqudPattern) || [];
-    
-    // Check for niqqud changes
+    // Check for niqqud changes (variables already declared above)
     if (originalNiqqud.length === 0 && correctedNiqqud.length > 0) {
       const reason = `Added ${correctedNiqqud.length} vowel marks`;
       this.logMatch(originalWord, correctedWord, reason, 0.95);
