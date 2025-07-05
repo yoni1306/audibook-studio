@@ -53,6 +53,10 @@ export abstract class BaseFixTypeHandler {
    * Log debug information for this handler's analysis
    */
   protected logDebug(originalWord: string, correctedWord: string, message: string, debugInfo?: Record<string, unknown>) {
+    // Skip logging during tests to reduce noise
+    if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID) {
+      return;
+    }
     this.logger.debug(`[${this.fixType}] "${originalWord}" → "${correctedWord}": ${message}`, debugInfo);
   }
   
@@ -60,6 +64,10 @@ export abstract class BaseFixTypeHandler {
    * Log when this handler matches
    */
   protected logMatch(originalWord: string, correctedWord: string, reason: string, confidence: number, debugInfo?: Record<string, unknown>): void {
+    // Skip logging during tests to reduce noise
+    if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID) {
+      return;
+    }
     this.logger.debug(`[${this.fixType}] MATCH (${confidence}): "${originalWord}" → "${correctedWord}" - ${reason}`, debugInfo);
   }
   
@@ -67,6 +75,10 @@ export abstract class BaseFixTypeHandler {
    * Log when this handler doesn't match
    */
   protected logNoMatch(originalWord: string, correctedWord: string, reason: string) {
+    // Skip logging during tests to reduce noise
+    if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID) {
+      return;
+    }
     this.logger.debug(`[${this.fixType}] NO MATCH: "${originalWord}" → "${correctedWord}" - ${reason}`);
   }
 }
