@@ -5,8 +5,8 @@ export class DialogueMarkingHandler extends BaseFixTypeHandler {
   readonly fixType = FixType.dialogue_marking;
   readonly description = 'Adding quotation marks and dialogue indicators for character speech';
   
-  // Dialogue patterns
-  private readonly quotationMarks = /["'"'״‟„«»]/g;
+  // Dialogue patterns - expanded to include more Unicode quotation marks
+  private readonly quotationMarks = /["'"'״‟„«»‘’“”]/g;
   private readonly hebrewQuotes = /[״‟]/g;
   private readonly englishQuotes = /["'"']/g;
   private readonly dialogueIndicators = /(?:אמר|אמרה|שאל|שאלה|צעק|צעקה|לחש|לחשה|ענה|ענתה|הוסיף|הוסיפה|המשיך|המשיכה)/g;
@@ -125,10 +125,25 @@ export class DialogueMarkingHandler extends BaseFixTypeHandler {
   }
   
   private hasDialogueStructureChanges(originalWord: string, correctedWord: string): boolean {
-    // Check if dialogue indicators were added or modified
+    // Check if dialogue indicators were added, removed, or modified
     const originalIndicators = originalWord.match(this.dialogueIndicators) || [];
     const correctedIndicators = correctedWord.match(this.dialogueIndicators) || [];
     
-    return correctedIndicators.length !== originalIndicators.length;
+    // Check if count changed
+    if (correctedIndicators.length !== originalIndicators.length) {
+      return true;
+    }
+    
+    // Check if indicators were replaced (same count but different content)
+    if (originalIndicators.length > 0 && correctedIndicators.length > 0) {
+      const originalSet = new Set(originalIndicators);
+      const correctedSet = new Set(correctedIndicators);
+      
+      // If the sets are different, indicators were replaced
+      return originalSet.size !== correctedSet.size || 
+             ![...originalSet].every(indicator => correctedSet.has(indicator));
+    }
+    
+    return false;
   }
 }
