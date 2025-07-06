@@ -28,6 +28,7 @@ describe('BooksController', () => {
 
   const mockTextCorrectionRepository = {
     findMany: jest.fn(),
+    findManyWithBookInfo: jest.fn(),
     create: jest.fn(),
     findGroupedCorrections: jest.fn(),
     getStats: jest.fn(),
@@ -123,11 +124,17 @@ describe('BooksController', () => {
         },
       ];
 
-      textCorrectionRepository.findMany.mockResolvedValue(mockCorrections);
+      const mockCorrectionsWithBookInfo = mockCorrections.map(correction => ({
+        ...correction,
+        bookTitle: correction.bookId,
+        book: { id: correction.bookId, title: correction.bookId, author: 'Test Author' },
+        location: { pageNumber: 1, paragraphIndex: 1 }
+      }));
+      textCorrectionRepository.findManyWithBookInfo.mockResolvedValue(mockCorrectionsWithBookInfo);
 
       const result = await controller.getAllCorrections({});
 
-      expect(textCorrectionRepository.findMany).toHaveBeenCalledWith({
+      expect(textCorrectionRepository.findManyWithBookInfo).toHaveBeenCalledWith({
         bookId: undefined,
         fixType: undefined,
         originalWord: undefined,
@@ -147,9 +154,13 @@ describe('BooksController', () => {
             updatedAt: new Date('2023-01-01'),
             bookId: 'book-1',
             bookTitle: 'book-1',
+            paragraphId: 'paragraph-1',
+            ttsModel: 'test-model',
+            ttsVoice: 'test-voice',
             book: {
               id: 'book-1',
               title: 'book-1',
+              author: 'Test Author',
             },
             location: {
               pageNumber: 1,
@@ -166,9 +177,13 @@ describe('BooksController', () => {
             updatedAt: new Date('2023-01-02'),
             bookId: 'book-2',
             bookTitle: 'book-2',
+            paragraphId: 'paragraph-2',
+            ttsModel: 'test-model',
+            ttsVoice: 'test-voice',
             book: {
               id: 'book-2',
               title: 'book-2',
+              author: 'Test Author',
             },
             location: {
               pageNumber: 1,
@@ -198,7 +213,13 @@ describe('BooksController', () => {
         },
       ];
 
-      textCorrectionRepository.findMany.mockResolvedValue(mockCorrections);
+      const mockCorrectionsWithBookInfo = mockCorrections.map(correction => ({
+        ...correction,
+        bookTitle: correction.bookId,
+        book: { id: correction.bookId, title: correction.bookId, author: 'Test Author' },
+        location: { pageNumber: 1, paragraphIndex: 1 }
+      }));
+      textCorrectionRepository.findManyWithBookInfo.mockResolvedValue(mockCorrectionsWithBookInfo);
 
       const filters = {
         filters: {
@@ -207,12 +228,12 @@ describe('BooksController', () => {
           originalWord: 'שגיאה',
         },
         limit: 50,
-        sortOrder: 'asc',
+        sortOrder: 'asc' as 'asc' | 'desc',
       };
 
       await controller.getAllCorrections(filters);
 
-      expect(textCorrectionRepository.findMany).toHaveBeenCalledWith({
+      expect(textCorrectionRepository.findManyWithBookInfo).toHaveBeenCalledWith({
         bookId: 'book-1',
         fixType: FixType.vowelization,
         originalWord: 'שגיאה',
@@ -223,15 +244,15 @@ describe('BooksController', () => {
 
     it('should handle repository errors gracefully', async () => {
       const error = new Error('Database connection failed');
-      textCorrectionRepository.findMany.mockRejectedValue(error);
+      textCorrectionRepository.findManyWithBookInfo.mockRejectedValue(error);
 
       await expect(controller.getAllCorrections({})).rejects.toThrow('Failed to get all corrections');
 
-      expect(textCorrectionRepository.findMany).toHaveBeenCalled();
+      expect(textCorrectionRepository.findManyWithBookInfo).toHaveBeenCalled();
     });
 
     it('should return empty array when no corrections found', async () => {
-      textCorrectionRepository.findMany.mockResolvedValue([]);
+      textCorrectionRepository.findManyWithBookInfo.mockResolvedValue([]);
 
       const result = await controller.getAllCorrections({});
 
@@ -243,11 +264,11 @@ describe('BooksController', () => {
     });
 
     it('should use default limit when not provided', async () => {
-      textCorrectionRepository.findMany.mockResolvedValue([]);
+      textCorrectionRepository.findManyWithBookInfo.mockResolvedValue([]);
 
       await controller.getAllCorrections({ filters: {} });
 
-      expect(textCorrectionRepository.findMany).toHaveBeenCalledWith({
+      expect(textCorrectionRepository.findManyWithBookInfo).toHaveBeenCalledWith({
         bookId: undefined,
         fixType: undefined,
         originalWord: undefined,

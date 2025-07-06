@@ -11,9 +11,6 @@ export class TextChange {
 
   @ApiProperty({ description: 'Position in text where change occurred' })
   position: number;
-
-  @ApiProperty({ description: 'Type of fix applied' })
-  fixType: string;
 }
 
 export class BulkFixSuggestion {

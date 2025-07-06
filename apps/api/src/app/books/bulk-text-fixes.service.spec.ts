@@ -1414,13 +1414,13 @@ describe('BulkTextFixesService', () => {
     it('should not match digits that are part of decimal numbers with dots', () => {
       const content = 'היו לו 1.2 מליון כבשים';
       const matches = service['findWordMatches'](content, '2');
-      expect(matches).toBeNull(); // Should not match '2' in '1.2'
+      expect(matches).toEqual([]); // Should not match '2' in '1.2'
     });
 
     it('should not match digits that are part of decimal numbers with commas', () => {
       const content = 'היו לו 1,2 מליון פרות';
       const matches = service['findWordMatches'](content, '2');
-      expect(matches).toBeNull(); // Should not match '2' in '1,2'
+      expect(matches).toEqual([]); // Should not match '2' in '1,2'
     });
 
     it('should match standalone numbers', () => {
@@ -1432,7 +1432,7 @@ describe('BulkTextFixesService', () => {
     it('should not match digits in larger numbers', () => {
       const content = 'השנה היא 2023 והיום הוא 23';
       const matches = service['findWordMatches'](content, '2');
-      expect(matches).toBeNull(); // Should not match '2' in '2023' or '23'
+      expect(matches).toEqual([]); // Should not match '2' in '2023' or '23'
     });
 
     it('should match multiple standalone occurrences of the same digit', () => {
@@ -1778,7 +1778,7 @@ describe('BulkTextFixesService', () => {
       
       // Test 1: "2" should NOT be matched in compound "ב־2" (meaning "on the 2nd")
       const matches = (service as any).findWordMatches(text, '2');
-      expect(matches).toBeNull(); // Should not match because "2" is part of compound "ב־2"
+      expect(matches).toEqual([]); // Should not match because "2" is part of compound "ב־2"
       
       // Test 2: "45" should be matched as it's a standalone number
       const standaloneMatches = (service as any).findWordMatches(text, '45');
@@ -1788,8 +1788,8 @@ describe('BulkTextFixesService', () => {
       
       // Test 3: "1930" behavior (documenting current issue)
       const yearMatches = (service as any).findWordMatches(text, '1930');
-      // Currently returns null - this is a separate issue to investigate
-      expect(yearMatches).toBeNull();
+      // Currently returns empty array when no matches found
+      expect(yearMatches).toEqual([]);
     });
 
     it('should correctly classify number expansion as expansion not disambiguation', async () => {

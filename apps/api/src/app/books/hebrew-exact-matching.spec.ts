@@ -98,7 +98,7 @@ describe('BulkTextFixesService - Hebrew Exact Matching', () => {
       
       const result = findHebrewWordMatches(text, word);
       
-      expect(result).toBeNull();
+      expect(result).toEqual([]);
     });
 
     it('should NOT match word with niqqud when searching for word without niqqud', () => {
@@ -107,7 +107,7 @@ describe('BulkTextFixesService - Hebrew Exact Matching', () => {
       
       const result = findHebrewWordMatches(text, word);
       
-      expect(result).toBeNull();
+      expect(result).toEqual([]);
     });
 
     it('should match words without niqqud when both are identical', () => {
@@ -127,7 +127,7 @@ describe('BulkTextFixesService - Hebrew Exact Matching', () => {
       
       const result = findHebrewWordMatches(text, word);
       
-      expect(result).toBeNull();
+      expect(result).toEqual([]);
     });
 
     it('should match only exact niqqud pattern among multiple variants', () => {
@@ -158,7 +158,7 @@ describe('BulkTextFixesService - Hebrew Exact Matching', () => {
       
       const result = findHebrewWordMatches(text, word);
       
-      expect(result).toBeNull();
+      expect(result).toEqual([]);
     });
 
     it('should find all exact matches in text', () => {
@@ -189,7 +189,7 @@ describe('BulkTextFixesService - Hebrew Exact Matching', () => {
       
       const result = findHebrewWordMatches(text, word);
       
-      expect(result).toBeNull();
+      expect(result).toEqual([]);
     });
 
     it('should match word ignoring punctuation', () => {
