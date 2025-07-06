@@ -118,20 +118,24 @@ export class SentenceBreakHandler extends BaseFixTypeHandler {
   private countSentences(text: string): number {
     if (!text.trim()) return 0;
     
-    // Count sentence markers followed by whitespace
-    const sentencesWithWhitespace = (text.match(this.sentenceBreakMarkers) || []).length;
+    // Count sentence markers followed by whitespace (these indicate sentence breaks)
+    const sentenceBreaks = (text.match(this.sentenceBreakMarkers) || []).length;
     
     // Check if text ends with a sentence marker (without requiring trailing whitespace)
     const endsWithSentenceMarker = /[.!?]$/.test(text.trim());
     
-    // If we found sentence markers with whitespace, that's our count
-    // If no markers with whitespace but ends with marker, it's 1 sentence
-    // Otherwise, it's 1 sentence (unmarked)
-    if (sentencesWithWhitespace > 0) {
-      // Add 1 if the text ends with a sentence marker (final sentence)
-      return endsWithSentenceMarker ? sentencesWithWhitespace + 1 : sentencesWithWhitespace;
+    // Logic: sentence breaks + 1 = total sentences
+    // If we have sentence breaks (markers followed by whitespace), 
+    // that means we have multiple sentences
+    if (sentenceBreaks > 0) {
+      // Each sentence break marker creates a new sentence
+      // So if we have 1 break marker, we have 2 sentences
+      return sentenceBreaks + 1;
+    } else if (endsWithSentenceMarker) {
+      // No internal breaks but ends with marker = 1 complete sentence
+      return 1;
     } else {
-      // No internal sentence breaks, so it's 1 sentence
+      // No sentence markers at all = 1 unmarked sentence
       return 1;
     }
   }

@@ -9,7 +9,7 @@ import { DialogueMarkingHandler } from './dialogue-marking-handler';
 import { ExpansionHandler } from './expansion-handler';
 
 export interface FixTypeClassificationResult {
-  fixType: FixType | null;
+  fixType: FixType;
   confidence: number;
   reason: string;
   matches: FixTypeMatch[];
@@ -64,20 +64,20 @@ export class FixTypeHandlerRegistry {
       }
     }
 
-    // Handle no matches
+    // Handle no matches - use default fix type
     if (allMatches.length === 0) {
-      this.logger.warn(`No fix type handlers matched "${originalWord}" → "${correctedWord}"`);
+      this.logger.warn(`No fix type handlers matched "${originalWord}" → "${correctedWord}", using default fix type`);
       
       return {
-        fixType: null,
-        confidence: 0,
-        reason: 'No matching fix type found',
+        fixType: FixType.default,
+        confidence: 0.1, // Low confidence for default classification
+        reason: 'No specific fix type matched, using default classification',
         matches: allMatches,
         debugInfo: {
           totalHandlers: this.handlers.length,
           matchingHandlers: 0,
           allMatches,
-          validationPassed: false
+          validationPassed: true // Still valid, just using default
         }
       };
     }

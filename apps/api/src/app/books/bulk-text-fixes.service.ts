@@ -389,8 +389,8 @@ export class BulkTextFixesService {
                 fix.correctedWord
               );
 
-              // Use the classified fix type or default to vowelization if no match
-              const fixType = (classification.fixType as FixType) || FixType.vowelization;
+              // Use the classified fix type (now never null due to default fallback)
+              const fixType = classification.fixType as FixType;
 
               // Record each individual correction that was actually applied
               for (const matchPosition of matchPositions) {
