@@ -115,4 +115,5 @@ enum FixType {
   sentence_break    // Breaking long/nested sentences into clear chunks
   dialogue_marking  // Adding quotation marks and dialogue indicators
   expansion         // Expanding numbers, currency, and acronyms into readable form
+  default          // Default/unclassified text correction when no specific type matches
 }

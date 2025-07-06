@@ -83,21 +83,18 @@ export class TextFixesService {
   /**
    * Classifies the type of change made using the modular fix type handler system
    */
-  private classifyChange(originalWord: string, correctedWord: string): string | null {
+  private classifyChange(originalWord: string, correctedWord: string): string {
     this.logger.debug(`Classifying change: "${originalWord}" → "${correctedWord}"`);
     
     const result = this.fixTypeRegistry.classifyCorrection(originalWord, correctedWord);
     
-    if (result.fixType) {
-      this.logger.debug(`Successfully classified as ${result.fixType} (confidence: ${result.confidence}): ${result.reason}`);
-      return result.fixType;
-    } else {
-      this.logger.warn(`Failed to classify change "${originalWord}" → "${correctedWord}": ${result.reason}`);
-      if (result.debugInfo.allMatches.length > 1) {
-        this.logger.warn(`Multiple handlers matched: ${result.debugInfo.allMatches.map(m => `${m.fixType}(${m.confidence})`).join(', ')}`);
-      }
-      return null;
+    this.logger.debug(`Successfully classified as ${result.fixType} (confidence: ${result.confidence}): ${result.reason}`);
+    
+    if (result.debugInfo.allMatches.length > 1) {
+      this.logger.debug(`Multiple handlers matched: ${result.debugInfo.allMatches.map(m => `${m.fixType}(${m.confidence})`).join(', ')}`);
     }
+    
+    return result.fixType;
   }
 
   /**
