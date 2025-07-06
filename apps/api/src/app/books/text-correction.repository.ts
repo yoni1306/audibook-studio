@@ -37,6 +37,27 @@ export interface CorrectionStats {
   }>;
 }
 
+export interface CorrectionWithBookInfo {
+  id: string;
+  originalWord: string;
+  correctedWord: string;
+  sentenceContext: string;
+  fixType: FixType;
+  createdAt: Date;
+  updatedAt: Date;
+  bookId: string;
+  bookTitle: string;
+  book: {
+    id: string;
+    title: string;
+    author: string | null;
+  };
+  location: {
+    pageNumber: number | null;
+    paragraphIndex: number | null;
+  };
+}
+
 @Injectable()
 export class TextCorrectionRepository {
   private readonly logger = new Logger(TextCorrectionRepository.name);
@@ -130,6 +151,83 @@ export class TextCorrectionRepository {
       return corrections;
     } catch (error) {
       this.logger.error(`Failed to find text corrections:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Find text corrections with book and paragraph information for display
+   */
+  async findManyWithBookInfo(filters: TextCorrectionFilters = {}): Promise<CorrectionWithBookInfo[]> {
+    this.logger.log(`Finding text corrections with book info, filters:`, filters);
+    
+    const where: Prisma.TextCorrectionWhereInput = {};
+    
+    if (filters.bookId) where.bookId = filters.bookId;
+    if (filters.paragraphId) where.paragraphId = filters.paragraphId;
+    if (filters.originalWord) where.originalWord = filters.originalWord;
+    if (filters.correctedWord) where.correctedWord = filters.correctedWord;
+    if (filters.fixType) where.fixType = filters.fixType;
+    if (filters.ttsModel) where.ttsModel = filters.ttsModel;
+    if (filters.ttsVoice) where.ttsVoice = filters.ttsVoice;
+    if (filters.createdAfter) where.createdAt = { gte: filters.createdAfter };
+    if (filters.createdBefore) {
+      where.createdAt = where.createdAt ? { ...where.createdAt as object, lte: filters.createdBefore } : { lte: filters.createdBefore };
+    }
+    
+    try {
+      const corrections = await this.prisma.textCorrection.findMany({
+        where,
+        include: {
+          book: {
+            select: {
+              id: true,
+              title: true,
+              author: true,
+            },
+          },
+          paragraph: {
+            select: {
+              id: true,
+              orderIndex: true,
+              page: {
+                select: {
+                  pageNumber: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: filters.orderBy || 'desc' },
+        take: filters.limit,
+      });
+      
+      // Transform to include proper location and book information
+      const transformedCorrections = corrections.map(correction => ({
+        id: correction.id,
+        originalWord: correction.originalWord,
+        correctedWord: correction.correctedWord,
+        sentenceContext: correction.sentenceContext,
+        fixType: correction.fixType,
+        createdAt: correction.createdAt,
+        updatedAt: correction.updatedAt,
+        bookId: correction.bookId,
+        bookTitle: correction.book?.title || 'Unknown Book',
+        book: {
+          id: correction.book?.id || correction.bookId,
+          title: correction.book?.title || 'Unknown Book',
+          author: correction.book?.author || null,
+        },
+        location: {
+          pageNumber: correction.paragraph?.page?.pageNumber || null,
+          paragraphIndex: correction.paragraph?.orderIndex || null,
+        },
+      }));
+      
+      this.logger.log(`Found ${transformedCorrections.length} text corrections with book info`);
+      return transformedCorrections;
+    } catch (error) {
+      this.logger.error(`Failed to find text corrections with book info:`, error);
       throw error;
     }
   }

@@ -7,7 +7,6 @@ export interface WordChange {
   originalWord: string;
   correctedWord: string;
   position: number;
-  fixType?: string;
 }
 
 @Injectable()
@@ -68,14 +67,12 @@ export class TextFixesService {
       
       // Word was changed
       if (originalWord && correctedWord && originalWord !== correctedWord) {
-        const fixType = this.classifyChange(originalWord, correctedWord);
-        this.logger.debug(`Creating WordChange: "${originalWord}" → "${correctedWord}" with fixType: ${fixType}`);
+        this.logger.debug(`Creating WordChange: "${originalWord}" → "${correctedWord}"`);
         
         changes.push({
           originalWord,
           correctedWord,
-          position: original[i].position,
-          fixType
+          position: original[i].position
         });
       }
     }
@@ -170,15 +167,9 @@ export class TextFixesService {
         }
 
         const textFixes = changes.map(change => {
-          // Ensure fix type is classified, use disambiguation as fallback for unclassified changes
-          let fixType: FixType;
-          if (change.fixType && Object.values(FixType).includes(change.fixType as FixType)) {
-            fixType = change.fixType as FixType;
-          } else {
-            // If no fix type provided, try to classify it
-            const classification = this.fixTypeRegistry.classifyCorrection(change.originalWord, change.correctedWord);
-            fixType = classification?.fixType as FixType || FixType.disambiguation;
-          }
+          // Always use automatic classification for fix type
+          const classification = this.fixTypeRegistry.classifyCorrection(change.originalWord, change.correctedWord);
+          const fixType = classification?.fixType as FixType || FixType.disambiguation;
           
           return {
             paragraphId,

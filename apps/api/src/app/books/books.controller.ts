@@ -12,6 +12,8 @@ import {
   LearningStatsResponseDto
 } from './dto/correction-learning.dto';
 import { BulkFixSuggestion as ServiceBulkFixSuggestion } from './bulk-text-fixes.service';
+import { CorrectionWithBookInfo } from './text-correction.repository';
+import { FixType } from '@prisma/client';
 import { S3Service } from '../s3/s3.service';
 
 @ApiTags('books')
@@ -329,8 +331,7 @@ export class BooksController {
             properties: {
               originalWord: { type: 'string', description: 'Original word' },
               correctedWord: { type: 'string', description: 'Corrected word' },
-              position: { type: 'number', description: 'Position in text' },
-              fixType: { type: 'string', description: 'Type of fix (optional)' }
+              position: { type: 'number', description: 'Position in text' }
             },
             required: ['originalWord', 'correctedWord', 'position']
           }
@@ -346,7 +347,6 @@ export class BooksController {
         originalWord: string;
         correctedWord: string;
         position: number;
-        fixType?: string;
       }>;
     }
   ) {
@@ -453,44 +453,25 @@ export class BooksController {
   @Post('all-corrections')
   @ApiOperation({ summary: 'Get all corrections', description: 'Get all text corrections with optional filtering and pagination' })
   @ApiResponse({ status: 200, description: 'All corrections retrieved successfully' })
-  async getAllCorrections(@Body() dto: any = {}): Promise<any> {
+  async getAllCorrections(@Body() dto: { filters?: { bookId?: string; fixType?: FixType; originalWord?: string }; limit?: number; sortOrder?: 'asc' | 'desc' } = {}): Promise<{ corrections: CorrectionWithBookInfo[]; total: number; timestamp: string }> {
     this.logger.log('Getting all corrections with filters:', dto);
     
     try {
-      // Use the text correction repository to get corrections
-      const corrections = await this.textCorrectionRepository.findMany({
+      const filters = {
         bookId: dto.filters?.bookId,
-        fixType: dto.filters?.fixType,
+        fixType: dto.filters?.fixType ? dto.filters.fixType as FixType : undefined,
         originalWord: dto.filters?.originalWord,
+        orderBy: dto.sortOrder || 'desc' as 'asc' | 'desc',
         limit: dto.limit || 100,
-        orderBy: dto.sortOrder === 'asc' ? 'asc' : 'desc',
-      });
+      };
       
-      // Transform to include book information if needed
-      const transformedCorrections = corrections.map(correction => ({
-        id: correction.id,
-        originalWord: correction.originalWord,
-        correctedWord: correction.correctedWord,
-        sentenceContext: correction.sentenceContext,
-        fixType: correction.fixType,
-        createdAt: correction.createdAt,
-        updatedAt: correction.updatedAt,
-        bookId: correction.bookId,
-        bookTitle: correction.bookId, // This would need to be joined from book table in a real implementation
-        book: {
-          id: correction.bookId,
-          title: correction.bookId, // This would need to be joined from book table
-        },
-        location: {
-          pageNumber: 1, // This would need to be determined from paragraph context
-          paragraphIndex: 1,
-        },
-      }));
+      // Use the new repository method that includes book and paragraph info
+      const correctionDtos = await this.textCorrectionRepository.findManyWithBookInfo(filters);
       
-      this.logger.log(`Found ${transformedCorrections.length} corrections`);
+      this.logger.log(`Found ${correctionDtos.length} corrections`);
       return {
-        corrections: transformedCorrections,
-        total: transformedCorrections.length,
+        corrections: correctionDtos,
+        total: correctionDtos.length,
         timestamp: new Date().toISOString(),
       };
     } catch (error) {

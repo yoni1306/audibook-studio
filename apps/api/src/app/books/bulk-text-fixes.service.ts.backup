@@ -189,7 +189,7 @@ export class BulkTextFixesService {
         change.originalWord
       );
 
-      if (matches.length > 0) {
+      if (matches && matches.length > 0) {
         // Create both previews from the original content
         const previewBefore = this.createPreview(
           paragraph.content,
@@ -503,7 +503,7 @@ export class BulkTextFixesService {
     // For all word types, we need to use our word boundary matching function
     const matches = this.findWordMatches(content, word);
 
-    if (matches.length === 0) {
+    if (!matches || matches.length === 0) {
       // Fallback to the original behavior
       return content.substring(0, contextLength) + '...';
     }
@@ -545,7 +545,7 @@ export class BulkTextFixesService {
       const sentence = sentenceMatch[0];
       // Check if this sentence contains our word
       const wordInSentence = this.findWordMatches(sentence, word);
-      if (wordInSentence.length > 0) {
+      if (wordInSentence && wordInSentence.length > 0) {
         sentences.push(sentence.trim());
       }
     }
@@ -553,7 +553,7 @@ export class BulkTextFixesService {
     // If no sentences found with punctuation, create logical word-based segments
     if (sentences.length === 0) {
       const wordInContent = this.findWordMatches(content, word);
-      if (wordInContent.length > 0) {
+      if (wordInContent && wordInContent.length > 0) {
         // Create word-based sentences (15-20 words per segment)
         const words = content.trim().split(/\s+/);
         const wordsPerSegment = 15;
@@ -561,7 +561,7 @@ export class BulkTextFixesService {
         for (let i = 0; i < words.length; i += wordsPerSegment) {
           const segment = words.slice(i, i + wordsPerSegment).join(' ');
           const wordInSegment = this.findWordMatches(segment, word);
-          if (wordInSegment.length > 0) {
+          if (wordInSegment && wordInSegment.length > 0) {
             sentences.push(segment);
           }
         }
@@ -812,7 +812,7 @@ export class BulkTextFixesService {
     word: string,
     allowPrefixes = false,
     advancedHebrewMatching = false
-  ): string[] {
+  ): string[] | null {
     const escapedWord = this.escapeRegExp(word);
     const hebrewPrefixes = '[ובלכמשה]';
     
@@ -833,7 +833,7 @@ export class BulkTextFixesService {
         }
       } else {
         // Default: use punctuation and whitespace boundaries (safer, less false positives)
-        const wordBoundaryPunctuation = '[.,;:!?()\\[\\]{}"\u0027\u2013\u2014\u2015\u2016\u2017\u2018\u2019\u201C\u201D]';
+        const wordBoundaryPunctuation = '[.,;:!?()\\[\\]{}"\'\u2013\u2014\u2015\u2016\u2017\u2018\u2019\u201C\u201D]';
         if (allowPrefixes) {
           pattern = `(^|\\s|${wordBoundaryPunctuation}|${hebrewPrefixes})(${escapedWord})(?=\\s|${wordBoundaryPunctuation}|$)`;
         } else {
@@ -858,17 +858,17 @@ export class BulkTextFixesService {
       if (isHebrewWord && !advancedHebrewMatching) {
         // Extract the captured word from matches with boundary context
         const matches = [...text.matchAll(regex)];
-        return matches.length > 0 ? matches.map(match => match[match.length - 1]) : [];
+        return matches.length > 0 ? matches.map(match => match[match.length - 1]) : null;
       } else {
         // For simple patterns or advanced matching, use direct match
         const directMatches = text.match(regex);
-        return directMatches ? Array.from(directMatches) : [];
+        return directMatches ? Array.from(directMatches) : null;
       }
     } catch {
       // Fallback: use simpler patterns that work across all environments
       let fallbackPattern;
       if (isHebrewWord) {
-        const wordBoundaryPunctuation = '[.,;:!?()\\[\\]{}"\u0027\u2013\u2014\u2015\u2016\u2017\u2018\u2019\u201C\u201D]';
+        const wordBoundaryPunctuation = '[.,;:!?()\\[\\]{}"\'–—―‖‗‘’“”]';
         if (allowPrefixes) {
           fallbackPattern = `(^|\\s|${wordBoundaryPunctuation}|${hebrewPrefixes})(${escapedWord})(?=\\s|${wordBoundaryPunctuation}|$)`;
         } else {
@@ -879,12 +879,12 @@ export class BulkTextFixesService {
         fallbackPattern = `(^|\\s|[^\\d.,\\s])(${escapedWord})(?=$|\\s|[^\\d.,\\s])`;
       } else {
         // For non-Hebrew, non-number words, use word boundaries with whitespace/punctuation
-        fallbackPattern = `(^|\\s|[.,;:!?()\\[\\]{}"'\u2013\u2014\u2015\u2016\u2017\u2018\u2019\u201C\u201D])(${escapedWord})(?=$|\\s|[.,;:!?()\\[\\]{}"'\u2013\u2014\u2015\u2016\u2017\u2018\u2019\u201C\u201D])`;
+        fallbackPattern = `(^|\\s|[.,;:!?()\\[\\]{}"\'–—―‖‗‘’“”])(${escapedWord})(?=$|\\s|[.,;:!?()\\[\\]{}"\'–—―‖‗‘’“”])`;
       }
       
       const regex = new RegExp(fallbackPattern, 'gu');
       const matches = [...text.matchAll(regex)];
-      return matches.length > 0 ? matches.map(match => match[match.length - 1]) : [];
+      return matches.length > 0 ? matches.map(match => match[match.length - 1]) : null;
     }
   }
 
