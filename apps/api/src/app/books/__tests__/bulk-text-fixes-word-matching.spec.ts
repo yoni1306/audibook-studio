@@ -107,12 +107,14 @@ describe('BulkTextFixesService - Word Matching', () => {
       {
         originalWord: 'שלום',
         correctedWord: 'שָׁלוֹם',
-        position: 0
+        position: 0,
+        fixType: FixType.vowelization
       },
       {
         originalWord: 'טוב',
         correctedWord: 'טוֹב', 
-        position: 0
+        position: 0,
+        fixType: FixType.vowelization
       }
     ];
 

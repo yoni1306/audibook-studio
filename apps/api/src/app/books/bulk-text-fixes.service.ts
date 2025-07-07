@@ -8,6 +8,7 @@ import { TextCorrectionRepository } from './text-correction.repository';
 export interface BulkFixSuggestion {
   originalWord: string;
   correctedWord: string;
+  fixType: FixType;
   paragraphs: Array<{
     id: string;
     pageId: string;
@@ -46,6 +47,10 @@ export class BulkTextFixesService {
 
   /**
    * Finds paragraphs in the same book that contain the same words that were just fixed
+   * 
+   * TODO: Support bulk fix suggestions lookup in the original text fix paragraph
+   * Currently excludes the paragraph where fixes were applied, but should also
+   * suggest fixes for remaining instances of the same words within that paragraph
    */
   async findSimilarFixesInBook(
     bookId: string,
@@ -152,9 +157,25 @@ export class BulkTextFixesService {
         this.logger.debug(
           `Found ${matchingParagraphs.length} paragraphs containing '${change.originalWord}'`
         );
+        
+        // Sanity check: re-classify the correction to ensure fix type consistency
+        const reClassification = this.fixTypeHandlerRegistry.classifyCorrection(
+          change.originalWord,
+          change.correctedWord
+        );
+        
+        if (reClassification && reClassification.fixType !== change.fixType) {
+          this.logger.warn(
+            `⚠️ Fix type classification changed for "${change.originalWord}" → "${change.correctedWord}": ` +
+            `Original: ${change.fixType}, Re-classified: ${reClassification.fixType} ` +
+            `(confidence: ${reClassification.confidence})`
+          );
+        }
+        
         suggestions.push({
           originalWord: change.originalWord,
           correctedWord: change.correctedWord,
+          fixType: change.fixType,
           paragraphs: matchingParagraphs,
         });
       } else {
