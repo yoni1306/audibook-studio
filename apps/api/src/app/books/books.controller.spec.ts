@@ -128,7 +128,12 @@ describe('BooksController', () => {
         ...correction,
         bookTitle: correction.bookId,
         book: { id: correction.bookId, title: correction.bookId, author: 'Test Author' },
-        location: { pageNumber: 1, paragraphIndex: 1 }
+        location: { 
+          pageId: 'page-1', 
+          pageNumber: 1, 
+          paragraphId: correction.paragraphId, 
+          paragraphIndex: 1 
+        }
       }));
       textCorrectionRepository.findManyWithBookInfo.mockResolvedValue(mockCorrectionsWithBookInfo);
 
@@ -163,7 +168,9 @@ describe('BooksController', () => {
               author: 'Test Author',
             },
             location: {
+              pageId: 'page-1',
               pageNumber: 1,
+              paragraphId: 'paragraph-1',
               paragraphIndex: 1,
             },
           },
@@ -186,7 +193,9 @@ describe('BooksController', () => {
               author: 'Test Author',
             },
             location: {
+              pageId: 'page-1',
               pageNumber: 1,
+              paragraphId: 'paragraph-2',
               paragraphIndex: 1,
             },
           },
@@ -217,7 +226,12 @@ describe('BooksController', () => {
         ...correction,
         bookTitle: correction.bookId,
         book: { id: correction.bookId, title: correction.bookId, author: 'Test Author' },
-        location: { pageNumber: 1, paragraphIndex: 1 }
+        location: { 
+          pageId: 'page-1', 
+          pageNumber: 1, 
+          paragraphId: correction.paragraphId, 
+          paragraphIndex: 1 
+        }
       }));
       textCorrectionRepository.findManyWithBookInfo.mockResolvedValue(mockCorrectionsWithBookInfo);
 

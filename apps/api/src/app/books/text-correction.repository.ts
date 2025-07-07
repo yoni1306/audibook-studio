@@ -53,8 +53,10 @@ export interface CorrectionWithBookInfo {
     author: string | null;
   };
   location: {
-    pageNumber: number | null;
-    paragraphIndex: number | null;
+    pageId: string;
+    pageNumber: number;
+    paragraphId: string;
+    paragraphIndex: number;
   };
 }
 
@@ -192,6 +194,7 @@ export class TextCorrectionRepository {
               orderIndex: true,
               page: {
                 select: {
+                  id: true,
                   pageNumber: true,
                 },
               },
@@ -219,8 +222,10 @@ export class TextCorrectionRepository {
           author: correction.book?.author || null,
         },
         location: {
-          pageNumber: correction.paragraph?.page?.pageNumber || null,
-          paragraphIndex: correction.paragraph?.orderIndex || null,
+          pageId: correction.paragraph?.page?.id || '',
+          pageNumber: correction.paragraph?.page?.pageNumber || 0,
+          paragraphId: correction.paragraphId,
+          paragraphIndex: correction.paragraph?.orderIndex || 0,
         },
       }));
       

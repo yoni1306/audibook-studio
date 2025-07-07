@@ -21,19 +21,19 @@ describe('BulkTextFixesService', () => {
       originalWord: 'וגם',
       correctedWord: 'וְגַם',
       position: 10,
-      fixType: 'niqqud',
+      fixType: FixType.vowelization,
     },
     {
       originalWord: 'אות',
       correctedWord: 'אוֹת',
       position: 20,
-      fixType: 'niqqud',
+      fixType: FixType.vowelization,
     },
     {
       originalWord: 'ארה״ב',
       correctedWord: 'ארצות הברית',
       position: 30,
-      fixType: 'abbreviation',
+      fixType: FixType.expansion,
     },
   ];
 
@@ -290,7 +290,7 @@ describe('BulkTextFixesService', () => {
           originalWord: 'שלום!',
           correctedWord: 'שלום',
           position: 10,
-          fixType: 'spelling',
+          fixType: FixType.default,
         },
       ];
 
@@ -333,7 +333,7 @@ describe('BulkTextFixesService', () => {
           originalWord: 'nonexistent',
           correctedWord: 'word',
           position: 10,
-          fixType: 'spelling',
+          fixType: FixType.default,
         },
       ];
 
@@ -354,7 +354,7 @@ describe('BulkTextFixesService', () => {
           originalWord: 'אוֹת',
           correctedWord: 'אות',
           position: 10,
-          fixType: 'niqqud',
+          fixType: FixType.vowelization,
         },
       ];
 
@@ -408,7 +408,7 @@ describe('BulkTextFixesService', () => {
           originalWord: 'ספר',
           correctedWord: 'ספרים',
           position: 10,
-          fixType: 'spelling',
+          fixType: FixType.default,
         },
       ];
 
@@ -607,7 +607,7 @@ describe('BulkTextFixesService', () => {
         originalWord: 'ספר',
         correctedWord: 'ספרים',
         position: 10,
-        fixType: 'spelling',
+        fixType: FixType.default,
       },
     ];
 
@@ -673,7 +673,7 @@ describe('BulkTextFixesService', () => {
           originalWord: 'כתב',
           correctedWord: 'כַּתָּב',
           position: 10,
-          fixType: 'niqqud',
+          fixType: FixType.vowelization,
         },
       ];
 
@@ -730,7 +730,7 @@ describe('BulkTextFixesService', () => {
           originalWord: 'אור',
           correctedWord: 'אוֹר',
           position: 10,
-          fixType: 'niqqud',
+          fixType: FixType.vowelization,
         },
       ];
 
@@ -806,7 +806,7 @@ describe('BulkTextFixesService', () => {
           originalWord: 'ספר',
           correctedWord: 'סֵפֶר',
           position: 10,
-          fixType: 'niqqud',
+          fixType: FixType.vowelization,
         },
       ];
 
@@ -863,7 +863,7 @@ describe('BulkTextFixesService', () => {
           originalWord: '5',
           correctedWord: 'חמש',
           position: 0,
-          fixType: 'number_to_word',
+          fixType: FixType.expansion,
         },
       ];
 
@@ -905,7 +905,7 @@ describe('BulkTextFixesService', () => {
           originalWord: '10',
           correctedWord: 'עשר',
           position: 0,
-          fixType: 'number_to_word',
+          fixType: FixType.expansion,
         },
       ];
 
@@ -947,7 +947,7 @@ describe('BulkTextFixesService', () => {
           originalWord: '3',
           correctedWord: 'שלוש',
           position: 0,
-          fixType: 'number_to_word',
+          fixType: FixType.expansion,
         },
       ];
 
@@ -989,7 +989,7 @@ describe('BulkTextFixesService', () => {
           originalWord: 'ספר',
           correctedWord: 'ספרי',
           position: 0,
-          fixType: 'spelling',
+          fixType: FixType.default,
         },
       ];
 
@@ -1031,7 +1031,7 @@ describe('BulkTextFixesService', () => {
           originalWord: '2',
           correctedWord: 'שתי',
           position: 0,
-          fixType: 'number_to_word',
+          fixType: FixType.expansion,
         },
       ];
 
@@ -1315,7 +1315,7 @@ describe('BulkTextFixesService', () => {
           originalWord: 'אות',
           correctedWord: 'אוֹת',
           position: 10,
-          fixType: 'niqqud',
+          fixType: FixType.vowelization,
         };
 
         const paragraphs = [
@@ -1345,7 +1345,7 @@ describe('BulkTextFixesService', () => {
           originalWord: 'אות',
           correctedWord: 'אוֹת',
           position: 10,
-          fixType: 'niqqud',
+          fixType: FixType.vowelization,
         };
 
         const paragraphs = [
@@ -1378,7 +1378,7 @@ describe('BulkTextFixesService', () => {
           originalWord: 'אות',
           correctedWord: 'אוֹת',
           position: 10,
-          fixType: 'niqqud',
+          fixType: FixType.vowelization,
         };
 
         const paragraphs = [
@@ -1528,7 +1528,7 @@ describe('BulkTextFixesService', () => {
           originalWord: 'test',
           correctedWord: 'corrected',
           position: 0,
-          // fixType is undefined
+          fixType: FixType.default,
         },
       ];
 
@@ -1611,7 +1611,7 @@ describe('BulkTextFixesService', () => {
           originalWord: 'נתלה', // Use the exact word from the paragraph
           correctedWord: 'נתלה', // Same word - no actual change
           position: 0,
-          fixType: 'test_fix',
+          fixType: FixType.default,
         },
       ];
 
@@ -1669,7 +1669,7 @@ describe('BulkTextFixesService', () => {
           originalWord: 'שטוראי',
           correctedWord: 'שוטר',
           position: 0,
-          fixType: 'hebrew_spelling',
+          fixType: FixType.default,
         },
       ];
 
@@ -1710,19 +1710,19 @@ describe('BulkTextFixesService', () => {
           originalWord: '',
           correctedWord: 'something',
           position: 0,
-          fixType: 'addition',
+          fixType: FixType.default,
         },
         {
           originalWord: 'something',
           correctedWord: '',
           position: 10,
-          fixType: 'deletion',
+          fixType: FixType.default,
         },
         {
           originalWord: ' ',
           correctedWord: '  ',
           position: 20,
-          fixType: 'whitespace',
+          fixType: FixType.default,
         },
       ];
 

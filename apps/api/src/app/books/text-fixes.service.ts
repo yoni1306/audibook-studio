@@ -1,12 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { FixTypeHandlerRegistry } from './fix-type-handlers/fix-type-handler-registry';
 import { FixType } from '@prisma/client';
+import { FixTypeHandlerRegistry } from './fix-type-handlers/fix-type-handler-registry';
 
 export interface WordChange {
   originalWord: string;
   correctedWord: string;
   position: number;
+  fixType: FixType;
 }
 
 @Injectable()
@@ -69,10 +70,15 @@ export class TextFixesService {
       if (originalWord && correctedWord && originalWord !== correctedWord) {
         this.logger.debug(`Creating WordChange: "${originalWord}" → "${correctedWord}"`);
         
+        // Classify the fix type for this change
+        const classification = this.fixTypeRegistry.classifyCorrection(originalWord, correctedWord);
+        const fixType = classification.fixType;
+        
         changes.push({
           originalWord,
           correctedWord,
-          position: original[i].position
+          position: original[i].position,
+          fixType
         });
       }
     }

@@ -153,6 +153,7 @@ describe('TextFixesService', () => {
           originalWord: 'שגיאה',
           correctedWord: 'תיקון',
           position: 15,
+          fixType: FixType.default,
         },
       ];
 
@@ -185,8 +186,8 @@ describe('TextFixesService', () => {
 
     it('should handle multiple changes', async () => {
       const changes: WordChange[] = [
-        { originalWord: 'שגיאה', correctedWord: 'תיקון', position: 0 },
-        { originalWord: 'עם', correctedWord: 'עם', position: 1 },
+        { originalWord: 'שגיאה', correctedWord: 'תיקון', position: 0, fixType: FixType.default },
+        { originalWord: 'עם', correctedWord: 'עם', position: 1, fixType: FixType.default },
       ];
 
       mockTxTextCorrection.createMany.mockResolvedValue({ count: 2 });
@@ -221,7 +222,7 @@ describe('TextFixesService', () => {
 
     it('should handle changes without fixType', async () => {
       const changes: WordChange[] = [
-        { originalWord: 'שגיאה', correctedWord: 'תיקון', position: 0 },
+        { originalWord: 'שגיאה', correctedWord: 'תיקון', position: 0, fixType: FixType.default },
       ];
 
       mockTxTextCorrection.createMany.mockResolvedValue({ count: 1 });
@@ -255,7 +256,7 @@ describe('TextFixesService', () => {
 
     it('should handle errors and rethrow them', async () => {
       const changes: WordChange[] = [
-        { originalWord: 'שגיאה', correctedWord: 'תיקון', position: 0 },
+        { originalWord: 'שגיאה', correctedWord: 'תיקון', position: 0, fixType: FixType.default },
       ];
 
       const error = new Error('Database error');
@@ -268,7 +269,7 @@ describe('TextFixesService', () => {
 
     it('should handle words not found in original text', async () => {
       const changes: WordChange[] = [
-        { originalWord: 'לא_קיים', correctedWord: 'תיקון', position: 0 },
+        { originalWord: 'לא_קיים', correctedWord: 'תיקון', position: 0, fixType: FixType.default },
       ];
 
       mockTxTextCorrection.createMany.mockResolvedValue({ count: 1 });

@@ -13,6 +13,7 @@ import {
 } from './dto/correction-learning.dto';
 import { BulkFixSuggestion as ServiceBulkFixSuggestion } from './bulk-text-fixes.service';
 import { CorrectionWithBookInfo } from './text-correction.repository';
+import { WordChange } from './text-fixes.service';
 import { FixType } from '@prisma/client';
 import { S3Service } from '../s3/s3.service';
 
@@ -178,10 +179,18 @@ export class BooksController {
       // If there were text changes, find similar fixes in the book
       if (result.textChanges && result.textChanges.length > 0) {
         this.logger.debug(`Found ${result.textChanges.length} text changes, looking for similar fixes in book ${result.bookId}`);
+        // Convert TextChange[] to WordChange[] by adding default fixType
+        const wordChanges: WordChange[] = result.textChanges.map(change => ({
+          originalWord: change.originalWord,
+          correctedWord: change.correctedWord,
+          position: change.position,
+          fixType: FixType.default
+        }));
+        
         const bulkSuggestions = await this.bulkTextFixesService.findSimilarFixesInBook(
           result.bookId,
           paragraphId,
-          result.textChanges
+          wordChanges
         );
         
         this.logger.debug(`Found ${bulkSuggestions?.length || 0} bulk suggestions`);
@@ -347,6 +356,7 @@ export class BooksController {
         originalWord: string;
         correctedWord: string;
         position: number;
+        fixType?: FixType;
       }>;
     }
   ) {
@@ -355,10 +365,18 @@ export class BooksController {
       throw new NotFoundException('Paragraph not found');
     }
 
+    // Convert input to WordChange[] by adding fixType if missing
+    const wordChanges: WordChange[] = body.wordChanges.map(change => ({
+      originalWord: change.originalWord,
+      correctedWord: change.correctedWord,
+      position: change.position,
+      fixType: change.fixType || FixType.default
+    }));
+    
     const suggestions = await this.bulkTextFixesService.findSimilarFixesInBook(
       paragraph.page?.book?.id || '',
       paragraphId,
-      body.wordChanges
+      wordChanges
     );
     
     // Map service suggestions to DTO format
