@@ -33,6 +33,7 @@ dist/
 !.env.example
 
 scripts/deploy/
+debug_scripts/
 
 aws-credentials-production.txt
 

@@ -13,6 +13,7 @@ export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
+  const [parsingMethod, setParsingMethod] = useState<'page-based' | 'xhtml-based'>('xhtml-based');
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -38,6 +39,7 @@ export default function UploadPage() {
       const { data, error } = await apiClient.s3.getPresignedUpload({
         filename: file.name,
         contentType: 'application/epub+zip',
+        parsingMethod,
       });
 
       if (error || !data) throw new Error('Failed to get upload URL');
@@ -82,6 +84,48 @@ export default function UploadPage() {
           disabled={uploading}
         />
       </div>
+
+      {file && (
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>
+            Choose Parsing Method:
+          </label>
+          <div style={{ marginBottom: '10px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+              <input
+                type="radio"
+                value="page-based"
+                checked={parsingMethod === 'page-based'}
+                onChange={(e) => setParsingMethod(e.target.value as 'page-based' | 'xhtml-based')}
+                disabled={uploading}
+                style={{ marginRight: '8px' }}
+              />
+              <div>
+                <strong>Page-Based Parser</strong>
+                <div style={{ fontSize: '14px', color: '#666', marginTop: '2px' }}>
+                  Optimizes paragraph sizes for consistent audio segments. Rebuilds content structure for uniform playback experience.
+                </div>
+              </div>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center' }}>
+              <input
+                type="radio"
+                value="xhtml-based"
+                checked={parsingMethod === 'xhtml-based'}
+                onChange={(e) => setParsingMethod(e.target.value as 'page-based' | 'xhtml-based')}
+                disabled={uploading}
+                style={{ marginRight: '8px' }}
+              />
+              <div>
+                <strong>XHTML-Based Parser</strong>
+                <div style={{ fontSize: '14px', color: '#666', marginTop: '2px' }}>
+                  Preserves original document structure and formatting. Maintains author&apos;s intended paragraph breaks and page divisions.
+                </div>
+              </div>
+            </label>
+          </div>
+        </div>
+      )}
 
       <button
         onClick={handleUpload}

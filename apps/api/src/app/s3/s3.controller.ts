@@ -30,10 +30,10 @@ export class S3Controller {
     }
   })
   async getPresignedUploadUrl(
-    @Body() body: { filename: string; contentType: string }
+    @Body() body: { filename: string; contentType: string; parsingMethod?: 'page-based' | 'xhtml-based' }
   ) {
     try {
-      const { filename, contentType } = body;
+      const { filename, contentType, parsingMethod = 'page-based' } = body;
       const key = `raw/${Date.now()}-${filename}`;
 
       this.logger.log(`📤 [API] Generating presigned URL for ${filename}`);
@@ -50,7 +50,7 @@ export class S3Controller {
       this.logger.log(`📚 [API] Created book ${book.id} for file ${key}`);
 
       // Start async file monitoring and job queueing
-      this.monitorAndQueueJob(book.id, key).catch((error) => {
+      this.monitorAndQueueJob(book.id, key, parsingMethod).catch((error) => {
         this.logger.error(
           `💥 [API] Failed to monitor and queue job for book ${book.id}:`,
           error
@@ -75,7 +75,7 @@ export class S3Controller {
     }
   }
 
-  private async monitorAndQueueJob(bookId: string, s3Key: string) {
+  private async monitorAndQueueJob(bookId: string, s3Key: string, parsingMethod: 'page-based' | 'xhtml-based' = 'page-based') {
     this.logger.log(`👀 [API] Starting to monitor file ${s3Key} for book ${bookId}`);
 
     try {
@@ -87,6 +87,7 @@ export class S3Controller {
         await this.queueService.addEpubParsingJob({
           bookId,
           s3Key,
+          parsingMethod,
         });
         this.logger.log(`✅ [API] Successfully queued parsing job for book ${bookId}`);
       } else {

@@ -10,6 +10,7 @@ import { Worker, Job } from 'bullmq';
 import { createLogger } from '@audibook/logger';
 import { downloadFromS3, uploadToS3 } from './s3-client';
 import { PageBasedEPUBParser } from './text-processing/page-based-epub-parser';
+import { XHTMLBasedEPUBParser } from './text-processing/xhtml-based-epub-parser';
 import {
   updateBookStatus,
   getParagraph,
@@ -69,10 +70,12 @@ const worker = new Worker(
             });
             return { processed: true, message: job.data.message };
 
-          case 'parse-epub':
-            logger.info('Starting page-based EPUB parsing', {
+          case 'parse-epub': {
+            const parsingMethod = job.data.parsingMethod || 'xhtml-based';
+            logger.info(`Starting ${parsingMethod} EPUB parsing`, {
               bookId: job.data.bookId,
               s3Key: job.data.s3Key,
+              parsingMethod,
             });
 
             try {
@@ -91,25 +94,77 @@ const worker = new Worker(
               await updateBookStatus(job.data.bookId, BookStatus.PROCESSING);
               logger.debug('Book status updated to PROCESSING');
 
-              // Parse the EPUB using page-based approach
-              logger.info('Starting page-based EPUB parsing', {
+              // Parse the EPUB using selected method
+              logger.info(`Starting ${parsingMethod} EPUB parsing`, {
                 localPath,
               });
               const parseStart = Date.now();
-              const parser = new PageBasedEPUBParser({
-                pageBreakDetection: {
-                  includeExplicit: true,
-                  includeStructural: true,
-                  includeStylistic: true,
-                  includeSemantic: true,
-                  minConfidence: 0.6,
-                },
-                paragraphTargetLengthChars: 750,
-                paragraphTargetLengthWords: 150,
-              });
               
-              const result = await parser.parseEpub(localPath);
-              logger.info('Page-based EPUB parsing completed', {
+              let result;
+              if (parsingMethod === 'xhtml-based') {
+                const xhtmlParser = new XHTMLBasedEPUBParser({
+                  paragraphTargetLengthChars: 750,
+                  paragraphTargetLengthWords: 150,
+                  includeEmptyPages: false,
+                  minParagraphLength: 4,
+                });
+                
+                const xhtmlResult = await xhtmlParser.parseEpub(localPath);
+                
+                logger.info('XHTML parser results:', {
+                  totalXHTMLFiles: xhtmlResult.metadata.xhtmlFiles?.length || 0,
+                  totalPages: xhtmlResult.pages.length,
+                  totalParagraphs: xhtmlResult.metadata.totalParagraphs,
+                  averageParagraphsPerPage: xhtmlResult.metadata.averageParagraphsPerPage,
+                });
+                
+                // Log individual page details for debugging
+                logger.debug('XHTML pages breakdown:', {
+                  pages: xhtmlResult.pages.map(p => ({
+                    pageNumber: p.pageNumber,
+                    fileName: p.fileName?.split('/').pop() || 'unknown',
+                    paragraphCount: p.paragraphs.length
+                  }))
+                });
+                
+                // Convert XHTML result to page-based format for database compatibility
+                result = {
+                  pages: xhtmlResult.pages.map((xhtmlPage) => ({
+                    pageNumber: xhtmlPage.pageNumber, // Use original page number from XHTML parser
+                    sourceChapter: xhtmlPage.sourceChapter,
+                    startPosition: xhtmlPage.startPosition,
+                    endPosition: xhtmlPage.endPosition,
+                    content: '', // Not used in page-based format
+                    paragraphs: xhtmlPage.paragraphs.map(p => ({
+                      orderIndex: p.orderIndex,
+                      content: p.content,
+                      audioStatus: 'PENDING' as const,
+                    })),
+                  })),
+                  metadata: {
+                    totalPages: xhtmlResult.metadata.totalPages,
+                    totalParagraphs: xhtmlResult.metadata.totalParagraphs,
+                    averageParagraphsPerPage: xhtmlResult.metadata.averageParagraphsPerPage,
+                  },
+                };
+              } else {
+                // Use page-based parser (default)
+                const pageParser = new PageBasedEPUBParser({
+                  pageBreakDetection: {
+                    includeExplicit: true,
+                    includeStructural: true,
+                    includeStylistic: true,
+                    includeSemantic: true,
+                    minConfidence: 0.6,
+                  },
+                  paragraphTargetLengthChars: 750,
+                  paragraphTargetLengthWords: 150,
+                });
+                
+                result = await pageParser.parseEpub(localPath);
+              }
+              
+              logger.info(`${parsingMethod} EPUB parsing completed`, {
                 parseDuration: Date.now() - parseStart,
                 totalPages: result.pages.length,
                 totalParagraphs: result.metadata.totalParagraphs,
@@ -166,6 +221,7 @@ const worker = new Worker(
 
               throw error;
             }
+          }
 
           case 'generate-audio':
             logger.info('Starting audio generation', {
