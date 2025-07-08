@@ -281,10 +281,11 @@ export function createApiClient(baseUrl: string) {
       cleanJobs: (status: string) => client.DELETE('/queue/clean/{status}', {
         params: { path: { status } },
       }),
-      parseEpub: (data: { bookId: string; s3Key: string }) => client.POST('/queue/parse-epub', { 
+      parseEpub: (data: { bookId: string; s3Key: string; parsingMethod?: 'page-based' | 'xhtml-based' }) => client.POST('/queue/parse-epub', { 
         body: {
           bookId: data.bookId,
           s3Key: data.s3Key,
+          parsingMethod: data.parsingMethod,
         }
       }),
     },

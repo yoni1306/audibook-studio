@@ -9,7 +9,7 @@ export class QueueService {
 
   constructor(@InjectQueue('audio-processing') private audioQueue: Queue) {}
 
-  async addEpubParsingJob(data: { bookId: string; s3Key: string }) {
+  async addEpubParsingJob(data: { bookId: string; s3Key: string; parsingMethod?: 'page-based' | 'xhtml-based' }) {
     const correlationId = getCurrentCorrelationId();
     const job = await this.audioQueue.add('parse-epub', {
       ...data,
