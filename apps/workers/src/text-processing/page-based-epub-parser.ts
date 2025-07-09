@@ -12,6 +12,8 @@ import {
   EPUBPageBreak,
   PageBreakOptions 
 } from './utils/epub-page-break-detector';
+import { ParagraphProcessor, ProcessedParagraph } from './utils/paragraph-processor';
+import { DEFAULT_EPUB_PARSER_CONFIG } from '../config/epub-parser-config';
 
 const logger = createLogger('PageBasedEpubParser');
 
@@ -24,13 +26,10 @@ export interface ParsedPage {
     startBreak?: EPUBPageBreak;
     endBreak?: EPUBPageBreak;
   };
-  paragraphs: ParsedParagraph[];
+  paragraphs: ProcessedParagraph[];
 }
 
-export interface ParsedParagraph {
-  orderIndex: number;
-  content: string;
-}
+// Using ProcessedParagraph from shared utility directly
 
 export interface EPUBParseResult {
   pages: ParsedPage[];
@@ -49,19 +48,19 @@ export interface PageBasedParserOptions {
 
 export class PageBasedEPUBParser {
   private readonly defaultOptions: Required<PageBasedParserOptions> = {
-    pageBreakDetection: {
-      includeExplicit: true,
-      includeStructural: true,
-      includeStylistic: true,
-      includeSemantic: true,
-      minConfidence: 0.6,
-    },
-    paragraphTargetLengthChars: 750,
-    paragraphTargetLengthWords: 150,
+    pageBreakDetection: DEFAULT_EPUB_PARSER_CONFIG.pageBreakDetection,
+    paragraphTargetLengthChars: DEFAULT_EPUB_PARSER_CONFIG.paragraphTargetLengthChars,
+    paragraphTargetLengthWords: DEFAULT_EPUB_PARSER_CONFIG.paragraphTargetLengthWords,
   };
+  
+  private readonly paragraphProcessor: ParagraphProcessor;
 
   constructor(private options: PageBasedParserOptions = {}) {
     this.options = { ...this.defaultOptions, ...options };
+    this.paragraphProcessor = new ParagraphProcessor({
+      paragraphTargetLengthChars: this.options.paragraphTargetLengthChars,
+      paragraphTargetLengthWords: this.options.paragraphTargetLengthWords,
+    });
   }
 
   async parseEpub(epubPath: string): Promise<EPUBParseResult> {
@@ -497,8 +496,8 @@ export class PageBasedEPUBParser {
            wordCount >= this.options.paragraphTargetLengthWords;
   }
 
-  private extractParagraphsFromText(text: string, basePosition: number): ParsedParagraph[] {
-    logger.debug(`📝 Starting target-based paragraph extraction`, {
+  private extractParagraphsFromText(text: string, basePosition: number): ProcessedParagraph[] {
+    logger.debug(`📝 Starting paragraph extraction with shared processor`, {
       textLength: text.length,
       basePosition,
       textPreview: text.substring(0, 150) + (text.length > 150 ? '...' : ''),
@@ -506,381 +505,32 @@ export class PageBasedEPUBParser {
       targetWords: this.options.paragraphTargetLengthWords
     });
 
-    const paragraphs: ParsedParagraph[] = [];
-    
-    // Split by double newlines to get initial paragraph-like chunks
-    const initialChunks = text.split(/\n\s*\n/)
+    // Split by double newlines to get initial text chunks
+    const textChunks = text.split(/\n\s*\n/)
       .map(chunk => chunk.trim())
       .filter(chunk => chunk.length > 0);
     
     logger.debug(`📊 Initial text split`, {
       totalChunks: text.split(/\n\s*\n/).length,
-      validChunks: initialChunks.length,
-      filteredOutCount: text.split(/\n\s*\n/).length - initialChunks.length
+      validChunks: textChunks.length,
+      filteredOutCount: text.split(/\n\s*\n/).length - textChunks.length
     });
 
-    // Combine chunks to reach target size, finalizing close to target at sentence boundaries
-    let currentParagraph = '';
-    let chunkIndex = 0;
+    // Use shared paragraph processor for consistent results
+    const processedParagraphs = this.paragraphProcessor.processTextChunks(textChunks);
 
-    while (chunkIndex < initialChunks.length) {
-      const chunk = initialChunks[chunkIndex];
-      
-      // If current paragraph is empty, start with this chunk
-      if (currentParagraph === '') {
-        currentParagraph = chunk;
-        chunkIndex++;
-        continue;
-      }
-
-      const testParagraph = currentParagraph + '\n\n' + chunk;
-      
-      // Check if adding this chunk would exceed 2x target length
-      if (testParagraph.length > this.options.paragraphTargetLengthChars * 2) {
-        // Finalize current paragraph ensuring it ends with complete sentence
-        this.finalizeParagraphWithSentenceBoundary(currentParagraph, paragraphs);
-        currentParagraph = chunk;
-        chunkIndex++;
-        continue;
-      }
-
-      // Check if we've reached or exceeded target size
-      const currentChars = currentParagraph.length;
-      const currentWords = this.countWords(currentParagraph);
-      const testChars = testParagraph.length;
-      const testWords = this.countWords(testParagraph);
-      
-      const reachedTargetChars = currentChars >= this.options.paragraphTargetLengthChars;
-      const reachedTargetWords = currentWords >= this.options.paragraphTargetLengthWords;
-      
-      if ((reachedTargetChars || reachedTargetWords)) {
-        // We've reached target and adding more would make it too long
-        // Check if current paragraph ends with complete sentence
-        if (this.endsWithCompleteSentence(currentParagraph)) {
-          logger.debug(`📝 Finalizing at target size with complete sentence`, {
-            currentChars,
-            currentWords,
-            targetChars: this.options.paragraphTargetLengthChars,
-            targetWords: this.options.paragraphTargetLengthWords
-          });
-          
-          this.finalizeParagraphWithSentenceBoundary(currentParagraph, paragraphs);
-          currentParagraph = chunk;
-          chunkIndex++;
-          continue;
-        } else {
-          // Try to find a sentence boundary in the test paragraph
-          const testEndsWithSentence = this.endsWithCompleteSentence(testParagraph);
-          if (testEndsWithSentence && testChars <= this.options.paragraphTargetLengthChars * 2) {
-            // Test paragraph ends with sentence and isn't too much over target, use it
-            logger.debug(`📝 Adding chunk to complete sentence near target`, {
-              testChars,
-              testWords,
-              targetChars: this.options.paragraphTargetLengthChars,
-              targetWords: this.options.paragraphTargetLengthWords,
-              threshold: this.options.paragraphTargetLengthChars * 2
-            });
-            
-            currentParagraph = testParagraph;
-            chunkIndex++;
-            
-            this.finalizeParagraphWithSentenceBoundary(currentParagraph, paragraphs);
-            currentParagraph = '';
-            continue;
-          } else {
-            // Can't find good sentence boundary in test, try to complete current paragraph
-            const completedParagraph = this.completeParagraphAtSentenceBoundary(currentParagraph);
-            this.finalizeParagraphWithSentenceBoundary(completedParagraph, paragraphs);
-            currentParagraph = chunk;
-            chunkIndex++;
-            continue;
-          }
-        }
-      }
-
-      // Add chunk to current paragraph
-      currentParagraph = testParagraph;
-      chunkIndex++;
-      
-      // Safety check: if current paragraph is getting too large, force finalization
-      if (currentParagraph.length > this.options.paragraphTargetLengthChars * 2) {
-        logger.debug(`⚠️ Forcing paragraph finalization due to excessive size`, {
-          currentLength: currentParagraph.length,
-          maxAllowed: this.options.paragraphTargetLengthChars * 2,
-          target: this.options.paragraphTargetLengthChars
-        });
-        
-        this.finalizeParagraphWithSentenceBoundary(currentParagraph, paragraphs);
-        currentParagraph = '';
-      }
-    }
-
-    // Don't forget the last paragraph - ensure it ends with complete sentence
-    if (currentParagraph.trim().length > 0) {
-      this.finalizeParagraphWithSentenceBoundary(currentParagraph, paragraphs);
-    }
-
-    logger.info(`📄 Target-based paragraph extraction completed`, {
-      totalParagraphs: paragraphs.length,
-      averageChars: paragraphs.length > 0 ? Math.round(paragraphs.reduce((sum, p) => sum + p.content.length, 0) / paragraphs.length) : 0,
-      averageWords: paragraphs.length > 0 ? Math.round(paragraphs.reduce((sum, p) => sum + this.countWords(p.content), 0) / paragraphs.length) : 0,
+    logger.info(`📄 Paragraph extraction completed with shared processor`, {
+      totalParagraphs: processedParagraphs.length,
+      averageChars: processedParagraphs.length > 0 ? Math.round(processedParagraphs.reduce((sum, p) => sum + p.content.length, 0) / processedParagraphs.length) : 0,
+      averageWords: processedParagraphs.length > 0 ? Math.round(processedParagraphs.reduce((sum, p) => sum + this.countWords(p.content), 0) / processedParagraphs.length) : 0,
       targetChars: this.options.paragraphTargetLengthChars,
-      targetWords: this.options.paragraphTargetLengthWords,
-      paragraphsAtTarget: paragraphs.filter(p => 
-        p.content.length >= this.options.paragraphTargetLengthChars || 
-        this.countWords(p.content) >= this.options.paragraphTargetLengthWords
-      ).length,
-      paragraphsWithSentenceEndings: paragraphs.filter(p => this.endsWithCompleteSentence(p.content)).length,
-      sentenceEndingCompliance: paragraphs.length > 0 ? 
-        Math.round((paragraphs.filter(p => this.endsWithCompleteSentence(p.content)).length / paragraphs.length) * 100) : 0
+      targetWords: this.options.paragraphTargetLengthWords
     });
 
-    return paragraphs.map((paragraph, index) => ({
-      ...paragraph,
-      orderIndex: index
-    }));
+    return processedParagraphs;
   }
 
-  private endsWithCompleteSentence(text: string): boolean {
-    const trimmed = text.trim();
-    // Enhanced sentence ending detection for Hebrew and English
-    // Matches: period, exclamation, question mark, optionally followed by closing quotes/brackets
-    return /[.!?][\u0022\u0027\u201C\u201D\u2018\u2019)\]}]*\s*$/.test(trimmed);
-  }
-
-  private findLastSentenceBoundary(text: string): number {
-    const trimmed = text.trim();
-    // Enhanced regex to find sentence boundaries in Hebrew and English text
-    // Looks for sentence endings followed by whitespace and capital/Hebrew letter, or end of text
-    const sentenceBoundaryRegex = /[.!?][\u0022\u0027\u201C\u201D\u2018\u2019)\]}]*(?:\s+(?=[A-Z\u05D0-\u05EA])|$)/g;
-    
-    let lastBoundary = -1;
-    let match;
-    
-    while ((match = sentenceBoundaryRegex.exec(trimmed)) !== null) {
-      lastBoundary = match.index + match[0].length;
-    }
-    
-    return lastBoundary;
-  }
-
-  private completeParagraphAtSentenceBoundary(text: string): string {
-    const trimmed = text.trim();
-    
-    // If already ends with complete sentence, return as-is
-    if (this.endsWithCompleteSentence(trimmed)) {
-      return trimmed;
-    }
-    
-    // Find the last sentence boundary
-    const lastBoundary = this.findLastSentenceBoundary(trimmed);
-    
-    if (lastBoundary > 0 && lastBoundary < trimmed.length) {
-      // Cut at the last sentence boundary
-      const completed = trimmed.substring(0, lastBoundary).trim();
-      
-      logger.debug(`✂️ Completed paragraph at sentence boundary`, {
-        originalLength: trimmed.length,
-        completedLength: completed.length,
-        removedText: trimmed.substring(lastBoundary).trim().substring(0, 50) + '...'
-      });
-      
-      return completed;
-    }
-    
-    // If no sentence boundary found, return original (better than nothing)
-    logger.warn(`⚠️ No sentence boundary found in paragraph, keeping original`, {
-      textLength: trimmed.length,
-      textPreview: trimmed.substring(0, 100) + '...'
-    });
-    
-    return trimmed;
-  }
-
-  private finalizeParagraphWithSentenceBoundary(text: string, paragraphs: ParsedParagraph[]): void {
-    const trimmed = text.trim();
-    if (trimmed.length === 0) return;
-    
-    // Calculate thresholds
-    const targetChars = this.options.paragraphTargetLengthChars;
-    const targetWords = this.options.paragraphTargetLengthWords;
-    
-    const currentChars = trimmed.length;
-    const currentWords = this.countWords(trimmed);
-    
-    // Only split if paragraph significantly exceeds target length
-    const splitThreshold = targetChars * 2; // Split at 2x target (1500 chars)
-    
-    if (currentChars > splitThreshold) {
-      // Paragraph significantly exceeds target, split it at sentence boundaries
-      logger.info(`✂️ Splitting oversized paragraph at sentence boundaries`, {
-        chars: currentChars,
-        words: currentWords,
-        splitThreshold,
-        targetChars,
-        reason: 'exceeds 2x target length'
-      });
-      
-      const splitParagraphs = this.splitLongParagraphAtSentences(trimmed);
-      splitParagraphs.forEach(splitText => {
-        paragraphs.push({
-          orderIndex: paragraphs.length,
-          content: splitText,
-        });
-        
-        logger.debug(`➕ Added split paragraph ${paragraphs.length}`, {
-          chars: splitText.length,
-          words: this.countWords(splitText),
-          endsWithSentence: this.endsWithCompleteSentence(splitText)
-        });
-      });
-    } else {
-      // Ensure paragraph ends with complete sentence
-      const completedParagraph = this.completeParagraphAtSentenceBoundary(trimmed);
-      
-      paragraphs.push({
-        orderIndex: paragraphs.length,
-        content: completedParagraph,
-      });
-      
-      logger.debug(`✅ Added paragraph ${paragraphs.length}`, {
-        chars: completedParagraph.length,
-        words: this.countWords(completedParagraph),
-        meetsTarget: completedParagraph.length >= targetChars || this.countWords(completedParagraph) >= targetWords,
-        endsWithSentence: this.endsWithCompleteSentence(completedParagraph),
-        withinMaxLimit: true
-      });
-    }
-  }
-
-  private splitLongParagraphAtSentences(text: string): string[] {
-    logger.debug(`🔪 Starting long paragraph split at sentence boundaries`, {
-      textLength: text.length,
-      targetLength: this.options.paragraphTargetLengthChars,
-      textPreview: text.substring(0, 200) + (text.length > 200 ? '...' : '')
-    });
-
-    const result: string[] = [];
-    let currentChunk = '';
-    
-    // Enhanced sentence splitting for Hebrew and English
-    // Split by sentences - keep punctuation with the sentence
-    const sentenceRegex = /[.!?][\u0022\u0027\u201C\u201D\u2018\u2019)\]}]*\s+(?=[A-Z\u05D0-\u05EA])/g;
-    const sentences: string[] = [];
-    
-    let lastIndex = 0;
-    let match;
-    
-    while ((match = sentenceRegex.exec(text)) !== null) {
-      // Include the sentence with its ending punctuation
-      const sentence = text.substring(lastIndex, match.index + match[0].length).trim();
-      if (sentence.length > 0) {
-        sentences.push(sentence);
-      }
-      lastIndex = match.index + match[0].length;
-    }
-    
-    // Add the last sentence (from last match to end of text)
-    if (lastIndex < text.length) {
-      const lastSentence = text.substring(lastIndex).trim();
-      if (lastSentence.length > 0) {
-        sentences.push(lastSentence);
-      }
-    }
-    
-    // If no sentences were found, treat the whole text as one sentence
-    if (sentences.length === 0) {
-      sentences.push(text.trim());
-    }
-    
-    logger.debug(`📝 Text split into sentences`, {
-      totalSentences: sentences.length,
-      averageSentenceLength: sentences.length > 0 ? Math.round(sentences.reduce((sum, s) => sum + s.trim().length, 0) / sentences.length) : 0,
-      sentencePreviews: sentences.slice(0, 3).map(s => s.trim().substring(0, 80) + '...')
-    });
-    
-    for (let i = 0; i < sentences.length; i++) {
-      const sentence = sentences[i].trim();
-      
-      logger.debug(`🔍 Processing sentence ${i + 1}/${sentences.length}`, {
-        sentenceLength: sentence.length,
-        currentChunkLength: currentChunk.length,
-        wouldExceedTarget: (currentChunk + ' ' + sentence).length > this.options.paragraphTargetLengthChars,
-        sentencePreview: sentence.substring(0, 100) + (sentence.length > 100 ? '...' : '')
-      });
-      
-      if (currentChunk.length === 0) {
-        // First sentence in chunk
-        currentChunk = sentence;
-        logger.debug(`🆕 Started new chunk with sentence`, {
-          chunkLength: currentChunk.length,
-          endsWithSentence: this.endsWithCompleteSentence(currentChunk)
-        });
-      } else {
-        const combinedLength = (currentChunk + ' ' + sentence).length;
-        const combinedWords = this.countWords(currentChunk + ' ' + sentence);
-        
-        // Check if adding this sentence would exceed our target thresholds
-        const exceedsTargetChars = combinedLength > this.options.paragraphTargetLengthChars;
-        const exceedsTargetWords = combinedWords > this.options.paragraphTargetLengthWords;
-        
-        if (exceedsTargetChars || exceedsTargetWords) {
-          // Save current chunk and start new one - current chunk should end with complete sentence
-          logger.info(`💾 Saving chunk (target threshold reached)`, {
-            chunkLength: currentChunk.length,
-            chunkWords: this.countWords(currentChunk),
-            targetChars: this.options.paragraphTargetLengthChars,
-            targetWords: this.options.paragraphTargetLengthWords,
-            reason: 'target_exceeded',
-            endsWithSentence: this.endsWithCompleteSentence(currentChunk),
-            chunkPreview: currentChunk.substring(0, 100) + '...'
-          });
-          
-          result.push(currentChunk);
-          currentChunk = sentence;
-          
-          logger.debug(`🆕 Started new chunk after split`, {
-            newChunkLength: currentChunk.length,
-            totalChunksSoFar: result.length,
-            endsWithSentence: this.endsWithCompleteSentence(currentChunk)
-          });
-        } else {
-          currentChunk += ' ' + sentence;
-          logger.debug(`➕ Added sentence to current chunk`, {
-            newChunkLength: currentChunk.length,
-            newChunkWords: this.countWords(currentChunk),
-            remainingTargetCapacity: this.options.paragraphTargetLengthChars - currentChunk.length,
-            endsWithSentence: this.endsWithCompleteSentence(currentChunk)
-          });
-        }
-      }
-    }
-    
-    // Add the last chunk
-    if (currentChunk.length > 0) {
-      result.push(currentChunk);
-      logger.debug(`💾 Added final chunk`, {
-        chunkLength: currentChunk.length,
-        totalChunks: result.length,
-        endsWithSentence: this.endsWithCompleteSentence(currentChunk)
-      });
-    }
-
-    logger.info(`✅ Long paragraph split completed`, {
-      originalLength: text.length,
-      originalWords: this.countWords(text),
-      splitInto: result.length,
-      chunkLengths: result.map(chunk => chunk.length),
-      chunkWords: result.map(chunk => this.countWords(chunk)),
-      averageChunkLength: result.length > 0 ? Math.round(result.reduce((sum, chunk) => sum + chunk.length, 0) / result.length) : 0,
-      averageChunkWords: result.length > 0 ? Math.round(result.reduce((sum, chunk) => sum + this.countWords(chunk), 0) / result.length) : 0,
-      chunksWithSentenceEndings: result.filter(chunk => this.endsWithCompleteSentence(chunk)).length,
-      sentenceEndingCompliance: result.length > 0 ? 
-        Math.round((result.filter(chunk => this.endsWithCompleteSentence(chunk)).length / result.length) * 100) : 0
-    });
-
-    return result;
-  }
+  // All paragraph processing logic now handled by shared ParagraphProcessor utility
 
   private async cleanup(tempDir: string): Promise<void> {
     try {
