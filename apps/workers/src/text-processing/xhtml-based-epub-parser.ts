@@ -6,23 +6,22 @@ import { JSDOM } from 'jsdom';
 import * as yauzl from 'yauzl';
 
 import { createLogger } from '@audibook/logger';
+import { ParagraphProcessor, ProcessedParagraph } from './utils/paragraph-processor';
+import { DEFAULT_EPUB_PARSER_CONFIG } from '../config/epub-parser-config';
 
 const logger = createLogger('XHTMLBasedEpubParser');
 
 export interface XHTMLPage {
   pageNumber: number;
+  fileName: string;
+  filePath: string;
   sourceChapter: number;
   startPosition: number;
   endPosition: number;
-  fileName: string;
-  filePath: string;
-  paragraphs: XHTMLParagraph[];
+  paragraphs: ProcessedParagraph[];
 }
 
-export interface XHTMLParagraph {
-  orderIndex: number;
-  content: string;
-}
+// Using ProcessedParagraph from shared utility
 
 export interface XHTMLParseResult {
   pages: XHTMLPage[];
@@ -43,14 +42,20 @@ export interface XHTMLParserOptions {
 
 export class XHTMLBasedEPUBParser {
   private readonly defaultOptions: Required<XHTMLParserOptions> = {
-    paragraphTargetLengthChars: 750,
-    paragraphTargetLengthWords: 150,
+    paragraphTargetLengthChars: DEFAULT_EPUB_PARSER_CONFIG.paragraphTargetLengthChars,
+    paragraphTargetLengthWords: DEFAULT_EPUB_PARSER_CONFIG.paragraphTargetLengthWords,
     includeEmptyPages: false,
     minParagraphLength: 10,
   };
+  
+  private readonly paragraphProcessor: ParagraphProcessor;
 
   constructor(private options: XHTMLParserOptions = {}) {
     this.options = { ...this.defaultOptions, ...options };
+    this.paragraphProcessor = new ParagraphProcessor({
+      paragraphTargetLengthChars: this.options.paragraphTargetLengthChars,
+      paragraphTargetLengthWords: this.options.paragraphTargetLengthWords,
+    });
   }
 
   async parseEpub(epubPath: string): Promise<XHTMLParseResult> {
@@ -165,27 +170,12 @@ export class XHTMLBasedEPUBParser {
           const isXHTML = ext === '.xhtml' || ext === '.html' || ext === '.htm';
           
           if (isXHTML) {
-            // Include all XHTML files without content filtering for now
+            // Add all XHTML files
             xhtmlFiles.push({
               fileName: entry.name,
               filePath: fullPath
             });
             logger.debug(`Found XHTML file: ${entry.name}`);
-            
-            // TODO: Re-enable content filtering if needed
-            // Check if file contains actual content (not just CSS or other resources)
-            // try {
-            //   const content = await fsPromises.readFile(fullPath, 'utf-8');
-            //   if (this.isContentFile(content)) {
-            //     xhtmlFiles.push({
-            //       fileName: entry.name,
-            //       filePath: fullPath
-            //     });
-            //     logger.debug(`Found XHTML content file: ${entry.name}`);
-            //   }
-            // } catch (error) {
-            //   logger.warn(`Could not read file ${entry.name}:`, error);
-            // }
           }
         }
       }
@@ -283,8 +273,8 @@ export class XHTMLBasedEPUBParser {
     return pages;
   }
 
-  private async extractParagraphsFromXHTML(content: string, fileName: string): Promise<XHTMLParagraph[]> {
-    const paragraphs: XHTMLParagraph[] = [];
+  private async extractParagraphsFromXHTML(content: string, fileName: string): Promise<ProcessedParagraph[]> {
+    const paragraphs: ProcessedParagraph[] = [];
     
     try {
       // Parse HTML/XHTML content
@@ -299,35 +289,26 @@ export class XHTMLBasedEPUBParser {
         'p, h1, h2, h3, h4, h5, h6, div, section, article, main, blockquote, li'
       );
 
-      let orderIndex = 0;
-
+      // Collect all text content first, then use shared processor
+      const textChunks: string[] = [];
+      
       textElements.forEach((element) => {
         const textContent = this.extractTextFromElement(element, document);
-        
-        if (textContent && textContent.length >= this.options.minParagraphLength) {
-          // Split long content into smaller paragraphs if needed
-          const splitParagraphs = this.splitLongContent(textContent);
-          
-          splitParagraphs.forEach((paragraphContent) => {
-            paragraphs.push({
-              orderIndex: orderIndex++,
-              content: paragraphContent.trim()
-            });
-          });
+        if (textContent && textContent.trim()) {
+          textChunks.push(textContent.trim());
         }
       });
+      
+      // Use shared paragraph processor for consistent results
+      const processedParagraphs = this.paragraphProcessor.processTextChunks(textChunks);
+      paragraphs.push(...processedParagraphs);
 
       // If no structured content found, try to extract all text as fallback
       if (paragraphs.length === 0) {
         const bodyText = document.body?.textContent?.trim();
-        if (bodyText && bodyText.length >= this.options.minParagraphLength) {
-          const splitParagraphs = this.splitLongContent(bodyText);
-          splitParagraphs.forEach((paragraphContent, index) => {
-            paragraphs.push({
-              orderIndex: index,
-              content: paragraphContent.trim()
-            });
-          });
+        if (bodyText && bodyText.trim()) {
+          const fallbackParagraphs = this.paragraphProcessor.processTextChunks([bodyText]);
+          paragraphs.push(...fallbackParagraphs);
         }
       }
 
@@ -382,50 +363,7 @@ export class XHTMLBasedEPUBParser {
     return currentText.trim();
   }
 
-  private splitLongContent(text: string): string[] {
-    const result: string[] = [];
-    
-    // If text is within target length, return as is
-    if (text.length <= this.options.paragraphTargetLengthChars && 
-        this.countWords(text) <= this.options.paragraphTargetLengthWords) {
-      return [text];
-    }
-
-    // Split by sentences first
-    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-    let currentChunk = '';
-
-    for (const sentence of sentences) {
-      const trimmedSentence = sentence.trim();
-      if (!trimmedSentence) continue;
-
-      const combinedLength = (currentChunk + ' ' + trimmedSentence).length;
-      const combinedWords = this.countWords(currentChunk + ' ' + trimmedSentence);
-
-      // Check if adding this sentence would exceed our target thresholds
-      if (currentChunk && 
-          (combinedLength > this.options.paragraphTargetLengthChars || 
-           combinedWords > this.options.paragraphTargetLengthWords)) {
-        
-        // Save current chunk and start new one
-        result.push(currentChunk.trim());
-        currentChunk = trimmedSentence;
-      } else {
-        currentChunk += (currentChunk ? ' ' : '') + trimmedSentence;
-      }
-    }
-
-    // Add the last chunk
-    if (currentChunk.trim()) {
-      result.push(currentChunk.trim());
-    }
-
-    return result.length > 0 ? result : [text];
-  }
-
-  private countWords(text: string): number {
-    return text.trim().split(/\s+/).filter(word => word.length > 0).length;
-  }
+  // Custom splitting methods removed - now using shared ParagraphProcessor utility
 
   private async cleanup(tempDir: string): Promise<void> {
     try {

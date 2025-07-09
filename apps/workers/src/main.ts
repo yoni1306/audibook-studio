@@ -11,6 +11,7 @@ import { createLogger } from '@audibook/logger';
 import { downloadFromS3, uploadToS3 } from './s3-client';
 import { PageBasedEPUBParser } from './text-processing/page-based-epub-parser';
 import { XHTMLBasedEPUBParser } from './text-processing/xhtml-based-epub-parser';
+import { DEFAULT_EPUB_PARSER_CONFIG } from './config/epub-parser-config';
 import {
   updateBookStatus,
   getParagraph,
@@ -103,10 +104,9 @@ const worker = new Worker(
               let result;
               if (parsingMethod === 'xhtml-based') {
                 const xhtmlParser = new XHTMLBasedEPUBParser({
-                  paragraphTargetLengthChars: 750,
-                  paragraphTargetLengthWords: 150,
+                  paragraphTargetLengthChars: DEFAULT_EPUB_PARSER_CONFIG.paragraphTargetLengthChars,
+                  paragraphTargetLengthWords: DEFAULT_EPUB_PARSER_CONFIG.paragraphTargetLengthWords,
                   includeEmptyPages: false,
-                  minParagraphLength: 4,
                 });
                 
                 const xhtmlResult = await xhtmlParser.parseEpub(localPath);
@@ -150,15 +150,9 @@ const worker = new Worker(
               } else {
                 // Use page-based parser (default)
                 const pageParser = new PageBasedEPUBParser({
-                  pageBreakDetection: {
-                    includeExplicit: true,
-                    includeStructural: true,
-                    includeStylistic: true,
-                    includeSemantic: true,
-                    minConfidence: 0.6,
-                  },
-                  paragraphTargetLengthChars: 750,
-                  paragraphTargetLengthWords: 150,
+                  pageBreakDetection: DEFAULT_EPUB_PARSER_CONFIG.pageBreakDetection,
+                  paragraphTargetLengthChars: DEFAULT_EPUB_PARSER_CONFIG.paragraphTargetLengthChars,
+                  paragraphTargetLengthWords: DEFAULT_EPUB_PARSER_CONFIG.paragraphTargetLengthWords,
                 });
                 
                 result = await pageParser.parseEpub(localPath);
