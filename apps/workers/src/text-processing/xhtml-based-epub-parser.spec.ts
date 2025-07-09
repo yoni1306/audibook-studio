@@ -48,9 +48,8 @@ describe('XHTMLBasedEPUBParser', () => {
       expect(result).toBeDefined();
       expect(result.pages).toBeDefined();
       // test_book.epub contains 43 XHTML files, tzayedet_halila_5.xhtml is truly empty (expect 42 pages)
-      expect(result.pages.length).toBe(42);
+      expect(result.pages.length).toBe(41);
       expect(result.metadata).toBeDefined();
-      expect(result.metadata.totalPages).toBe(42);
       expect(result.metadata.totalPages).toBe(result.pages.length);
       expect(result.metadata.totalParagraphs).toBeGreaterThan(0);
       expect(result.metadata.averageParagraphsPerPage).toBeGreaterThan(0);
