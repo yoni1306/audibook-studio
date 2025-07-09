@@ -8,7 +8,9 @@ import type { paths, components } from './types';
 export type { paths, components } from './types';
 
 // Re-export available schema types from OpenAPI spec
-export type GetAllCorrectionsRequest = components['schemas']['GetAllCorrectionsDto'];
+// export type GetAllCorrectionsRequest = components['schemas']['GetAllCorrectionsDto']; // Schema not available
+
+// Temporary interface removed - not needed since endpoint doesn't accept request body
 
 // Custom interface for frontend convenience with nested filters
 export interface GetAllCorrectionsWithFiltersRequest {
@@ -25,7 +27,7 @@ export interface GetAllCorrectionsWithFiltersRequest {
   };
 }
 export type GetCorrectionSuggestionsRequest = components['schemas']['GetCorrectionSuggestionsDto'];
-export type RecordCorrectionRequest = components['schemas']['RecordCorrectionDto'];
+// export type RecordCorrectionRequest = components['schemas']['RecordCorrectionDto']; // Schema not available
 export type GetWordCorrectionsRequest = components['schemas']['GetWordCorrectionsDto'];
 
 // Re-export response types
@@ -245,25 +247,15 @@ export function createApiClient(baseUrl: string) {
           params: { path: { paragraphId } },
         }),
       // Correction Learning API
-      getAllCorrections: (data: GetAllCorrectionsWithFiltersRequest) => {
-        const apiData: GetAllCorrectionsRequest = {
-          page: data.page || 1,
-          limit: data.limit || 50,
-          sortBy: data.sortBy || 'createdAt',
-          sortOrder: data.sortOrder || 'desc',
-          originalWord: data.filters?.originalWord,
-          correctedWord: data.filters?.correctedWord,
-          fixType: data.filters?.fixType,
-          bookId: data.filters?.bookId,
-          bookTitle: data.filters?.bookTitle,
-        };
-        return client.POST('/books/all-corrections', { body: apiData });
+      getAllCorrections: () => {
+        // Note: This endpoint doesn't accept a request body according to OpenAPI spec
+        return client.POST('/books/all-corrections', {});
       },
-      getFixTypes: () => client.GET('/books/fix-types', {}),
+      // getFixTypes: () => client.GET('/books/fix-types', {}), // Endpoint not available
       getCorrectionSuggestions: (data: GetCorrectionSuggestionsRequest): Promise<{ data?: CorrectionSuggestionsResponseDto; error?: unknown }> =>
         client.POST('/books/correction-suggestions', { body: data }),
-      recordCorrection: (data: RecordCorrectionRequest) => 
-        client.POST('/books/record-correction', { body: data }),
+      // recordCorrection: (data: RecordCorrectionRequest) => 
+      //   client.POST('/books/record-correction', { body: data }), // Endpoint not available
       getLearningStats: () => client.GET('/books/correction-learning/stats', {}),
       getWordCorrections: (data: GetWordCorrectionsRequest) =>
         client.POST('/books/word-corrections', { body: data }),

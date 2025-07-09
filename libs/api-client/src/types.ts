@@ -245,22 +245,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/books/word-corrections': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations['BooksController_getWordCorrections'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/books/all-corrections': {
     parameters: {
       query?: never;
@@ -272,9 +256,25 @@ export interface paths {
     put?: never;
     /**
      * Get all corrections
-     * @description Retrieve all corrections with filtering and pagination
+     * @description Get all text corrections with optional filtering and pagination
      */
     post: operations['BooksController_getAllCorrections'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/books/word-corrections': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['BooksController_getWordCorrections'];
     delete?: never;
     options?: never;
     head?: never;
@@ -293,26 +293,6 @@ export interface paths {
      * @description Test endpoint to verify routing and API functionality
      */
     get: operations['BooksController_testEndpoint'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/books/fix-types': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Get fix types
-     * @description Get available fix types for filtering corrections
-     */
-    get: operations['BooksController_getFixTypes'];
     put?: never;
     post?: never;
     delete?: never;
@@ -593,16 +573,12 @@ export interface components {
       correctedWord: string;
       /** @description Position in text where change occurred */
       position: number;
-      /** @description Type of fix applied */
-      fixType: string;
     };
     BulkFixSuggestion: {
       /** @description Original word to be fixed */
       originalWord: string;
       /** @description Suggested corrected word */
       correctedWord: string;
-      /** @description Type of fix suggested */
-      fixType: string;
       /** @description Array of paragraph IDs where this fix applies */
       paragraphIds: string[];
       /** @description Number of occurrences found */
@@ -708,47 +684,6 @@ export interface components {
     GetWordCorrectionsDto: {
       /** @description Original word to get corrections for */
       originalWord: string;
-    };
-    GetAllCorrectionsDto: {
-      /** @description Filter by original word */
-      originalWord?: string;
-      /** @description Filter by corrected word */
-      correctedWord?: string;
-      /** @description Filter by fix type */
-      fixType?: string;
-      /** @description Filter by book ID */
-      bookId?: string;
-      /** @description Filter by book title */
-      bookTitle?: string;
-      /**
-       * @description Page number
-       * @default 1
-       */
-      page: number;
-      /**
-       * @description Number of items per page
-       * @default 50
-       */
-      limit: number;
-      /**
-       * @description Sort field
-       * @default createdAt
-       * @enum {string}
-       */
-      sortBy: 'createdAt' | 'originalWord' | 'correctedWord';
-      /**
-       * @description Sort order
-       * @default desc
-       * @enum {string}
-       */
-      sortOrder: 'asc' | 'desc';
-    };
-    GetAllCorrectionsResponseDto: Record<string, never>;
-    GetFixTypesResponseDto: {
-      /** @description Available fix types for filtering */
-      fixTypes: string[];
-      /** @description Response timestamp */
-      timestamp?: string;
     };
     JobDto: {
       /** @description Job ID */
@@ -1042,8 +977,6 @@ export interface operations {
             correctedWord: string;
             /** @description Position in text */
             position: number;
-            /** @description Type of fix (optional) */
-            fixType?: string;
           }[];
         };
       };
@@ -1125,6 +1058,24 @@ export interface operations {
       };
     };
   };
+  BooksController_getAllCorrections: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description All corrections retrieved successfully */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   BooksController_getWordCorrections: {
     parameters: {
       query?: never;
@@ -1146,30 +1097,6 @@ export interface operations {
       };
     };
   };
-  BooksController_getAllCorrections: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['GetAllCorrectionsDto'];
-      };
-    };
-    responses: {
-      /** @description Successfully retrieved corrections */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['GetAllCorrectionsResponseDto'];
-        };
-      };
-    };
-  };
   BooksController_testEndpoint: {
     parameters: {
       query?: never;
@@ -1185,26 +1112,6 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
-      };
-    };
-  };
-  BooksController_getFixTypes: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successfully retrieved fix types */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['GetFixTypesResponseDto'];
-        };
       };
     };
   };
