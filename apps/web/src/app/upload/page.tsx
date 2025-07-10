@@ -39,7 +39,6 @@ export default function UploadPage() {
       const { data, error } = await apiClient.s3.getPresignedUpload({
         filename: file.name,
         contentType: 'application/epub+zip',
-        parsingMethod,
       });
 
       if (error || !data) throw new Error('Failed to get upload URL');
@@ -56,7 +55,20 @@ export default function UploadPage() {
 
       if (!uploadResponse.ok) throw new Error('Failed to upload file');
 
-      setMessage('File uploaded successfully! Redirecting...');
+      setMessage('Starting EPUB parsing...');
+
+      // Start EPUB parsing with the selected method
+      const parseResult = await apiClient.queue.parseEpub({
+        bookId: data.bookId,
+        s3Key: data.key,
+        parsingMethod,
+      });
+
+      if (parseResult.error) {
+        throw new Error('Failed to start EPUB parsing');
+      }
+
+      setMessage('EPUB parsing started! Redirecting...');
       setFile(null);
 
       // Redirect to book detail page
