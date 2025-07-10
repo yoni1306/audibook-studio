@@ -15,6 +15,7 @@ import {
   Alert,
   Paper,
   Grid,
+  Chip,
 } from '@mui/material';
 import { DataGrid, GridColDef, GridSortModel, GridToolbar } from '@mui/x-data-grid';
 import Link from 'next/link';
@@ -30,19 +31,18 @@ interface TextCorrection {
   sentenceContext: string;
   fixType: string | null;
   createdAt: string;
-  paragraph: {
+  bookId: string;
+  bookTitle: string;
+  book: {
     id: string;
-    page: {
-      id: string;
-      pageNumber: number;
-      book: {
-        id: string;
-        title: string;
-        ttsModel?: string;
-        ttsVoice?: string;
-      };
-    };
-    orderIndex: number;
+    title: string;
+    author: string | null;
+  };
+  location: {
+    pageId: string;
+    pageNumber: number;
+    paragraphId: string;
+    paragraphIndex: number;
   };
 }
 
@@ -97,13 +97,27 @@ export default function CorrectionsPage() {
         throw new Error(`API Error: ${apiError}`);
       }
 
-      if (data) {
-        setCorrections(data.corrections || []);
-        setTotalCorrections(data.totalCount || 0);
+      // Enhanced response validation
+      if (data && typeof data === 'object') {
+        // Handle both old and new API response structures
+        const corrections = Array.isArray(data.corrections) ? data.corrections : 
+                          Array.isArray(data) ? data : [];
+        const totalCount = typeof data.totalCount === 'number' ? data.totalCount : 
+                          corrections.length;
+        
+        setCorrections(corrections);
+        setTotalCorrections(totalCount);
+      } else {
+        // Fallback for unexpected response format
+        setCorrections([]);
+        setTotalCorrections(0);
       }
     } catch (err) {
       console.error('Error fetching corrections:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch corrections');
+      // Set empty state on error
+      setCorrections([]);
+      setTotalCorrections(0);
     } finally {
       setLoading(false);
     }
@@ -126,11 +140,15 @@ export default function CorrectionsPage() {
         return;
       }
 
-      if (data) {
-        setFixTypes(data.fixTypes || []);
+      if (data && Array.isArray(data.fixTypes)) {
+        setFixTypes(data.fixTypes);
+      } else {
+        // Fallback to empty array if response is unexpected
+        setFixTypes([]);
       }
     } catch (err) {
       console.error('Error fetching fix types:', err);
+      setFixTypes([]); // Ensure we have a fallback
     }
   }, [apiClient]);
 
@@ -147,6 +165,22 @@ export default function CorrectionsPage() {
     setCorrectedWordFilter('');
     setFixTypeFilter('');
     setBookTitleFilter('');
+    // Clear previous errors on retry
+    setError(null);
+  };
+
+  // Helper functions
+  const detectTextDirection = (text: string): 'ltr' | 'rtl' => {
+    // Check for Hebrew characters using Unicode range
+    const hebrewPattern = /[\u0590-\u05FF]/;
+    const arabicPattern = /[\u0600-\u06FF]/;
+    
+    // If text contains Hebrew or Arabic characters, it's RTL
+    if (hebrewPattern.test(text) || arabicPattern.test(text)) {
+      return 'rtl';
+    }
+    
+    return 'ltr';
   };
 
   const formatDate = (dateString: string) => {
@@ -159,132 +193,140 @@ export default function CorrectionsPage() {
 
   const columns: GridColDef[] = [
     {
-      field: 'sentenceContext',
-      headerName: 'Context',
-      width: 350,
+      field: 'originalWord',
+      headerName: 'Original Word',
+      width: 150,
+      align: 'center',
+      headerAlign: 'center',
       renderCell: (params) => {
-        const context = params.value as string;
-        const originalWord = params.row.originalWord;
-        const correctedWord = params.row.correctedWord;
-        
-        // Highlight the original and corrected words in context
-        const highlightedContext = context
-          .replace(
-            new RegExp(`\\b${originalWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'),
-            `<mark style="background-color: #ffeb3b; padding: 2px 4px; border-radius: 3px;">${originalWord}</mark>`
-          )
-          .replace(
-            new RegExp(`\\b${correctedWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'),
-            `<mark style="background-color: #c8e6c9; padding: 2px 4px; border-radius: 3px;">${correctedWord}</mark>`
-          );
-
+        const isRTL = detectTextDirection(params.value) === 'rtl';
         return (
-          <Box 
-            sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              height: '100%', 
-              width: '100%',
-              direction: /[\u0590-\u05FF]/.test(context) ? 'rtl' : 'ltr',
-            }}
-          >
-            <Typography 
-              variant="body2" 
-              sx={{ 
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                width: '100%',
-                lineHeight: 1.4,
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+            <Chip
+              label={params.value}
+              color="error"
+              variant="outlined"
+              size="small"
+              sx={{
+                direction: isRTL ? 'rtl' : 'ltr',
+                fontFamily: 'monospace',
+                '& .MuiChip-label': {
+                  direction: isRTL ? 'rtl' : 'ltr',
+                  textAlign: isRTL ? 'right' : 'left',
+                  unicodeBidi: 'embed',
+                },
               }}
-              title={context}
-              dangerouslySetInnerHTML={{ __html: highlightedContext }}
             />
           </Box>
         );
       },
     },
     {
-      field: 'originalWord',
-      headerName: 'Original',
-      width: 120,
-      renderCell: (params) => (
-        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
-          <Typography 
-            variant="body2" 
-            sx={{ 
-              color: '#d32f2f',
-              fontWeight: 'medium',
-              direction: /[\u0590-\u05FF]/.test(params.value) ? 'rtl' : 'ltr',
-            }}
-          >
-            {params.value}
-          </Typography>
-        </Box>
-      ),
+      field: 'correctedWord',
+      headerName: 'Corrected Word',
+      width: 150,
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: (params) => {
+        const isRTL = detectTextDirection(params.value) === 'rtl';
+        return (
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+            <Chip
+              label={params.value}
+              color="success"
+              variant="outlined"
+              size="small"
+              sx={{
+                direction: isRTL ? 'rtl' : 'ltr',
+                fontFamily: 'monospace',
+                '& .MuiChip-label': {
+                  direction: isRTL ? 'rtl' : 'ltr',
+                  textAlign: isRTL ? 'right' : 'left',
+                  unicodeBidi: 'embed',
+                },
+              }}
+            />
+          </Box>
+        );
+      },
     },
     {
-      field: 'correctedWord',
-      headerName: 'Corrected',
-      width: 120,
-      renderCell: (params) => (
-        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
-          <Typography 
-            variant="body2" 
-            sx={{ 
-              color: '#2e7d32',
-              fontWeight: 'medium',
-              direction: /[\u0590-\u05FF]/.test(params.value) ? 'rtl' : 'ltr',
-            }}
-          >
-            {params.value}
-          </Typography>
-        </Box>
-      ),
+      field: 'sentenceContext',
+      headerName: 'Context',
+      width: 350,
+      renderCell: (params) => {
+        const isRTL = detectTextDirection(params.value) === 'rtl';
+        return (
+          <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%', px: 2 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                direction: isRTL ? 'rtl' : 'ltr',
+                textAlign: isRTL ? 'right' : 'left',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                overflowWrap: 'break-word',
+                lineHeight: '1.4',
+                width: '100%',
+                unicodeBidi: 'embed',
+              }}
+            >
+              {params.value}
+            </Typography>
+          </Box>
+        );
+      },
     },
     {
       field: 'fixType',
       headerName: 'Fix Type',
       width: 130,
-      renderCell: (params) => (
-        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
-          <Typography variant="body2" color={params.value ? 'text.primary' : 'text.secondary'}>
-            {params.value || 'N/A'}
-          </Typography>
-        </Box>
-      ),
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: (params) => {
+        const fixType = params.value || 'unknown';
+        
+        // Color mapping for different fix types
+        const getChipColor = (type: string) => {
+          if (type.includes('niqqud')) return 'secondary';
+          if (type.includes('hebrew')) return 'primary';
+          if (type.includes('punctuation')) return 'info';
+          if (type.includes('spelling')) return 'warning';
+          if (type === 'manual') return 'default';
+          return 'default';
+        };
+        
+        return (
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+            <Chip
+              label={fixType.replace(/_/g, ' ')}
+              color={getChipColor(fixType)}
+              variant="outlined"
+              size="small"
+              sx={{
+                textTransform: 'capitalize',
+                fontWeight: 500,
+              }}
+            />
+          </Box>
+        );
+      },
     },
     {
       field: 'location',
       headerName: 'Location',
       width: 180,
       renderCell: (params) => {
-        const pageNumber = params.row.paragraph?.page?.pageNumber;
-        const paragraphIndex = params.row.paragraph?.orderIndex;
-        const bookId = params.row.paragraph?.page?.book?.id;
-        
-        if (!pageNumber || paragraphIndex === undefined || !bookId) {
-          return (
-            <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
-              <Typography variant="body2" color="text.secondary">
-                N/A
-              </Typography>
-            </Box>
-          );
-        }
+        const correction = params.row;
+        const pageNumber = correction.location.pageNumber;
+        const paragraphIndex = correction.location.paragraphIndex;
 
         return (
-          <Link 
-            href={`/books/${bookId}?page=${pageNumber}&paragraph=${paragraphIndex}`}
-            style={{ 
-              color: '#1976d2', 
-              textDecoration: 'none',
-            }}
-            onMouseEnter={(e) => (e.target as HTMLElement).style.textDecoration = 'underline'}
-            onMouseLeave={(e) => (e.target as HTMLElement).style.textDecoration = 'none'}
-          >
-            Page: {pageNumber}, Paragraph: {paragraphIndex}
-          </Link>
+          <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
+            <Typography variant="body2" color="text.primary">
+              Page {pageNumber}, Paragraph {paragraphIndex}
+            </Typography>
+          </Box>
         );
       },
     },
@@ -294,18 +336,21 @@ export default function CorrectionsPage() {
       width: 250,
       renderCell: (params) => (
         <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
-          <Link href={`/books/${params.row.bookId}`} style={{ textDecoration: 'none', width: '100%' }}>
+          <Link
+            href={`/books/${params.row.book.id}`}
+            style={{
+              color: 'inherit',
+              textDecoration: 'none',
+            }}
+          >
             <Typography
               variant="body2"
-              color="primary"
               sx={{
-                '&:hover': { textDecoration: 'underline' },
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                width: '100%',
+                '&:hover': {
+                  textDecoration: 'underline',
+                  color: 'primary.main',
+                },
               }}
-              title={params.value}
             >
               {params.value}
             </Typography>
@@ -445,7 +490,7 @@ export default function CorrectionsPage() {
       ) : (
         <Card>
           <CardContent sx={{ p: 0 }}>
-            <Box sx={{ height: 600, width: '100%' }}>
+            <Box sx={{ height: 600, width: '1800px', maxWidth: '100%', overflow: 'auto' }}>
               <DataGrid
                 rows={transformedCorrections}
                 columns={columns}
@@ -465,25 +510,20 @@ export default function CorrectionsPage() {
                     quickFilterProps: { debounceMs: 500 },
                   },
                 }}
-                getRowHeight={() => 100}
+                rowHeight={100}
                 sx={{
                   '& .MuiDataGrid-cell': {
-                    padding: '12px',
+                    borderBottom: '1px solid #f0f0f0',
                     display: 'flex',
-                    alignItems: 'center',
-                    minHeight: '52px',
-                    borderBottom: '1px solid rgba(224, 224, 224, 1)',
+                    alignItems: 'flex-start',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    overflowWrap: 'break-word',
+                    padding: '12px 8px',
+                    lineHeight: '1.4',
                   },
-                  '& .MuiDataGrid-row': {
-                    '&:hover': {
-                      backgroundColor: 'rgba(25, 118, 210, 0.04)',
-                    },
-                    '&.Mui-selected': {
-                      backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                      '&:hover': {
-                        backgroundColor: 'rgba(25, 118, 210, 0.12)',
-                      },
-                    },
+                  '& .MuiDataGrid-row:hover': {
+                    backgroundColor: '#f8f9fa',
                   },
                   '& .MuiDataGrid-columnHeaders': {
                     backgroundColor: 'rgba(0, 0, 0, 0.04)',
@@ -498,14 +538,6 @@ export default function CorrectionsPage() {
                   '& .MuiDataGrid-footerContainer': {
                     borderTop: '2px solid rgba(224, 224, 224, 1)',
                     backgroundColor: 'rgba(0, 0, 0, 0.02)',
-                  },
-                  '& .MuiDataGrid-cell--withRenderer': {
-                    padding: 0,
-                  },
-                  '& .MuiDataGrid-cell--withRenderer > div': {
-                    width: '100%',
-                    height: '100%',
-                    padding: '12px',
                   },
                 }}
               />
