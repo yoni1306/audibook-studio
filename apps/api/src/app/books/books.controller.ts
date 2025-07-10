@@ -6,13 +6,15 @@ import { CorrectionLearningService } from './correction-learning.service';
 import { TextCorrectionRepository } from './text-correction.repository';
 import { UpdateParagraphRequestDto, UpdateParagraphResponseDto, BulkFixSuggestion as DtoBulkFixSuggestion, SuggestedFixesResponseDto } from './dto/paragraph-update.dto';
 import { 
+  GetAllCorrectionsDto,
+  GetAllCorrectionsResponseDto,
+  GetFixTypesResponseDto,
   GetCorrectionSuggestionsDto, 
   GetWordCorrectionsDto,
   CorrectionSuggestionsResponseDto,
   LearningStatsResponseDto
 } from './dto/correction-learning.dto';
 import { BulkFixSuggestion as ServiceBulkFixSuggestion } from './bulk-text-fixes.service';
-import { CorrectionWithBookInfo } from './text-correction.repository';
 import { WordChange } from './text-fixes.service';
 import { FixType } from '@prisma/client';
 import { S3Service } from '../s3/s3.service';
@@ -466,12 +468,43 @@ export class BooksController {
   }
 
   /**
+   * Get available fix types for filtering
+   */
+  @Get('fix-types')
+  @ApiOperation({ summary: 'Get fix types', description: 'Get all available fix types for filtering corrections' })
+  @ApiResponse({ status: 200, description: 'Fix types retrieved successfully', type: GetFixTypesResponseDto })
+  async getFixTypes(): Promise<GetFixTypesResponseDto> {
+    this.logger.log('Getting available fix types');
+    
+    try {
+      // Return all available FixType enum values
+      const fixTypes = Object.values(FixType);
+      
+      this.logger.log(`Found ${fixTypes.length} fix types`);
+      
+      return {
+        fixTypes,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      this.logger.error(`Error getting fix types: ${error.message}`, error.stack);
+      throw new InternalServerErrorException({
+        error: 'Internal Server Error',
+        message: 'Failed to get fix types',
+        statusCode: 500,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  /**
    * Get all corrections with optional filtering and pagination
    */
   @Post('all-corrections')
   @ApiOperation({ summary: 'Get all corrections', description: 'Get all text corrections with optional filtering and pagination' })
-  @ApiResponse({ status: 200, description: 'All corrections retrieved successfully' })
-  async getAllCorrections(@Body() dto: { filters?: { bookId?: string; fixType?: FixType; originalWord?: string }; limit?: number; sortOrder?: 'asc' | 'desc' } = {}): Promise<{ corrections: CorrectionWithBookInfo[]; total: number; timestamp: string }> {
+  @ApiBody({ type: GetAllCorrectionsDto })
+  @ApiResponse({ status: 200, description: 'All corrections retrieved successfully', type: GetAllCorrectionsResponseDto })
+  async getAllCorrections(@Body() dto: GetAllCorrectionsDto): Promise<GetAllCorrectionsResponseDto> {
     this.logger.log('Getting all corrections with filters:', dto);
     
     try {
@@ -487,9 +520,12 @@ export class BooksController {
       const correctionDtos = await this.textCorrectionRepository.findManyWithBookInfo(filters);
       
       this.logger.log(`Found ${correctionDtos.length} corrections`);
+      const totalPages = Math.ceil(correctionDtos.length / (dto.limit || 50));
       return {
         corrections: correctionDtos,
         total: correctionDtos.length,
+        page: dto.page || 1,
+        totalPages,
         timestamp: new Date().toISOString(),
       };
     } catch (error) {

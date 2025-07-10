@@ -8,7 +8,6 @@ export interface TextChange {
 export interface BulkFixSuggestion {
   originalWord: string;
   correctedWord: string;
-  fixType: string;
   paragraphIds: string[];
   count: number;
 }

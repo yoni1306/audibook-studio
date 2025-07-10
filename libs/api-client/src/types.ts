@@ -245,6 +245,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/books/fix-types': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get fix types
+     * @description Get all available fix types for filtering corrections
+     */
+    get: operations['BooksController_getFixTypes'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/books/all-corrections': {
     parameters: {
       query?: never;
@@ -681,6 +701,51 @@ export interface components {
       /** @description Timestamp when suggestions were generated */
       timestamp?: string;
     };
+    GetFixTypesResponseDto: {
+      /** @description Available fix types for filtering */
+      fixTypes: string[];
+      /** @description Response timestamp */
+      timestamp?: string;
+    };
+    FiltersDto: {
+      /** @description Filter by original word */
+      originalWord?: string;
+      /** @description Filter by corrected word */
+      correctedWord?: string;
+      /** @description Filter by fix type */
+      fixType?: string;
+      /** @description Filter by book ID */
+      bookId?: string;
+      /** @description Filter by book title */
+      bookTitle?: string;
+    };
+    GetAllCorrectionsDto: {
+      /** @description Filters for corrections */
+      filters?: components['schemas']['FiltersDto'];
+      /**
+       * @description Page number
+       * @default 1
+       */
+      page: number;
+      /**
+       * @description Number of items per page
+       * @default 50
+       */
+      limit: number;
+      /**
+       * @description Sort field
+       * @default createdAt
+       * @enum {string}
+       */
+      sortBy: 'createdAt' | 'originalWord' | 'correctedWord';
+      /**
+       * @description Sort order
+       * @default desc
+       * @enum {string}
+       */
+      sortOrder: 'asc' | 'desc';
+    };
+    GetAllCorrectionsResponseDto: Record<string, never>;
     GetWordCorrectionsDto: {
       /** @description Original word to get corrections for */
       originalWord: string;
@@ -1058,7 +1123,7 @@ export interface operations {
       };
     };
   };
-  BooksController_getAllCorrections: {
+  BooksController_getFixTypes: {
     parameters: {
       query?: never;
       header?: never;
@@ -1067,12 +1132,38 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
+      /** @description Fix types retrieved successfully */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GetFixTypesResponseDto'];
+        };
+      };
+    };
+  };
+  BooksController_getAllCorrections: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GetAllCorrectionsDto'];
+      };
+    };
+    responses: {
       /** @description All corrections retrieved successfully */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['GetAllCorrectionsResponseDto'];
+        };
       };
     };
   };

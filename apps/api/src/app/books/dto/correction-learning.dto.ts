@@ -23,7 +23,7 @@ export class GetWordCorrectionsDto {
   originalWord: string;
 }
 
-export class GetAllCorrectionsDto {
+class FiltersDto {
   @ApiPropertyOptional({ description: 'Filter by original word' })
   @IsOptional()
   @IsString()
@@ -48,6 +48,14 @@ export class GetAllCorrectionsDto {
   @IsOptional()
   @IsString()
   bookTitle?: string;
+}
+
+export class GetAllCorrectionsDto {
+  @ApiPropertyOptional({ description: 'Filters for corrections', type: FiltersDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => FiltersDto)
+  filters?: FiltersDto;
 
   @ApiPropertyOptional({ description: 'Page number', default: 1, minimum: 1 })
   @IsOptional()

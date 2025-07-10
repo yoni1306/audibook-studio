@@ -1,97 +1,87 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useApiClient } from '@hooks/useApiClient';
-
-// Force dynamic rendering to prevent build-time pre-rendering
-export const dynamic = 'force-dynamic';
-import Link from 'next/link';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
+  Typography,
   Card,
   CardContent,
-  Typography,
   TextField,
+  Button,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
-  Button,
-  Chip,
-  Paper,
   Alert,
+  Paper,
   Grid,
 } from '@mui/material';
-import { DataGrid, GridColDef, GridToolbar, GridSortModel } from '@mui/x-data-grid';
+import { DataGrid, GridColDef, GridSortModel, GridToolbar } from '@mui/x-data-grid';
+import Link from 'next/link';
+import { useApiClient } from '@hooks/useApiClient';
 
-interface Correction {
+// Force dynamic rendering to prevent build-time pre-rendering
+export const dynamic = 'force-dynamic';
+
+interface TextCorrection {
   id: string;
-  paragraphId: string;
-  bookId: string;
   originalWord: string;
   correctedWord: string;
   sentenceContext: string;
-  fixType: string;
-  ttsModel: string | null;
-  ttsVoice: string | null;
+  fixType: string | null;
   createdAt: string;
-  updatedAt: string;
-  bookTitle: string;
-  location: {
-    pageId: string;
-    pageNumber: number;
-    paragraphId: string;
-    paragraphIndex: number;
+  paragraph: {
+    id: string;
+    page: {
+      id: string;
+      pageNumber: number;
+      book: {
+        id: string;
+        title: string;
+        ttsModel?: string;
+        ttsVoice?: string;
+      };
+    };
+    orderIndex: number;
   };
 }
 
-export default function CorrectionsPage() {
-  // API client
-  const apiClient = useApiClient();
-  
-  // State
-  const [corrections, setCorrections] = useState<Correction[]>([]);
-  const [fixTypes, setFixTypes] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [totalCorrections, setTotalCorrections] = useState(0);
-  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 25 });
-  const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'createdAt', sort: 'desc' }]);
+interface PaginationModel {
+  page: number;
+  pageSize: number;
+}
 
-  // Filter states
+export default function CorrectionsPage() {
+  const apiClient = useApiClient();
+  const [corrections, setCorrections] = useState<TextCorrection[]>([]);
+  const [totalCorrections, setTotalCorrections] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [fixTypes, setFixTypes] = useState<string[]>([]);
+
+  // Filters
   const [originalWordFilter, setOriginalWordFilter] = useState('');
   const [correctedWordFilter, setCorrectedWordFilter] = useState('');
   const [fixTypeFilter, setFixTypeFilter] = useState('');
   const [bookTitleFilter, setBookTitleFilter] = useState('');
 
-  // Helper functions
-  const detectTextDirection = (text: string): 'ltr' | 'rtl' => {
-    // Check for Hebrew characters using Unicode range
-    const hebrewPattern = /[\u0590-\u05FF]/;
-    const arabicPattern = /[\u0600-\u06FF]/;
-    
-    // If text contains Hebrew or Arabic characters, it's RTL
-    if (hebrewPattern.test(text) || arabicPattern.test(text)) {
-      return 'rtl';
-    }
-    
-    return 'ltr';
-  };
+  // Pagination and sorting
+  const [paginationModel, setPaginationModel] = useState<PaginationModel>({
+    page: 0,
+    pageSize: 25,
+  });
+  const [sortModel, setSortModel] = useState<GridSortModel>([{
+    field: 'createdAt',
+    sort: 'desc',
+  }]);
 
-  const formatDate = (dateString: string) => {
-    // Use a static format that won't differ between server and client
-    const date = new Date(dateString);
-    return date.toISOString().split('T')[0]; // YYYY-MM-DD format
-  };
-
-  // API Functions
   const fetchCorrections = useCallback(async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
-      const { data, error } = await apiClient.books.getAllCorrections({
-        page: paginationModel.page + 1, // API expects 1-based page numbers
+      const { data, error: apiError } = await apiClient.books.getAllCorrections({
+        page: paginationModel.page + 1,
         limit: paginationModel.pageSize,
         sortBy: (sortModel[0]?.field as 'createdAt' | 'originalWord' | 'correctedWord') || 'createdAt',
         sortOrder: sortModel[0]?.sort || 'desc',
@@ -103,53 +93,52 @@ export default function CorrectionsPage() {
         },
       });
 
-      if (error) {
-        throw new Error(`API error: ${error}`);
+      if (apiError) {
+        throw new Error(`API Error: ${apiError}`);
       }
-      
-      if (data && Array.isArray(data.corrections)) {
-        setCorrections(data.corrections);
-        setTotalCorrections(data.total || 0);
-      } else {
-        setCorrections([]);
-        setTotalCorrections(0);
+
+      if (data) {
+        setCorrections(data.corrections || []);
+        setTotalCorrections(data.totalCount || 0);
       }
     } catch (err) {
       console.error('Error fetching corrections:', err);
-      setError('Failed to load corrections. Please try again.');
-      setCorrections([]);
-      setTotalCorrections(0);
+      setError(err instanceof Error ? err.message : 'Failed to fetch corrections');
     } finally {
       setLoading(false);
     }
-  }, [apiClient, paginationModel, sortModel, originalWordFilter, correctedWordFilter, fixTypeFilter, bookTitleFilter]);
+  }, [
+    apiClient,
+    originalWordFilter,
+    correctedWordFilter,
+    fixTypeFilter,
+    bookTitleFilter,
+    paginationModel,
+    sortModel,
+  ]);
 
   const fetchFixTypes = useCallback(async () => {
     try {
-      const { data, error } = await apiClient.books.getFixTypes();
-      
-      if (error) {
-        throw new Error(`API error: ${error}`);
+      const { data, error: apiError } = await apiClient.client.GET('/books/fix-types');
+
+      if (apiError) {
+        console.error('Error fetching fix types:', apiError);
+        return;
       }
-      
-      // The backend returns { fixTypes: [...] }, so we need to access the fixTypes property
-      setFixTypes(data?.fixTypes || []);
+
+      if (data) {
+        setFixTypes(data.fixTypes || []);
+      }
     } catch (err) {
       console.error('Error fetching fix types:', err);
-      // Set an empty array as fallback
-      setFixTypes([]);
     }
   }, [apiClient]);
 
-  // Effects
   useEffect(() => {
-    // Initialize component: load static data and set mounted state - runs once on mount
-    fetchFixTypes();   // Load fix types for filter dropdown
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty dependency array since these functions never change (they have empty deps)
+    fetchFixTypes();
+  }, [fetchFixTypes]);
 
   useEffect(() => {
-    // Load corrections after filters/pagination changes
     fetchCorrections();
   }, [fetchCorrections]);
 
@@ -158,144 +147,135 @@ export default function CorrectionsPage() {
     setCorrectedWordFilter('');
     setFixTypeFilter('');
     setBookTitleFilter('');
-    setPaginationModel({ page: 0, pageSize: 25 });
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
   };
 
   const columns: GridColDef[] = [
     {
+      field: 'sentenceContext',
+      headerName: 'Context',
+      width: 350,
+      renderCell: (params) => {
+        const context = params.value as string;
+        const originalWord = params.row.originalWord;
+        const correctedWord = params.row.correctedWord;
+        
+        // Highlight the original and corrected words in context
+        const highlightedContext = context
+          .replace(
+            new RegExp(`\\b${originalWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'),
+            `<mark style="background-color: #ffeb3b; padding: 2px 4px; border-radius: 3px;">${originalWord}</mark>`
+          )
+          .replace(
+            new RegExp(`\\b${correctedWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'),
+            `<mark style="background-color: #c8e6c9; padding: 2px 4px; border-radius: 3px;">${correctedWord}</mark>`
+          );
+
+        return (
+          <Box 
+            sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              height: '100%', 
+              width: '100%',
+              direction: /[\u0590-\u05FF]/.test(context) ? 'rtl' : 'ltr',
+            }}
+          >
+            <Typography 
+              variant="body2" 
+              sx={{ 
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                width: '100%',
+                lineHeight: 1.4,
+              }}
+              title={context}
+              dangerouslySetInnerHTML={{ __html: highlightedContext }}
+            />
+          </Box>
+        );
+      },
+    },
+    {
       field: 'originalWord',
-      headerName: 'Original Word',
-      width: 150,
-      renderCell: (params) => {
-        const isRTL = detectTextDirection(params.value) === 'rtl';
-        return (
-          <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
-            <Chip
-              label={params.value}
-              color="error"
-              variant="outlined"
-              size="small"
-              sx={{
-                direction: isRTL ? 'rtl' : 'ltr',
-                fontFamily: 'monospace',
-                '& .MuiChip-label': {
-                  direction: isRTL ? 'rtl' : 'ltr',
-                  textAlign: isRTL ? 'right' : 'left',
-                  unicodeBidi: 'embed',
-                },
-              }}
-            />
-          </Box>
-        );
-      },
-    },
-    {
-      field: 'correctedWord',
-      headerName: 'Corrected Word',
-      width: 150,
-      renderCell: (params) => {
-        const isRTL = detectTextDirection(params.value) === 'rtl';
-        return (
-          <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
-            <Chip
-              label={params.value}
-              color="success"
-              variant="outlined"
-              size="small"
-              sx={{
-                direction: isRTL ? 'rtl' : 'ltr',
-                fontFamily: 'monospace',
-                '& .MuiChip-label': {
-                  direction: isRTL ? 'rtl' : 'ltr',
-                  textAlign: isRTL ? 'right' : 'left',
-                  unicodeBidi: 'embed',
-                },
-              }}
-            />
-          </Box>
-        );
-      },
-    },
-    {
-      field: 'fixType',
-      headerName: 'Fix Type',
+      headerName: 'Original',
       width: 120,
       renderCell: (params) => (
         <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
-          {params.value ? (
-            <Chip
-              label={params.value}
-              color="primary"
-              variant="outlined"
-              size="small"
-            />
-          ) : (
-            <Typography variant="body2" color="text.secondary">—</Typography>
-          )}
+          <Typography 
+            variant="body2" 
+            sx={{ 
+              color: '#d32f2f',
+              fontWeight: 'medium',
+              direction: /[\u0590-\u05FF]/.test(params.value) ? 'rtl' : 'ltr',
+            }}
+          >
+            {params.value}
+          </Typography>
         </Box>
       ),
     },
     {
-      field: 'sentenceContext',
-      headerName: 'Context',
-      width: 300,
-      renderCell: (params) => {
-        const isRTL = detectTextDirection(params.value) === 'rtl';
-        return (
-          <Box
-            sx={{
-              width: '100%',
-              maxHeight: '80px',
-              overflowY: 'auto',
-              padding: '8px',
-              direction: isRTL ? 'rtl' : 'ltr',
-              textAlign: isRTL ? 'right' : 'left',
-              fontSize: '0.875rem',
-              lineHeight: 1.4,
-              backgroundColor: '#f8f9fa',
-              borderRadius: '4px',
-              border: '1px solid #e0e0e0',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-              '&::-webkit-scrollbar': {
-                width: '4px',
-              },
-              '&::-webkit-scrollbar-track': {
-                background: '#f1f1f1',
-                borderRadius: '2px',
-              },
-              '&::-webkit-scrollbar-thumb': {
-                background: '#c1c1c1',
-                borderRadius: '2px',
-              },
-              '&::-webkit-scrollbar-thumb:hover': {
-                background: '#a8a8a8',
-              },
+      field: 'correctedWord',
+      headerName: 'Corrected',
+      width: 120,
+      renderCell: (params) => (
+        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
+          <Typography 
+            variant="body2" 
+            sx={{ 
+              color: '#2e7d32',
+              fontWeight: 'medium',
+              direction: /[\u0590-\u05FF]/.test(params.value) ? 'rtl' : 'ltr',
             }}
           >
-            {params.value || 'No context available'}
-          </Box>
-        );
-      },
+            {params.value}
+          </Typography>
+        </Box>
+      ),
+    },
+    {
+      field: 'fixType',
+      headerName: 'Fix Type',
+      width: 130,
+      renderCell: (params) => (
+        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
+          <Typography variant="body2" color={params.value ? 'text.primary' : 'text.secondary'}>
+            {params.value || 'N/A'}
+          </Typography>
+        </Box>
+      ),
     },
     {
       field: 'location',
       headerName: 'Location',
       width: 180,
       renderCell: (params) => {
-        const { pageId, pageNumber, paragraphId, paragraphIndex } = params.row.location;
+        const pageNumber = params.row.paragraph?.page?.pageNumber;
+        const paragraphIndex = params.row.paragraph?.orderIndex;
+        const bookId = params.row.paragraph?.page?.book?.id;
         
-        if (!pageId || !paragraphId || pageNumber === undefined || paragraphIndex === undefined) {
+        if (!pageNumber || paragraphIndex === undefined || !bookId) {
           return (
-            <Typography variant="body2" color="text.secondary">
-              N/A
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
+              <Typography variant="body2" color="text.secondary">
+                N/A
+              </Typography>
+            </Box>
           );
         }
-        
+
         return (
-          <Link
-            href={`/books/${params.row.bookId}/pages/${pageId}#paragraph-${paragraphIndex}`}
+          <Link 
+            href={`/books/${bookId}?page=${pageNumber}&paragraph=${paragraphIndex}`}
             style={{ 
               color: '#1976d2', 
               textDecoration: 'none',
