@@ -7,6 +7,7 @@ import * as yauzl from 'yauzl';
 
 import { createLogger } from '@audibook/logger';
 import { ParagraphProcessor, ProcessedParagraph } from './utils/paragraph-processor';
+import { HTMLTextExtractor } from './utils/html-text-extractor';
 import { DEFAULT_EPUB_PARSER_CONFIG } from '../config/epub-parser-config';
 
 const logger = createLogger('XHTMLBasedEpubParser');
@@ -49,6 +50,7 @@ export class XHTMLBasedEPUBParser {
   };
   
   private readonly paragraphProcessor: ParagraphProcessor;
+  private readonly htmlTextExtractor: HTMLTextExtractor;
 
   constructor(private options: XHTMLParserOptions = {}) {
     this.options = { ...this.defaultOptions, ...options };
@@ -56,6 +58,7 @@ export class XHTMLBasedEPUBParser {
       paragraphTargetLengthChars: this.options.paragraphTargetLengthChars,
       paragraphTargetLengthWords: this.options.paragraphTargetLengthWords,
     });
+    this.htmlTextExtractor = new HTMLTextExtractor();
   }
 
   async parseEpub(epubPath: string): Promise<XHTMLParseResult> {
@@ -281,36 +284,12 @@ export class XHTMLBasedEPUBParser {
       const dom = new JSDOM(content, { contentType: 'application/xhtml+xml' });
       const document = dom.window.document;
 
-      // Remove script and style elements
-      document.querySelectorAll('script, style').forEach((el) => el.remove());
-
-      // Extract text from various content elements
-      const textElements = document.querySelectorAll(
-        'p, h1, h2, h3, h4, h5, h6, div, section, article, main, blockquote, li'
-      );
-
-      // Collect all text content first, then use shared processor
-      const textChunks: string[] = [];
-      
-      textElements.forEach((element) => {
-        const textContent = this.extractTextFromElement(element, document);
-        if (textContent && textContent.trim()) {
-          textChunks.push(textContent.trim());
-        }
-      });
+      // Use shared HTML text extractor to avoid duplication from nested elements
+      const textChunks = this.htmlTextExtractor.extractTextChunks(document);
       
       // Use shared paragraph processor for consistent results
       const processedParagraphs = this.paragraphProcessor.processTextChunks(textChunks);
       paragraphs.push(...processedParagraphs);
-
-      // If no structured content found, try to extract all text as fallback
-      if (paragraphs.length === 0) {
-        const bodyText = document.body?.textContent?.trim();
-        if (bodyText && bodyText.trim()) {
-          const fallbackParagraphs = this.paragraphProcessor.processTextChunks([bodyText]);
-          paragraphs.push(...fallbackParagraphs);
-        }
-      }
 
       // Log detailed information about paragraph extraction
       logger.debug(`Extracted ${paragraphs.length} paragraphs from ${fileName}`);
@@ -329,39 +308,7 @@ export class XHTMLBasedEPUBParser {
     return paragraphs;
   }
 
-  private extractTextFromElement(element: Element, document: Document): string {
-    // Create a tree walker to collect all text nodes
-    const NodeFilter = document.defaultView?.NodeFilter || {
-      SHOW_TEXT: 4,
-      FILTER_ACCEPT: 1,
-      FILTER_SKIP: 3
-    };
-    
-    const walker = document.createTreeWalker(
-      element,
-      NodeFilter.SHOW_TEXT,
-      {
-        acceptNode: (node: Node) => {
-          const text = node.textContent?.trim();
-          if (text && text.length > 0) {
-            return NodeFilter.FILTER_ACCEPT;
-          }
-          return NodeFilter.FILTER_SKIP;
-        },
-      }
-    );
 
-    let currentText = '';
-    let node;
-    while ((node = walker.nextNode())) {
-      const nodeText = node.textContent?.trim();
-      if (nodeText) {
-        currentText += (currentText ? ' ' : '') + nodeText;
-      }
-    }
-
-    return currentText.trim();
-  }
 
   // Custom splitting methods removed - now using shared ParagraphProcessor utility
 

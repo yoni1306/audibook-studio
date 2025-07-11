@@ -13,6 +13,7 @@ import {
   PageBreakOptions 
 } from './utils/epub-page-break-detector';
 import { ParagraphProcessor, ProcessedParagraph } from './utils/paragraph-processor';
+import { HTMLTextExtractor } from './utils/html-text-extractor';
 import { DEFAULT_EPUB_PARSER_CONFIG } from '../config/epub-parser-config';
 
 const logger = createLogger('PageBasedEpubParser');
@@ -54,6 +55,7 @@ export class PageBasedEPUBParser {
   };
   
   private readonly paragraphProcessor: ParagraphProcessor;
+  private readonly htmlTextExtractor: HTMLTextExtractor;
 
   constructor(private options: PageBasedParserOptions = {}) {
     this.options = { ...this.defaultOptions, ...options };
@@ -61,6 +63,7 @@ export class PageBasedEPUBParser {
       paragraphTargetLengthChars: this.options.paragraphTargetLengthChars,
       paragraphTargetLengthWords: this.options.paragraphTargetLengthWords,
     });
+    this.htmlTextExtractor = new HTMLTextExtractor();
   }
 
   async parseEpub(epubPath: string): Promise<EPUBParseResult> {
@@ -444,45 +447,11 @@ export class PageBasedEPUBParser {
   }
 
   private extractFullText(document: Document): string {
-    // Extract text from various elements
-    const textElements = document.querySelectorAll(
-      'p, h1, h2, h3, h4, h5, h6, div, section'
-    );
-
-    let fullText = '';
-    textElements.forEach((element) => {
-      const elementText = this.extractTextFromElement(element, document);
-      fullText += elementText + '\n\n';
-    });
-
-    return fullText.trim();
+    // Use shared HTML text extractor to avoid duplication from nested elements
+    return this.htmlTextExtractor.extractFullText(document);
   }
 
-  private extractTextFromElement(element: Element, document: Document): string {
-    // Simple recursive text extraction that works in Node.js
-    const extractTextRecursively = (node: Node): string => {
-      let text = '';
-      
-      if (node.nodeType === 3) { // TEXT_NODE
-        const content = node.textContent?.trim();
-        if (content && content.length > 0) {
-          text += content + ' ';
-        }
-      } else if (node.nodeType === 1) { // ELEMENT_NODE
-        // Skip script and style elements
-        const tagName = (node as Element).tagName?.toLowerCase();
-        if (tagName !== 'script' && tagName !== 'style') {
-          for (let i = 0; i < node.childNodes.length; i++) {
-            text += extractTextRecursively(node.childNodes[i]);
-          }
-        }
-      }
-      
-      return text;
-    };
 
-    return extractTextRecursively(element).trim();
-  }
 
   private countWords(text: string): number {
     return text.trim().split(/\s+/).filter(word => word.length > 0).length;
