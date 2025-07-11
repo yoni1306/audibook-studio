@@ -2,6 +2,9 @@
 
 import { useEffect } from 'react';
 
+// Disable prerendering to avoid build issues
+export const dynamic = 'force-dynamic';
+
 export default function Error({
   error,
   reset,

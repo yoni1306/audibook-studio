@@ -12,6 +12,7 @@ const nextConfig = {
     // See: https://github.com/gregberge/svgr
     svgr: false,
   },
+
   // Performance optimizations
   experimental: {
     // Enable faster builds in development
