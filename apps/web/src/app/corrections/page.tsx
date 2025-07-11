@@ -257,7 +257,17 @@ export default function CorrectionsPage() {
       renderCell: (params) => {
         const isRTL = detectTextDirection(params.value) === 'rtl';
         return (
-          <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%', px: 2 }}>
+          <Box 
+            sx={{ 
+              display: 'flex', 
+              alignItems: 'flex-start', 
+              height: '100%', 
+              width: '100%', 
+              py: 1,
+              px: 0.5,
+              minHeight: '80px'
+            }}
+          >
             <Typography
               variant="body2"
               sx={{
@@ -266,9 +276,13 @@ export default function CorrectionsPage() {
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
                 overflowWrap: 'break-word',
-                lineHeight: '1.4',
+                lineHeight: '1.6',
                 width: '100%',
                 unicodeBidi: 'embed',
+                fontSize: '0.875rem',
+                color: 'text.primary',
+                maxHeight: 'none',
+                overflow: 'visible',
               }}
             >
               {params.value}
@@ -490,7 +504,7 @@ export default function CorrectionsPage() {
       ) : (
         <Card>
           <CardContent sx={{ p: 0 }}>
-            <Box sx={{ height: 600, width: '1800px', maxWidth: '100%', overflow: 'auto' }}>
+            <Box sx={{ height: 'auto', minHeight: 600, width: '100%', overflow: 'auto' }}>
               <DataGrid
                 rows={transformedCorrections}
                 columns={columns}
@@ -510,7 +524,7 @@ export default function CorrectionsPage() {
                     quickFilterProps: { debounceMs: 500 },
                   },
                 }}
-                rowHeight={100}
+                getRowHeight={() => 'auto'}
                 sx={{
                   '& .MuiDataGrid-cell': {
                     borderBottom: '1px solid #f0f0f0',
@@ -519,8 +533,20 @@ export default function CorrectionsPage() {
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
                     overflowWrap: 'break-word',
-                    padding: '12px 8px',
-                    lineHeight: '1.4',
+                    padding: '16px 12px',
+                    lineHeight: '1.5',
+                    minHeight: '80px',
+                    maxHeight: 'none',
+                    overflow: 'visible',
+                  },
+                  '& .MuiDataGrid-row': {
+                    maxHeight: 'none !important',
+                  },
+                  '& .MuiDataGrid-cell--textLeft': {
+                    justifyContent: 'flex-start',
+                  },
+                  '& .MuiDataGrid-cell--textCenter': {
+                    justifyContent: 'center',
                   },
                   '& .MuiDataGrid-row:hover': {
                     backgroundColor: '#f8f9fa',
@@ -534,6 +560,10 @@ export default function CorrectionsPage() {
                   },
                   '& .MuiDataGrid-virtualScroller': {
                     backgroundColor: 'white',
+                    overflow: 'visible',
+                  },
+                  '& .MuiDataGrid-main': {
+                    overflow: 'visible',
                   },
                   '& .MuiDataGrid-footerContainer': {
                     borderTop: '2px solid rgba(224, 224, 224, 1)',
