@@ -324,7 +324,7 @@ export default function CorrectionsPage() {
         return (
           <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
             <Typography variant="body2" color="text.primary">
-              Page {pageNumber}, Paragraph {paragraphIndex}
+              Page {pageNumber}, Paragraph {paragraphIndex + 1}
             </Typography>
           </Box>
         );

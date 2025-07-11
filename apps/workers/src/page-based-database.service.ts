@@ -29,6 +29,16 @@ export async function savePages(
 
     // Use transaction to ensure data consistency
     await prisma.$transaction(async (tx) => {
+      // First, delete any existing pages for this book to avoid unique constraint violations
+      logger.debug(`Clearing existing pages for book ${bookId}`);
+      await tx.paragraph.deleteMany({
+        where: { bookId }
+      });
+      await tx.page.deleteMany({
+        where: { bookId }
+      });
+      logger.debug(`Existing pages cleared for book ${bookId}`);
+
       for (const page of pages) {
         logger.debug(`Saving page ${page.pageNumber} with ${page.paragraphs.length} paragraphs`);
 
