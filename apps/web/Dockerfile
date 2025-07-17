@@ -31,8 +31,8 @@ RUN npm install -g pnpm
 WORKDIR /app
 
 # Copy built application and dependencies
-COPY --from=base /app/apps/web/.next ./apps/web/.next
-COPY --from=base /app/apps/web/public ./apps/web/public
+COPY --from=base /app/apps/web/dist ./apps/web/dist
+COPY --from=base /app/apps/web/server.js ./apps/web/server.js
 COPY --from=base /app/node_modules ./node_modules
 COPY --from=base /app/package.json ./
 
