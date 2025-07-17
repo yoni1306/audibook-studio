@@ -6,43 +6,32 @@
   "tags": [],
   "targets": {
     "build": {
-      "executor": "@nx/next:build",
-      "outputs": ["{options.outputPath}"],
-      "defaultConfiguration": "production",
+      "executor": "nx:run-commands",
+      "outputs": ["{projectRoot}/dist"],
       "options": {
-        "outputPath": "dist/apps/web"
-      },
-      "configurations": {
-        "development": {
-          "outputPath": "apps/web"
-        },
-        "production": {}
+        "command": "vite build",
+        "cwd": "{projectRoot}"
       }
     },
-    "dev": {
-      "executor": "@nx/next:server",
-      "defaultConfiguration": "development",
+    "serve": {
+      "executor": "nx:run-commands",
       "options": {
-        "buildTarget": "web:build",
-        "dev": true,
-        "port": 4200
-      },
-      "configurations": {
-        "development": {
-          "buildTarget": "web:build:development"
-        },
-        "production": {
-          "buildTarget": "web:build:production",
-          "dev": false
-        }
+        "command": "vite",
+        "cwd": "{projectRoot}"
       }
     },
     "start": {
-      "executor": "@nx/next:server",
-      "defaultConfiguration": "production",
+      "executor": "nx:run-commands",
       "options": {
-        "buildTarget": "web:build",
-        "dev": false
+        "command": "node server.js",
+        "cwd": "{projectRoot}"
+      }
+    },
+    "preview": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vite preview",
+        "cwd": "{projectRoot}"
       }
     }
   }

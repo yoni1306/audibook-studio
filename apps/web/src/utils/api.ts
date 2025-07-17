@@ -1,5 +1,7 @@
+import { config } from '../../lib/config';
+
 export const getApiUrl = () => {
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+  return config.api.clientUrl;
 };
 
 export const apiUrl = getApiUrl();
