@@ -6,22 +6,25 @@ interface AudioStatsProps {
 }
 
 export default function AudioStats({ paragraphs, book }: AudioStatsProps) {
+  // Safety check for paragraphs
+  const safeParagraphs = paragraphs || [];
+  
   // Calculate audio status statistics
   const audioStats = {
-    ready: paragraphs.filter((p) => p.audioStatus === 'READY').length,
-    generating: paragraphs.filter((p) => p.audioStatus === 'GENERATING').length,
-    pending: paragraphs.filter((p) => p.audioStatus === 'PENDING').length,
-    error: paragraphs.filter((p) => p.audioStatus === 'ERROR').length,
+    ready: safeParagraphs.filter((p) => p.audioStatus === 'READY').length,
+    generating: safeParagraphs.filter((p) => p.audioStatus === 'GENERATING').length,
+    pending: safeParagraphs.filter((p) => p.audioStatus === 'PENDING').length,
+    error: safeParagraphs.filter((p) => p.audioStatus === 'ERROR').length,
   };
 
   // Calculate book statistics
-  const totalCharacters = paragraphs.reduce((sum, p) => sum + (p.content?.length || 0), 0);
-  const totalWords = paragraphs.reduce((sum, p) => {
+  const totalWords = safeParagraphs.reduce((sum, p) => {
     const wordCount = p.content ? p.content.trim().split(/\s+/).length : 0;
     return sum + wordCount;
   }, 0);
   const totalParagraphs = paragraphs.length;
-  const totalPages = book?.pages?.length || 0;
+  // Note: pages property may not exist on BookWithDetails type - using fallback
+  const totalPages = book && 'pages' in book ? (book as { pages?: unknown[] }).pages?.length || 0 : 0;
 
   // Estimate reading time (average 200 words per minute)
   const estimatedReadingTimeMinutes = Math.ceil(totalWords / 200);

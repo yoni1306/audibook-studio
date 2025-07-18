@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useApiClient } from '../../../hooks/useApiClient';
-import { BulkFixSuggestion } from '@audibook/api-client';
-import { getTextDirection, getTextAlign } from '../../utils/text';
+import { BulkFixSuggestion, BulkFixRequest } from '../../types/api';
+import { ApiClient } from '../../utils/api';
+import { createLogger } from '../../utils/logger';
+
+const logger = createLogger('BulkFixModal');
 
 interface BulkFixModalProps {
   onClose: () => void;
@@ -9,10 +12,6 @@ interface BulkFixModalProps {
   bookId: string;
   onFixesApplied: () => void;
 }
-
-const logger = {
-  debug: (message: string, ...args: unknown[]) => console.log(message, ...args)
-};
 
 export default function BulkFixModal({ 
   onClose, 
@@ -29,7 +28,7 @@ export default function BulkFixModal({
   useEffect(() => {
     if (suggestions.length > 0) {
       // Always log when modal opens, regardless of suggestions length
-      logger.debug('Received bulk fix suggestions:', suggestions);
+  
       
       // Initialize with all paragraphs selected by default
       const initialSelection: {[key: string]: string[]} = {};
@@ -51,161 +50,208 @@ export default function BulkFixModal({
       const updated = current.includes(paragraphId)
         ? current.filter(id => id !== paragraphId)
         : [...current, paragraphId];
-      return { ...prev, [wordKey]: updated };
+      
+      return {
+        ...prev,
+        [wordKey]: updated
+      };
     });
   };
 
   const handleToggleAll = (wordKey: string, allParagraphIds: string[]) => {
     setSelectedFixes(prev => {
       const current = prev[wordKey] || [];
-      const allSelected = allParagraphIds.every(id => current.includes(id));
+      const allSelected = allParagraphIds.length === current.length;
+      
       return {
         ...prev,
-        [wordKey]: allSelected ? [] : [...allParagraphIds]
+        [wordKey]: allSelected ? [] : allParagraphIds
       };
     });
   };
 
-  const getTotalSelected = () => {
-    return Object.values(selectedFixes).reduce((total, ids) => total + ids.length, 0);
-  };
-
   const handleApply = async () => {
-    setApplying(true);
-    try {
-      // Convert selected fixes to the format expected by the API
-      const fixesToApply = Object.entries(selectedFixes)
-        .filter(([_, paragraphIds]) => paragraphIds.length > 0)
-        .map(([wordKey, paragraphIds]) => {
-          const [originalWord, correctedWord] = wordKey.split(':');
-          return {
-            originalWord,
-            correctedWord,
-            paragraphIds
-          };
-        });
+    logger.info('Starting bulk fix application...');
 
-      if (fixesToApply.length === 0) {
-        onClose();
-        return;
+    
+    const fixesToApply = Object.entries(selectedFixes)
+      .map(([wordKey, paragraphIds]) => {
+        const suggestion = suggestions.find(s => `${s.originalWord}:${s.correctedWord}` === wordKey);
+        if (!suggestion) {
+          logger.warn(`No suggestion found for wordKey: ${wordKey}`);
+          logger.warn('Available suggestions:', suggestions.map(s => `${s.originalWord}:${s.correctedWord}`));
+          return null;
+        }
+        
+        const fix = {
+          originalWord: suggestion.originalWord,
+          correctedWord: suggestion.correctedWord,
+          paragraphIds: paragraphIds
+        };
+        
+
+        return fix;
+      })
+      .filter((fix): fix is { originalWord: string; correctedWord: string; paragraphIds: string[] } => fix !== null);
+
+    logger.info(`Total fixes to apply: ${fixesToApply.length}`);
+
+
+    if (fixesToApply.length === 0) {
+      logger.warn('No fixes to apply - exiting early');
+      return;
+    }
+
+    setApplying(true);
+    
+    try {
+      logger.info('Making API call to /books/bulk-fixes...');
+      const { data: result, error } = await apiClient.books.applyBulkFixes({
+        bookId,
+        fixes: fixesToApply,
+      });
+
+      if (error) {
+        logger.error('API Error response:', error);
+        throw new Error(`Failed to apply fixes: ${error}`);
       }
 
-      logger.debug('Applying bulk fixes:', fixesToApply);
-      
-      // Apply the fixes via API
-      await apiClient.books.applyBulkFixes({ bookId, fixes: fixesToApply });
-      
-      logger.debug('Bulk fixes applied successfully');
-      onFixesApplied();
-      onClose();
+      if (!result) {
+        logger.error('API returned no result');
+        throw new Error('Failed to apply fixes: No result returned from API');
+      }
+
+      logger.info('API Success response:', result);
+      logger.info(`Results: ${result.totalParagraphsUpdated} paragraphs updated, ${result.totalWordsFixed} words fixed`);
+
+      if (result.totalParagraphsUpdated > 0) {
+        logger.info('Fixes applied successfully! Calling onFixesApplied callback...');
+        onFixesApplied?.();
+        onClose();
+      } else {
+        logger.warn('No paragraphs were updated - this might indicate an issue');
+      }
     } catch (error) {
-      logger.debug('Error applying bulk fixes:', error);
-      // Handle error - could show a toast or error message
+      logger.error('Error applying bulk fixes:', error);
+      logger.error('Error details:', (error as Error).message);
+      logger.error('Error stack:', (error as Error).stack);
+      alert(`Error applying fixes: ${(error as Error).message || 'Unknown error'}`);
     } finally {
+      logger.info('Bulk fix application completed');
       setApplying(false);
     }
   };
 
+  const getTotalSelected = () => {
+    return Object.values(selectedFixes).reduce((total, paragraphIds) => total + paragraphIds.length, 0);
+  };
+
+  if (suggestions.length === 0) return null;
+
   return (
     <div style={{
       position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
+      inset: '0',
       backgroundColor: 'rgba(0, 0, 0, 0.5)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex: 1000,
-      padding: '20px'
+      zIndex: 50,
+      padding: '16px'
     }}>
       <div style={{
         backgroundColor: 'white',
-        borderRadius: '12px',
-        maxWidth: '800px',
+        borderRadius: '8px',
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+        maxWidth: '1152px',
         width: '100%',
         maxHeight: '90vh',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+        overflow: 'hidden'
       }}>
         <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
           padding: '24px',
-          borderBottom: '1px solid #e5e7eb',
-          backgroundColor: '#f9fafb'
+          borderBottom: '1px solid #e5e7eb'
         }}>
-          <h2 style={{
-            margin: 0,
-            fontSize: '20px',
-            fontWeight: '600',
-            color: '#111827'
-          }}>
-            Review Bulk Fix Suggestions
-          </h2>
-          <p style={{
-            margin: '8px 0 0 0',
-            fontSize: '14px',
-            color: '#6b7280'
-          }}>
-            Select which paragraphs you&apos;d like to apply the suggested fixes to.
-          </p>
+          <div>
+            <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>
+              Apply Bulk Fixes ({suggestions.length} suggestions)
+            </h2>
+            <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '20px' }}>
+              Select which text corrections you&apos;d like to apply. All paragraphs are selected by default.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              color: '#9ca3af',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '18px'
+            }}
+          >
+            ✕
+          </button>
         </div>
 
         <div style={{
-          flex: 1,
-          overflow: 'auto',
-          padding: '0'
+          padding: '24px',
+          overflowY: 'auto',
+          maxHeight: '60vh'
         }}>
-          {suggestions.map((suggestion, idx) => {
+          {suggestions.map(suggestion => {
             const wordKey = `${suggestion.originalWord}:${suggestion.correctedWord}`;
-            const isExpanded = expandedWord === wordKey;
+            const selectedParagraphs = selectedFixes[wordKey] || [];
+            
+            // Use the new API format with full paragraph details
             const allParagraphIds = suggestion.paragraphIds || [];
-            const selectedCount = selectedFixes[wordKey]?.length || 0;
-            const allSelected = allParagraphIds.length > 0 && selectedCount === allParagraphIds.length;
-            const paragraphsToRender = suggestion.paragraphs || [];
+            
+            // Use the paragraphs field which contains full paragraph details
+            const paragraphsToRender = suggestion.paragraphs?.map(paragraph => ({
+              id: paragraph.id || '',
+              pageId: paragraph.pageId || '',
+              pageNumber: paragraph.pageNumber || 0,
+              orderIndex: paragraph.orderIndex || 0,
+              content: paragraph.content || '',
+              occurrences: paragraph.occurrences || 1,
+              previewBefore: paragraph.previewBefore || '',
+              previewAfter: paragraph.previewAfter || ''
+            })) || [];
+            
+            const allSelected = allParagraphIds.length === selectedParagraphs.length;
+            const isExpanded = expandedWord === wordKey;
 
             return (
-              <div key={idx} style={{
-                borderBottom: idx < suggestions.length - 1 ? '1px solid #e5e7eb' : 'none'
+              <div key={wordKey} style={{
+                marginBottom: '24px',
+                border: '1px solid #e5e7eb',
+                borderRadius: '8px'
               }}>
                 <div style={{
-                  padding: '20px 24px',
-                  backgroundColor: '#fff'
+                  padding: '16px',
+                  backgroundColor: '#f9fafb',
+                  borderBottom: '1px solid #e5e7eb'
                 }}>
                   <div style={{
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginBottom: '16px'
+                    justifyContent: 'space-between'
                   }}>
-                    <div>
-                      <h3 style={{
-                        margin: '0 0 4px 0',
-                        fontSize: '16px',
-                        fontWeight: '600',
-                        color: '#111827'
-                      }}>
-                        Replace &quot;{suggestion.originalWord}&quot; with &quot;{suggestion.correctedWord}&quot;
-                      </h3>
-                      <p style={{
-                        margin: 0,
-                        fontSize: '14px',
-                        color: '#6b7280'
-                      }}>
-                        Found in {allParagraphIds.length} paragraph{allParagraphIds.length !== 1 ? 's' : ''} • {selectedCount} selected
-                      </p>
-                    </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                      <label style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        cursor: 'pointer',
-                        fontSize: '14px',
-                        color: '#374151'
-                      }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ color: '#dc2626', fontWeight: '500', fontSize: '15px' }}>&quot;{suggestion.originalWord}&quot;</span>
+                        <span style={{ color: '#9ca3af', fontSize: '15px' }}>→</span>
+                        <span style={{ color: '#16a34a', fontWeight: '500', fontSize: '15px' }}>&quot;{suggestion.correctedWord}&quot;</span>
+                      </div>
+                      <span style={{ fontSize: '15px', color: '#6b7280' }}>
+                        Found in {suggestion.paragraphIds?.length || 0} paragraphs
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                         <input
                           type="checkbox"
                           checked={allSelected}
@@ -232,7 +278,7 @@ export default function BulkFixModal({
 
                 <div style={{ padding: '16px' }}>
                   <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                    {paragraphsToRender.map((paragraph) => (
+                    {paragraphsToRender.map((paragraph, pIdx) => (
                       <li key={paragraph.id} style={{ marginBottom: '12px' }}>
                         <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer' }}>
                           <input
@@ -280,8 +326,8 @@ export default function BulkFixModal({
                                     {paragraph.previewBefore.split('.').map((sentence, idx) => (
                                       <div key={idx} style={{
                                         padding: '2px 0',
-                                        direction: getTextDirection(sentence),
-                                        textAlign: getTextAlign(sentence)
+                                        direction: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'rtl' : 'ltr',
+                                        textAlign: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'right' : 'left'
                                       }}>
                                         {sentence.trim()}{idx < paragraph.previewBefore.split('.').length - 1 ? '.' : ''}
                                       </div>
@@ -304,8 +350,8 @@ export default function BulkFixModal({
                                     {paragraph.previewAfter.split('.').map((sentence, idx) => (
                                       <div key={idx} style={{
                                         padding: '2px 0',
-                                        direction: getTextDirection(sentence),
-                                        textAlign: getTextAlign(sentence)
+                                        direction: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'rtl' : 'ltr',
+                                        textAlign: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'right' : 'left'
                                       }}>
                                         {sentence.trim()}{idx < paragraph.previewAfter.split('.').length - 1 ? '.' : ''}
                                       </div>

@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useApiClient } from '../../hooks/useApiClient';
 import { useSearchParams } from 'react-router-dom';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('TextFixesPage');
 
 interface WordFix {
   id: string;
@@ -56,10 +59,10 @@ export default function TextFixesPage() {
       
       try {
         const endpoint = bookId ? `/api/text-fixes?bookId=${bookId}` : '/api/text-fixes';
-        const response = await apiClient.get(endpoint);
-        setData(response);
+        const { data, error } = await apiClient.textFixes.getAll({ endpoint });
+        setData(data);
       } catch (err) {
-        console.error('Error fetching text fixes:', err);
+        logger.error('Error fetching text fixes:', err);
         setError('Failed to load text fixes data');
       } finally {
         setLoading(false);

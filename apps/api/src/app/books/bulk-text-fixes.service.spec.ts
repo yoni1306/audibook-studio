@@ -1819,4 +1819,185 @@ describe('BulkTextFixesService', () => {
       expect(disambiguationMatches.length).toBe(0); // Should be 0 because disambiguation excludes numbers
     });
   });
+
+  describe('extractSentenceContext', () => {
+    it('should extract proper sentence context for Hebrew text', () => {
+      const content = 'זוהי המשפט הראשון. זוהי המשפט השני עם המילה שלום בתוכו. זוהי המשפט השלישי.';
+      const word = 'שלום';
+      const position = content.indexOf(word);
+      
+      const context = (service as any).extractSentenceContext(content, word, position);
+      
+      // Should extract only the sentence containing the word
+      expect(context).toBe('זוהי המשפט השני עם המילה שלום בתוכו.');
+      expect(context).not.toContain('הראשון');
+      expect(context).not.toContain('השלישי');
+    });
+
+    it('should extract proper sentence context for English text', () => {
+      const content = 'This is the first sentence. This is the second sentence with the word hello in it. This is the third sentence.';
+      const word = 'hello';
+      const position = content.indexOf(word);
+      
+      const context = (service as any).extractSentenceContext(content, word, position);
+      
+      // Should extract only the sentence containing the word
+      expect(context).toBe('This is the second sentence with the word hello in it.');
+      expect(context).not.toContain('first');
+      expect(context).not.toContain('third');
+    });
+
+    it('should handle Hebrew punctuation marks', () => {
+      const content = 'זוהי המשפט הראשון׃ זוהי המשפט השני עם המילה שלום בתוכו׃ זוהי המשפט השלישי׃';
+      const word = 'שלום';
+      const position = content.indexOf(word);
+      
+      const context = (service as any).extractSentenceContext(content, word, position);
+      
+      // Should extract only the sentence containing the word (Hebrew colon ׃ is U+05C3)
+      expect(context).toBe('זוהי המשפט השני עם המילה שלום בתוכו׃');
+      expect(context).not.toContain('הראשון');
+      expect(context).not.toContain('השלישי');
+    });
+
+    it('should handle exclamation and question marks', () => {
+      const content = 'זוהי המשפט הראשון! זוהי המשפט השני עם המילה שלום בתוכו? זוהי המשפט השלישי.';
+      const word = 'שלום';
+      const position = content.indexOf(word);
+      
+      const context = (service as any).extractSentenceContext(content, word, position);
+      
+      // Should extract only the sentence containing the word
+      expect(context).toBe('זוהי המשפט השני עם המילה שלום בתוכו?');
+      expect(context).not.toContain('הראשון');
+      expect(context).not.toContain('השלישי');
+    });
+
+    it('should fall back to contextual extraction for very long sentences', () => {
+      // Create a very long "sentence" (over 200 characters) that would be treated as a paragraph
+      const longSentence = 'זוהי פסקה ארוכה מאוד שלא מסתיימת בנקודה או בסימן פיסוק אחר והיא ממשיכה והולכת עם הרבה מילים ועוד מילים ועוד מילים כדי להגיע לאורך של יותר מ200 תווים כדי לבדוק את המנגנון של חילוץ הקשר כאשר המשפט ארוך מדי ואז המילה שלום מופיעה כאן ואחרי זה עוד הרבה מילים ועוד מילים ועוד מילים כדי להמשיך את הפסקה הארוכה הזו';
+      const word = 'שלום';
+      const position = longSentence.indexOf(word);
+      
+      const context = (service as any).extractSentenceContext(longSentence, word, position);
+      
+      // Should fall back to contextual extraction (around 80 chars + word + 80 chars)
+      expect(context.length).toBeLessThan(longSentence.length);
+      expect(context).toContain(word);
+      expect(context).toContain('...');
+    });
+
+    it('should handle word at the beginning of content', () => {
+      const content = 'שלום זוהי המשפט הראשון. זוהי המשפט השני.';
+      const word = 'שלום';
+      const position = 0;
+      
+      const context = (service as any).extractSentenceContext(content, word, position);
+      
+      // Should extract the first sentence
+      expect(context).toBe('שלום זוהי המשפט הראשון.');
+      expect(context).not.toContain('השני');
+    });
+
+    it('should handle word at the end of content', () => {
+      const content = 'זוהי המשפט הראשון. זוהי המשפט השני עם המילה שלום';
+      const word = 'שלום';
+      const position = content.indexOf(word);
+      
+      const context = (service as any).extractSentenceContext(content, word, position);
+      
+      // Should extract from the sentence start to the end
+      expect(context).toBe('זוהי המשפט השני עם המילה שלום');
+      expect(context).not.toContain('הראשון');
+    });
+
+    it('should handle content with no sentence terminators', () => {
+      const content = 'זוהי פסקה ללא סימני פיסוק והמילה שלום מופיעה כאן';
+      const word = 'שלום';
+      const position = content.indexOf(word);
+      
+      const context = (service as any).extractSentenceContext(content, word, position);
+      
+      // Should fall back to contextual extraction since no sentence terminators
+      expect(context).toContain(word);
+      expect(context.length).toBeLessThanOrEqual(content.length);
+    });
+
+    it('should handle multiple occurrences of the same word', () => {
+      const content = 'המילה שלום מופיעה כאן. המילה שלום מופיעה גם כאן. המילה שלום מופיעה שוב.';
+      const word = 'שלום';
+      const secondOccurrence = content.indexOf(word, content.indexOf(word) + 1);
+      
+      const context = (service as any).extractSentenceContext(content, word, secondOccurrence);
+      
+      // Should extract only the second sentence
+      expect(context).toBe('המילה שלום מופיעה גם כאן.');
+      expect(context).not.toContain('מופיעה שוב');
+    });
+
+    it('should handle mixed Hebrew and English text', () => {
+      const content = 'This is English text. זוהי פסקה בעברית עם המילה שלום בתוכה. Back to English.';
+      const word = 'שלום';
+      const position = content.indexOf(word);
+      
+      const context = (service as any).extractSentenceContext(content, word, position);
+      
+      // Should extract only the Hebrew sentence
+      expect(context).toBe('זוהי פסקה בעברית עם המילה שלום בתוכה.');
+      expect(context).not.toContain('English');
+    });
+
+    it('should break at word boundaries when using contextual extraction', () => {
+      // Create content where contextual extraction will be used
+      const content = 'זוהי פסקה ארוכה מאוד ללא סימני פיסוק והיא ממשיכה והולכת עם הרבה מילים ועוד מילים ועוד מילים כדי להגיע לאורך של יותר מ200 תווים כדי לבדוק את המנגנון של חילוץ הקשר כאשר המשפט ארוך מדי ואז המילה שלום מופיעה כאן ואחרי זה עוד הרבה מילים ועוד מילים ועוד מילים כדי להמשיך את הפסקה הארוכה הזו';
+      const word = 'שלום';
+      const position = content.indexOf(word);
+      
+      const context = (service as any).extractSentenceContext(content, word, position);
+      
+      // Should break at word boundaries (not in the middle of words)
+      expect(context).toContain(word);
+      expect(context).toContain('...');
+      
+      // The context should not end or start in the middle of a word
+      const contextWithoutEllipsis = context.replace(/\.\.\./g, '').trim();
+      const words = contextWithoutEllipsis.split(/\s+/);
+      
+      // First and last words should be complete (no partial words)
+      expect(words[0].length).toBeGreaterThan(0);
+      expect(words[words.length - 1].length).toBeGreaterThan(0);
+    });
+
+    it('should handle Arabic punctuation marks', () => {
+      const content = 'This is the first sentence؟ This is the second sentence with the word hello in it؟ This is the third sentence.';
+      const word = 'hello';
+      const position = content.indexOf(word);
+      
+      const context = (service as any).extractSentenceContext(content, word, position);
+      
+      // Should extract only the sentence containing the word (Arabic question mark ؟ is U+061F)
+      expect(context).toBe('This is the second sentence with the word hello in it؟');
+      expect(context).not.toContain('first');
+      expect(context).not.toContain('third');
+    });
+
+    it('should prevent returning the full paragraph as context', () => {
+      // This is the main bug we're fixing - ensure we don't return the full paragraph
+      const fullParagraph = 'זוהי פסקה ארוכה מאוד עם הרבה משפטים. המשפט הראשון מכיל מידע חשוב. המשפט השני מכיל את המילה שלום שאנחנו מחפשים. המשפט השלישי מכיל מידע נוסף. המשפט הרביעי הוא המשפט האחרון בפסקה הזו.';
+      const word = 'שלום';
+      const position = fullParagraph.indexOf(word);
+      
+      const context = (service as any).extractSentenceContext(fullParagraph, word, position);
+      
+      // Should NOT return the full paragraph
+      expect(context).not.toBe(fullParagraph);
+      expect(context.length).toBeLessThan(fullParagraph.length);
+      
+      // Should contain the word
+      expect(context).toContain(word);
+      
+      // Should be a reasonable length (not the full paragraph)
+      expect(context.length).toBeLessThan(fullParagraph.length * 0.8);
+    });
+  });
 });

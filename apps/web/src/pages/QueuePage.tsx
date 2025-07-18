@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useApiClient } from '../../hooks/useApiClient';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('QueuePage');
 
 interface QueueStatus {
   waiting: number;
@@ -43,7 +46,7 @@ export default function QueuePage() {
       const response = await apiClient.get('/api/queue/status');
       setStatus(response);
     } catch (err) {
-      console.error('Error fetching queue status:', err);
+      logger.error('Error fetching queue status:', err);
       setError('Failed to fetch queue status');
     }
   }, [apiClient]);
@@ -55,7 +58,7 @@ export default function QueuePage() {
       const response = await apiClient.get(`/api/queue/jobs/${selectedStatus}`);
       setJobs(response.jobs || []);
     } catch (err) {
-      console.error('Error fetching jobs:', err);
+      logger.error('Error fetching jobs:', err);
       setError('Failed to fetch jobs');
     }
   }, [apiClient, selectedStatus]);
@@ -68,7 +71,7 @@ export default function QueuePage() {
       await fetchJobs();
       await fetchQueueStatus();
     } catch (err) {
-      console.error('Error cleaning jobs:', err);
+      logger.error('Error cleaning jobs:', err);
       setError('Failed to clean jobs');
     }
   };
@@ -81,7 +84,7 @@ export default function QueuePage() {
       await fetchJobs();
       await fetchQueueStatus();
     } catch (err) {
-      console.error('Error retrying job:', err);
+      logger.error('Error retrying job:', err);
       setError('Failed to retry job');
     }
   };
