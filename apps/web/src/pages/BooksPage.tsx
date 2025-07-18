@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApiClient } from '../../hooks/useApiClient';
 import type { BookWithCounts } from '@audibook/api-client';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('BooksPage');
 
 export default function BooksPage() {
   const [books, setBooks] = useState<BookWithCounts[]>([]);
@@ -15,25 +18,17 @@ export default function BooksPage() {
         setLoading(true);
         setError(null);
         
-        console.log('🔍 Fetching books from API...');
-        console.log('🔧 API Client config:', apiClient);
+
         
         // Test direct fetch first
-        console.log('🧪 Testing direct fetch...');
-        try {
-          const directResponse = await fetch('http://localhost:3000/api/books');
-          const directData = await directResponse.json();
-          console.log('✅ Direct fetch successful:', directData);
-        } catch (directError) {
-          console.error('❌ Direct fetch failed:', directError);
-        }
+
         
         const { data, error } = await apiClient.books.getAll();
         
-        console.log('📡 Raw API response:', { data, error });
+
         
         if (error) {
-          console.error('❌ API error:', error);
+          logger.error('API error:', error);
           throw new Error(`API error: ${error}`);
         }
         
@@ -47,7 +42,7 @@ export default function BooksPage() {
         setBooks(Array.isArray(booksArray) ? booksArray : []);
         setError(null);
       } catch (err) {
-        console.error('Error fetching books:', err);
+        logger.error('Error fetching books:', err);
         let errorMessage = 'Failed to load books';
         
         if (err instanceof TypeError && err.message.includes('fetch')) {

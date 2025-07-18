@@ -261,6 +261,123 @@ describe('BooksService', () => {
       expect(result).toEqual({ ...updatedParagraph, textChanges: [] });
     });
 
+    it('should send full paragraph text for audio generation - long content', async () => {
+      const longContent = 'זהו פסקה ארוכה מאוד שמכילה הרבה טקסט עברי. ' +
+        'הפסקה הזו נועדה לבדוק שהטקסט המלא נשלח ליצירת אודיו, ' +
+        'גם כאשר הוא ארוך מאוד ומכיל תווים מיוחדים כמו ניקוד וסימני פיסוק. ' +
+        'חשוב לוודא שלא חסר שום חלק מהטקסט בתהליך יצירת האודיו, ' +
+        'כי זה יכול לגרום לבעיות בהשמעה ובהבנת התוכן. ' +
+        'בנוסף, הטקסט כולל מספרים כמו 123 ו-456, ' +
+        'וגם סימני פיסוק שונים כמו נקודות, פסיקים, סימני שאלה? וסימני קריאה! ' +
+        'כל אלה צריכים להיות כלולים בטקסט שנשלח ליצירת האודיו.';
+      
+      const existingParagraph = { ...mockParagraph, content: 'Original content' };
+      const updatedParagraph = {
+        ...mockParagraph,
+        content: longContent,
+        page: {
+          ...mockPage,
+          book: mockBook,
+        },
+        textCorrections: [],
+      };
+
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(existingParagraph);
+      (prismaService.paragraph.update as jest.Mock).mockResolvedValue(updatedParagraph);
+
+      const result = await service.updateParagraph(paragraphId, longContent, true);
+
+      // Verify that the EXACT full content is sent for audio generation
+      expect(queueService.addAudioGenerationJob).toHaveBeenCalledWith({
+        paragraphId: paragraphId,
+        bookId: mockBook.id,
+        content: longContent, // Full content, not truncated
+      });
+      
+      // Verify the content length is preserved
+      const audioJobCall = (queueService.addAudioGenerationJob as jest.Mock).mock.calls[0][0];
+      expect(audioJobCall.content).toHaveLength(longContent.length);
+      expect(audioJobCall.content).toBe(longContent);
+      
+      expect(result).toEqual({ ...updatedParagraph, textChanges: [] });
+    });
+
+    it('should send full paragraph text for audio generation - mixed languages', async () => {
+      const mixedContent = 'This is English text mixed with Hebrew: שלום עולם! ' +
+        'And some numbers: 123, 456.78, and special characters: @#$%^&*()[]{}|;:,.<>? ' +
+        'More Hebrew: זהו טקסט מעורב עם אנגלית ומספרים ותווים מיוחדים. ' +
+        'Final English part with punctuation!';
+      
+      const existingParagraph = { ...mockParagraph, content: 'Original content' };
+      const updatedParagraph = {
+        ...mockParagraph,
+        content: mixedContent,
+        page: {
+          ...mockPage,
+          book: mockBook,
+        },
+        textCorrections: [],
+      };
+
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(existingParagraph);
+      (prismaService.paragraph.update as jest.Mock).mockResolvedValue(updatedParagraph);
+
+      const result = await service.updateParagraph(paragraphId, mixedContent, true);
+
+      // Verify that the EXACT mixed content is sent for audio generation
+      expect(queueService.addAudioGenerationJob).toHaveBeenCalledWith({
+        paragraphId: paragraphId,
+        bookId: mockBook.id,
+        content: mixedContent, // Full mixed content preserved
+      });
+      
+      // Verify no content modification or encoding issues
+      const audioJobCall = (queueService.addAudioGenerationJob as jest.Mock).mock.calls[0][0];
+      expect(audioJobCall.content).toContain('שלום עולם');
+      expect(audioJobCall.content).toContain('This is English');
+      expect(audioJobCall.content).toContain('123, 456.78');
+      expect(audioJobCall.content).toContain('@#$%^&*()[]{}|;:,.<>?');
+      
+      expect(result).toEqual({ ...updatedParagraph, textChanges: [] });
+    });
+
+    it('should send full paragraph text for audio generation - with niqqud', async () => {
+      const hebrewWithNiqqud = 'שָׁלוֹם עוֹלָם! זֶה טֶקְסְט עִבְרִי עִם נִקּוּד מָלֵא. ' +
+        'הַנִּקּוּד חָשׁוּב לְיִצִירַת אוּדְיוֹ נָכוֹן וּמְדֻיָּק. ' +
+        'כָּל הַתַּוִּים הַמְּיֻחָדִים צְרִיכִים לְהִשָּׁמֵר בַּטֶּקְסְט הַמְּלֵא.';
+      
+      const existingParagraph = { ...mockParagraph, content: 'Original content' };
+      const updatedParagraph = {
+        ...mockParagraph,
+        content: hebrewWithNiqqud,
+        page: {
+          ...mockPage,
+          book: mockBook,
+        },
+        textCorrections: [],
+      };
+
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(existingParagraph);
+      (prismaService.paragraph.update as jest.Mock).mockResolvedValue(updatedParagraph);
+
+      const result = await service.updateParagraph(paragraphId, hebrewWithNiqqud, true);
+
+      // Verify that Hebrew with niqqud is fully preserved
+      expect(queueService.addAudioGenerationJob).toHaveBeenCalledWith({
+        paragraphId: paragraphId,
+        bookId: mockBook.id,
+        content: hebrewWithNiqqud, // Full content with niqqud preserved
+      });
+      
+      // Verify niqqud characters are preserved
+      const audioJobCall = (queueService.addAudioGenerationJob as jest.Mock).mock.calls[0][0];
+      expect(audioJobCall.content).toContain('שָׁלוֹם'); // Contains niqqud
+      expect(audioJobCall.content).toContain('נִקּוּד'); // Contains niqqud
+      expect(audioJobCall.content).toContain('מְּיֻחָדִים'); // Contains complex niqqud
+      
+      expect(result).toEqual({ ...updatedParagraph, textChanges: [] });
+    });
+
     it('should track text changes when content differs', async () => {
       const existingParagraph = { ...mockParagraph, content: 'Old content' };
       const updatedParagraph = {

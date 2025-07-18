@@ -201,6 +201,8 @@ describe('BooksController', () => {
           },
         ],
         total: 2,
+        page: 1,
+        totalPages: 1,
         timestamp: expect.any(String),
       });
     });
@@ -273,6 +275,8 @@ describe('BooksController', () => {
       expect(result).toEqual({
         corrections: [],
         total: 0,
+        page: 1,
+        totalPages: 0,
         timestamp: expect.any(String),
       });
     });

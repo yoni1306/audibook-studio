@@ -16,11 +16,6 @@ import BulkFixModal from '../components/book/BulkFixModal';
 export default function BookDetailPage() {
   const { id: bookId } = useParams<{ id: string }>();
   
-  // Early return if bookId is not available
-  if (!bookId) {
-    return <div>Invalid book ID</div>;
-  }
-  
   // API client
   const apiClient = useApiClient();
   const [book, setBook] = useState<BookWithDetails | null>(null);
@@ -48,6 +43,8 @@ export default function BookDetailPage() {
   }
 
   const fetchBook = useCallback(async () => {
+    if (!bookId) return; // Guard against undefined bookId
+    
     const correlationId = generateCorrelationId();
     try {
       setError(null); // Clear any previous errors
@@ -85,7 +82,7 @@ export default function BookDetailPage() {
       const errorMessage = 'Failed to connect to the server. Please check if the API server is running.';
       setError(errorMessage);
       setBook(null);
-      console.error('Error fetching book:', error, { correlationId });
+      logger.error('Error fetching book:', { error, correlationId });
       logger.error('Network error fetching book:', { error: error instanceof Error ? error.message : String(error), correlationId });
     } finally {
       if (isInitialLoad.current) {
@@ -112,6 +109,11 @@ export default function BookDetailPage() {
     return () => clearInterval(interval);
   }, [book, fetchBook]);
 
+  // Early return if bookId is not available (after all hooks)
+  if (!bookId) {
+    return <div>Invalid book ID</div>;
+  }
+
   const startEdit = (paragraph: Paragraph) => {
     setEditingId(paragraph.id);
     setEditContent(paragraph.content);
@@ -131,11 +133,11 @@ export default function BookDetailPage() {
       });
 
       if (!error && result) {
-        logger.debug('Paragraph update response:', result);
+
 
         // Check if there are bulk fix suggestions
         if (result.bulkSuggestions && result.bulkSuggestions.length > 0) {
-          logger.debug('Bulk suggestions found:', result.bulkSuggestions);
+
           setPendingBulkFix({
             paragraphId,
             content: editContent,
@@ -144,7 +146,7 @@ export default function BookDetailPage() {
           });
           setShowBulkFixModal(true);
         } else {
-          logger.debug('No bulk suggestions found in response');
+
         }
 
         await fetchBook();
@@ -154,7 +156,7 @@ export default function BookDetailPage() {
         alert('Failed to save changes');
       }
     } catch (error) {
-      console.error('Error saving paragraph:', error);
+      logger.error('Error saving paragraph:', error);
       alert('Error saving changes');
     } finally {
       setSaving(false);
@@ -188,7 +190,7 @@ export default function BookDetailPage() {
         
         // Check if there are bulk fix suggestions
         if (result.bulkSuggestions && result.bulkSuggestions.length > 0) {
-          logger.debug('Bulk suggestions found from audio generation:', result.bulkSuggestions);
+
           setPendingBulkFix({
             paragraphId,
             content,
@@ -215,7 +217,7 @@ export default function BookDetailPage() {
         }
       }
     } catch (error) {
-      console.error('Error generating audio:', error);
+      logger.error('Error generating audio:', error);
       
       // If there was an error, revert the status back
       if (book) {
@@ -233,7 +235,7 @@ export default function BookDetailPage() {
   };
 
   const handleBulkFixComplete = () => {
-    console.log('Bulk fix completed');
+    logger.info('Bulk fix completed');
 
     // Show success message based on whether audio was requested
     const message = pendingBulkFix?.audioRequested 
@@ -264,7 +266,7 @@ export default function BookDetailPage() {
         }
       })
       .catch((error: Error) => {
-        console.error('Error applying original edit:', error);
+        logger.error('Error applying original edit:', error);
       });
     }
     
@@ -280,7 +282,7 @@ export default function BookDetailPage() {
     <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
       <BookHeader book={book} />
       
-      <AudioStats book={book} />
+      <AudioStats paragraphs={book.paragraphs} book={book} />
 
       {/* Bulk Fix Notification */}
       {pendingBulkFix && (
