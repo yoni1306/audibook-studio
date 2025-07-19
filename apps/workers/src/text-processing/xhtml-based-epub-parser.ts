@@ -1,10 +1,9 @@
-import path from 'path';
-import { promises as fsPromises } from 'fs';
-import * as fs from 'fs';
-
-import { JSDOM } from 'jsdom';
+import * as path from 'path';
+import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 import * as yauzl from 'yauzl';
-
+import { JSDOM } from 'jsdom';
+import { parseStringPromise } from 'xml2js';
 import { createLogger } from '@audibook/logger';
 import { ParagraphProcessor, ProcessedParagraph } from './utils/paragraph-processor';
 import { HTMLTextExtractor } from './utils/html-text-extractor';
@@ -31,6 +30,15 @@ export interface XHTMLParseResult {
     totalParagraphs: number;
     averageParagraphsPerPage: number;
     xhtmlFiles: string[];
+  };
+  bookMetadata?: {
+    title?: string;
+    author?: string;
+    language?: string;
+    publisher?: string;
+    publishedDate?: string;
+    description?: string;
+    identifier?: string;
   };
 }
 
@@ -121,18 +129,18 @@ export class XHTMLBasedEPUBParser {
           if (/\/$/.test(entry.fileName)) {
             // Directory entry
             const dirPath = path.join(extractPath, entry.fileName);
-            fs.mkdirSync(dirPath, { recursive: true });
+            fsSync.mkdirSync(dirPath, { recursive: true });
             zipfile.readEntry();
           } else {
             // File entry
             const filePath = path.join(extractPath, entry.fileName);
             const dirPath = path.dirname(filePath);
-            fs.mkdirSync(dirPath, { recursive: true });
+            fsSync.mkdirSync(dirPath, { recursive: true });
             
             zipfile.openReadStream(entry, (err, readStream) => {
               if (err) return reject(err);
               
-              const writeStream = fs.createWriteStream(filePath);
+              const writeStream = fsSync.createWriteStream(filePath);
               readStream.pipe(writeStream);
               
               writeStream.on('close', () => {
@@ -158,7 +166,7 @@ export class XHTMLBasedEPUBParser {
     
     // Recursively search for XHTML files
     const searchDirectory = async (dirPath: string): Promise<void> => {
-      const entries = await fsPromises.readdir(dirPath, { withFileTypes: true });
+      const entries = await fs.readdir(dirPath, { withFileTypes: true });
       
       for (const entry of entries) {
         const fullPath = path.join(dirPath, entry.name);
@@ -243,7 +251,7 @@ export class XHTMLBasedEPUBParser {
       try {
         logger.debug(`Processing file ${i + 1}: ${file.fileName}`);
         
-        const content = await fsPromises.readFile(file.filePath, 'utf-8');
+        const content = await fs.readFile(file.filePath, 'utf-8');
         const paragraphs = await this.extractParagraphsFromXHTML(content, file.fileName);
         
         // Include all files, even those with minimal content (only skip truly empty files with 0 paragraphs)
@@ -312,9 +320,138 @@ export class XHTMLBasedEPUBParser {
 
   // Custom splitting methods removed - now using shared ParagraphProcessor utility
 
+  private async extractBookMetadata(tempDir: string): Promise<XHTMLParseResult['bookMetadata']> {
+    try {
+      // Find the OPF file
+      const opfPath = await this.findOPFFile(tempDir);
+      if (!opfPath) {
+        logger.warn('No OPF file found - skipping metadata extraction');
+        return undefined;
+      }
+
+      // Read and parse the OPF file
+      const opfContent = await fs.readFile(opfPath, 'utf-8');
+      const opfData = await parseStringPromise(opfContent);
+
+      // Extract metadata from the OPF
+      const metadata = opfData?.package?.metadata?.[0];
+      if (!metadata) {
+        logger.warn('No metadata section found in OPF file');
+        return undefined;
+      }
+
+      const bookMetadata: XHTMLParseResult['bookMetadata'] = {};
+
+      // Extract title
+      if (metadata['dc:title']) {
+        const titleEntry = Array.isArray(metadata['dc:title']) ? metadata['dc:title'][0] : metadata['dc:title'];
+        bookMetadata.title = typeof titleEntry === 'string' ? titleEntry : titleEntry._;
+      }
+
+      // Extract author
+      if (metadata['dc:creator']) {
+        const creatorEntry = Array.isArray(metadata['dc:creator']) ? metadata['dc:creator'][0] : metadata['dc:creator'];
+        bookMetadata.author = typeof creatorEntry === 'string' ? creatorEntry : creatorEntry._;
+      }
+
+      // Extract language
+      if (metadata['dc:language']) {
+        const languageEntry = Array.isArray(metadata['dc:language']) ? metadata['dc:language'][0] : metadata['dc:language'];
+        bookMetadata.language = typeof languageEntry === 'string' ? languageEntry : languageEntry._;
+      }
+
+      // Extract publisher
+      if (metadata['dc:publisher']) {
+        const publisherEntry = Array.isArray(metadata['dc:publisher']) ? metadata['dc:publisher'][0] : metadata['dc:publisher'];
+        bookMetadata.publisher = typeof publisherEntry === 'string' ? publisherEntry : publisherEntry._;
+      }
+
+      // Extract published date
+      if (metadata['dc:date']) {
+        const dateEntry = Array.isArray(metadata['dc:date']) ? metadata['dc:date'][0] : metadata['dc:date'];
+        bookMetadata.publishedDate = typeof dateEntry === 'string' ? dateEntry : dateEntry._;
+      }
+
+      // Extract description
+      if (metadata['dc:description']) {
+        const descriptionEntry = Array.isArray(metadata['dc:description']) ? metadata['dc:description'][0] : metadata['dc:description'];
+        bookMetadata.description = typeof descriptionEntry === 'string' ? descriptionEntry : descriptionEntry._;
+      }
+
+      // Extract identifier
+      if (metadata['dc:identifier']) {
+        const identifierEntry = Array.isArray(metadata['dc:identifier']) ? metadata['dc:identifier'][0] : metadata['dc:identifier'];
+        bookMetadata.identifier = typeof identifierEntry === 'string' ? identifierEntry : identifierEntry._;
+      }
+
+      logger.info('Book metadata extracted from EPUB OPF', {
+        hasTitle: !!bookMetadata.title,
+        hasAuthor: !!bookMetadata.author,
+        hasLanguage: !!bookMetadata.language,
+        hasPublisher: !!bookMetadata.publisher,
+        title: bookMetadata.title,
+        author: bookMetadata.author
+      });
+
+      return bookMetadata;
+    } catch (error) {
+      logger.error('Failed to extract book metadata from EPUB OPF:', error);
+      return undefined;
+    }
+  }
+
+  private async findOPFFile(tempDir: string): Promise<string | null> {
+    try {
+      // First, try to find container.xml to get the OPF path
+      const containerPath = path.join(tempDir, 'META-INF', 'container.xml');
+      try {
+        const containerContent = await fs.readFile(containerPath, 'utf-8');
+        const containerData = await parseStringPromise(containerContent);
+        const rootfiles = containerData?.container?.rootfiles?.[0]?.rootfile;
+        if (rootfiles && rootfiles.length > 0) {
+          const opfPath = rootfiles[0].$?.['full-path'];
+          if (opfPath) {
+            const fullOpfPath = path.join(tempDir, opfPath);
+            try {
+              await fs.access(fullOpfPath);
+              return fullOpfPath;
+            } catch {
+              logger.warn(`OPF file not found at specified path: ${fullOpfPath}`);
+            }
+          }
+        }
+      } catch {
+        logger.debug('Could not read container.xml, falling back to search');
+      }
+
+      // Fallback: search for .opf files
+      const searchForOPF = async (dir: string): Promise<string | null> => {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          
+          if (entry.isFile() && entry.name.endsWith('.opf')) {
+            return fullPath;
+          } else if (entry.isDirectory()) {
+            const found = await searchForOPF(fullPath);
+            if (found) return found;
+          }
+        }
+        
+        return null;
+      };
+
+      return await searchForOPF(tempDir);
+    } catch (error) {
+      logger.error('Error finding OPF file:', error);
+      return null;
+    }
+  }
+
   private async cleanup(tempDir: string): Promise<void> {
     try {
-      await fsPromises.rm(tempDir, { recursive: true, force: true });
+      await fs.rm(tempDir, { recursive: true, force: true });
       logger.debug(`Cleaned up temp directory: ${tempDir}`);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';

@@ -3,10 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import {
   S3Client,
   PutObjectCommand,
+  GetObjectCommand,
   HeadBucketCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { HeadObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { HeadObjectCommand } from '@aws-sdk/client-s3';
 
 @Injectable()
 export class S3Service {
@@ -42,6 +43,9 @@ export class S3Service {
         new HeadBucketCommand({ Bucket: this.bucketName })
       );
       this.logger.log(`✓ Bucket ${this.bucketName} is accessible`);
+      
+      // Note: No CORS configuration needed since we use API proxy uploads
+      // Browser never communicates directly with S3
     } catch (error) {
       this.logger.warn(
         `⚠ Bucket ${this.bucketName} is not accessible. Make sure the bucket exists and credentials have proper permissions.`,
@@ -49,6 +53,22 @@ export class S3Service {
       );
       // Don't try to create bucket - assume it exists and will be accessible when needed
     }
+  }
+
+
+
+  async uploadFile(key: string, buffer: Buffer, contentType: string) {
+    const command = new PutObjectCommand({
+      Bucket: this.bucketName,
+      Key: key,
+      Body: buffer,
+      ContentType: contentType,
+    });
+
+    await this.s3Client.send(command);
+    this.logger.log(`✅ File uploaded successfully to S3: ${key}`);
+    
+    return { key };
   }
 
   async getPresignedUploadUrl(key: string, contentType: string) {

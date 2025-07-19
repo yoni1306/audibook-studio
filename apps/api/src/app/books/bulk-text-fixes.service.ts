@@ -57,15 +57,9 @@ export class BulkTextFixesService {
     excludeParagraphId: string,
     wordChanges: WordChange[]
   ): Promise<BulkFixSuggestion[]> {
-    this.logger.debug(
-      `findSimilarFixesInBook called for book ${bookId}, excluding paragraph ${excludeParagraphId}`
-    );
-    this.logger.debug(
-      `Word changes to look for: ${JSON.stringify(wordChanges)}`
-    );
+
 
     if (wordChanges.length === 0) {
-      this.logger.debug(`No word changes provided, returning empty array`);
       return [];
     }
 
@@ -73,9 +67,7 @@ export class BulkTextFixesService {
     const validWordChanges = wordChanges.filter((change) => {
       // Skip changes where original and corrected words are identical
       if (change.originalWord === change.correctedWord) {
-        this.logger.debug(
-          `Skipping identical word change: '${change.originalWord}' -> '${change.correctedWord}'`
-        );
+
         return false;
       }
 
@@ -83,7 +75,6 @@ export class BulkTextFixesService {
     });
 
     if (validWordChanges.length === 0) {
-      this.logger.debug(`No valid word changes after filtering, returning empty array`);
       return [];
     }
 
@@ -267,8 +258,8 @@ export class BulkTextFixesService {
       correctedWord: string;
       paragraphIds: string[];
     }>,
-    ttsModel?: string,
-    ttsVoice?: string
+    _ttsModel?: string, // Reserved for future TTS metadata tracking
+    _ttsVoice?: string  // Reserved for future TTS metadata tracking
   ): Promise<BulkFixResult> {
     this.logger.log(`🔧 Starting bulk fixes application for book: ${bookId}`);
     this.logger.log(

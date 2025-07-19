@@ -171,16 +171,12 @@ export class BooksController {
         throw new BadRequestException('Content is required and must be a string');
       }
       
-      this.logger.debug(`Updating paragraph ${paragraphId} with content: ${body.content.substring(0, 20)}...`);
       // Pass the generateAudio flag to the service, default to false if not specified
       const generateAudio = body.generateAudio !== undefined ? body.generateAudio : false;
-      this.logger.debug(`Audio generation requested: ${generateAudio}`);
       const result = await this.booksService.updateParagraph(paragraphId, body.content, generateAudio);
-      this.logger.debug(`Update result - textChanges: ${JSON.stringify(result.textChanges)}`);
       
       // If there were text changes, find similar fixes in the book
       if (result.textChanges && result.textChanges.length > 0) {
-        this.logger.debug(`Found ${result.textChanges.length} text changes, looking for similar fixes in book ${result.bookId}`);
         // Convert TextChange[] to WordChange[] by adding default fixType
         const wordChanges: WordChange[] = result.textChanges.map(change => ({
           originalWord: change.originalWord,
@@ -195,18 +191,13 @@ export class BooksController {
           wordChanges
         );
         
-        this.logger.debug(`Found ${bulkSuggestions?.length || 0} bulk suggestions`);
-        
         // Convert service format to DTO format
         const mappedSuggestions = this.mapBulkSuggestionsToDto(bulkSuggestions);
-        this.logger.debug(`Mapped ${mappedSuggestions.length} bulk suggestions to DTO format`);
 
         return {
           ...result,
           bulkSuggestions: mappedSuggestions,
         };
-      } else {
-        this.logger.debug(`No text changes detected, not looking for bulk suggestions`);
       }
 
       return result;

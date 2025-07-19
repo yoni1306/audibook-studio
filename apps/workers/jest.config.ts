@@ -8,4 +8,9 @@ export default {
   },
   moduleFileExtensions: ['ts', 'js', 'html'],
   coverageDirectory: '../../coverage/apps/workers',
+  moduleNameMapper: {
+    '^@audibook/logger$': '<rootDir>/../../libs/shared/logger/src/index.ts',
+    '^@audibook/correlation$': '<rootDir>/../../libs/shared/correlation/src/index.ts',
+    '^@audibook/api-client$': '<rootDir>/../../libs/api-client/src/index.ts',
+  },
 };
