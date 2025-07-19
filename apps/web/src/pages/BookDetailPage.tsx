@@ -145,9 +145,8 @@ export default function BookDetailPage() {
             audioRequested: false,
           });
           setShowBulkFixModal(true);
-        } else {
-
         }
+        // No action needed for other cases
 
         await fetchBook();
         setEditingId(null);

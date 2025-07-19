@@ -59,7 +59,7 @@ export default function TextFixesPage() {
       
       try {
         const endpoint = bookId ? `/api/text-fixes?bookId=${bookId}` : '/api/text-fixes';
-        const { data, error } = await apiClient.textFixes.getAll({ endpoint });
+        const { data } = await apiClient.textFixes.getAll({ endpoint });
         setData(data);
       } catch (err) {
         logger.error('Error fetching text fixes:', err);

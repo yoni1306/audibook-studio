@@ -14,6 +14,7 @@ import { XHTMLBasedEPUBParser } from './text-processing/xhtml-based-epub-parser'
 import { DEFAULT_EPUB_PARSER_CONFIG } from './config/epub-parser-config';
 import {
   updateBookStatus,
+  updateBookMetadata,
   getParagraph,
   cleanupDatabase,
   checkDatabaseHealth,
@@ -179,6 +180,24 @@ const worker = new Worker(
               logger.info('Pages saved successfully', {
                 saveDuration: Date.now() - saveStart,
               });
+
+              // Update book metadata with extracted EPUB information
+              if (result.bookMetadata) {
+                logger.info('Updating book metadata with extracted EPUB information', {
+                  bookId: job.data.bookId,
+                  hasTitle: !!result.bookMetadata.title,
+                  hasAuthor: !!result.bookMetadata.author,
+                  hasLanguage: !!result.bookMetadata.language
+                });
+                
+                const metadataStart = Date.now();
+                await updateBookMetadata(job.data.bookId, result.bookMetadata);
+                logger.info('Book metadata updated successfully', {
+                  metadataDuration: Date.now() - metadataStart,
+                });
+              } else {
+                logger.warn('No book metadata extracted from EPUB - skipping metadata update');
+              }
 
               // Update book status to READY
               await updateBookStatus(job.data.bookId, BookStatus.READY);

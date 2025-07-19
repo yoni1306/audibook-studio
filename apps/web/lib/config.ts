@@ -28,13 +28,36 @@ const buildApiUrl = (protocol = CONFIG_CONSTANTS.API.DEFAULT_PROTOCOL, host = CO
 // Default API URL using configuration constants
 const DEFAULT_API_URL = buildApiUrl();
 
+// Runtime API URL resolution - best practice for production deployments
+const getProductionApiUrl = (): string => {
+  // If we're in browser context, try to determine API URL from current domain
+  if (typeof window !== 'undefined') {
+    const currentHost = window.location.hostname;
+    
+    // Railway production pattern: if web is on railway.app, API should be too
+    if (currentHost.includes('railway.app')) {
+      // Extract the project pattern and construct API URL
+      const railwayApiUrl = currentHost.replace('web-production-', 'api-production-');
+      return `https://${railwayApiUrl}`;
+    }
+    
+    // For other production domains, try common patterns
+    if (currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
+      // Try subdomain pattern
+      return `https://api.${currentHost}`;
+    }
+  }
+  
+  return DEFAULT_API_URL;
+};
+
 export const config = {
     api: {
-      // Client-side API URL (browser) - using Vite env vars
-      clientUrl: import.meta.env.VITE_API_URL || DEFAULT_API_URL,
+      // Client-side API URL (browser) - runtime resolution with fallbacks
+      clientUrl: import.meta.env.VITE_API_URL || getProductionApiUrl(),
       
-      // Server-side API URL (for production deployment)
-      serverUrl: import.meta.env.VITE_INTERNAL_API_URL || import.meta.env.VITE_API_URL || DEFAULT_API_URL,
+      // Server-side API URL - prefer env var, fallback to production resolution
+      serverUrl: import.meta.env.VITE_API_URL || getProductionApiUrl(),
       
       // Timeout settings
       timeout: CONFIG_CONSTANTS.API.DEFAULT_TIMEOUT,

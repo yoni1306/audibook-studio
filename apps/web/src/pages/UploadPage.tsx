@@ -29,43 +29,20 @@ export default function UploadPage() {
     if (!file) return;
 
     setUploading(true);
-    setMessage('Getting upload URL...');
+    setMessage('Uploading file...');
 
     try {
-      // Get presigned URL from API
-      const { data, error } = await apiClient.s3.getPresignedUpload({
-        filename: file.name,
-        contentType: 'application/epub+zip',
-      });
+      // Create FormData for file upload
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('parsingMethod', parsingMethod);
 
-      if (error || !data) throw new Error('Failed to get upload URL');
-      setMessage('Uploading file...');
+      // Upload file through API proxy (eliminates CORS issues)
+      const { data, error } = await apiClient.s3.uploadFile(formData);
 
-      // Upload file directly to S3
-      const uploadResponse = await fetch(data.uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: {
-          'Content-Type': 'application/epub+zip',
-        },
-      });
+      if (error || !data) throw new Error('Failed to upload file');
 
-      if (!uploadResponse.ok) throw new Error('Failed to upload file');
-
-      setMessage('Starting EPUB parsing...');
-
-      // Start EPUB parsing with the selected method
-      const parseResult = await apiClient.queue.parseEpub({
-        bookId: data.bookId,
-        s3Key: data.key,
-        parsingMethod,
-      });
-
-      if (parseResult.error) {
-        throw new Error('Failed to start EPUB parsing');
-      }
-
-      setMessage('EPUB parsing started! Redirecting...');
+      setMessage('File uploaded and parsing started! Redirecting...');
       setFile(null);
 
       // Redirect to book detail page using React Router

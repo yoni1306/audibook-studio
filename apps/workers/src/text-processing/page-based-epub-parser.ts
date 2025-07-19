@@ -16,6 +16,14 @@ import { ParagraphProcessor, ProcessedParagraph } from './utils/paragraph-proces
 import { HTMLTextExtractor } from './utils/html-text-extractor';
 import { DEFAULT_EPUB_PARSER_CONFIG } from '../config/epub-parser-config';
 
+export interface EPUBMetadata {
+  title?: string;
+  author?: string;
+  language?: string;
+  publisher?: string;
+  description?: string;
+}
+
 const logger = createLogger('PageBasedEpubParser');
 
 export interface ParsedPage {
@@ -39,6 +47,7 @@ export interface EPUBParseResult {
     totalParagraphs: number;
     averageParagraphsPerPage: number;
   };
+  bookMetadata: EPUBMetadata;
 }
 
 export interface PageBasedParserOptions {
@@ -76,7 +85,7 @@ export class PageBasedEPUBParser {
       await this.extractEPUB(epubPath, tempDir);
       
       // Parse EPUB structure
-      const chapters = await this.parseEPUBStructure(tempDir);
+      const { chapters, metadata: bookMetadata } = await this.parseEPUBStructure(tempDir);
       
       // Detect page breaks
       const pageBreaks = await detectEPUBPageBreaks(chapters, this.options.pageBreakDetection);
@@ -95,7 +104,8 @@ export class PageBasedEPUBParser {
           totalPages: pages.length,
           totalParagraphs,
           averageParagraphsPerPage: pages.length > 0 ? totalParagraphs / pages.length : 0,
-        }
+        },
+        bookMetadata
       };
 
       logger.info('Page-based EPUB parsing completed', result.metadata);
@@ -123,7 +133,7 @@ export class PageBasedEPUBParser {
     logger.debug('EPUB extraction completed');
   }
 
-  private async parseEPUBStructure(tempDir: string): Promise<EPUBChapterContent[]> {
+  private async parseEPUBStructure(tempDir: string): Promise<{ chapters: EPUBChapterContent[]; metadata: EPUBMetadata }> {
     logger.debug('Parsing EPUB structure');
 
     // Read container.xml to find content.opf
@@ -135,6 +145,9 @@ export class PageBasedEPUBParser {
     const opfDir = path.dirname(path.join(tempDir, opfPath));
     const opfContent = await fsPromises.readFile(path.join(tempDir, opfPath), 'utf-8');
     const opf = await parseStringPromise(opfContent);
+
+    // Extract book metadata from OPF
+    const metadata = this.extractBookMetadata(opf);
 
     // Get spine order (reading order)
     const spine = opf.package.spine[0].itemref;
@@ -178,7 +191,81 @@ export class PageBasedEPUBParser {
     }
 
     logger.debug(`Parsed ${chapters.length} chapters from EPUB structure`);
-    return chapters;
+    logger.info('Extracted book metadata', {
+      title: metadata.title,
+      author: metadata.author,
+      language: metadata.language
+    });
+    
+    return { chapters, metadata };
+  }
+
+  private extractBookMetadata(opf: Record<string, any>): EPUBMetadata {
+    const metadata: EPUBMetadata = {};
+    
+    try {
+      // Extract metadata from OPF package
+      const metadataSection = opf.package?.metadata?.[0];
+      
+      if (metadataSection) {
+        // Extract title (dc:title)
+        if (metadataSection['dc:title']?.[0]) {
+          if (typeof metadataSection['dc:title'][0] === 'string') {
+            metadata.title = metadataSection['dc:title'][0].trim();
+          } else if (metadataSection['dc:title'][0]._) {
+            metadata.title = metadataSection['dc:title'][0]._.trim();
+          }
+        }
+        
+        // Extract author (dc:creator)
+        if (metadataSection['dc:creator']?.[0]) {
+          if (typeof metadataSection['dc:creator'][0] === 'string') {
+            metadata.author = metadataSection['dc:creator'][0].trim();
+          } else if (metadataSection['dc:creator'][0]._) {
+            metadata.author = metadataSection['dc:creator'][0]._.trim();
+          }
+        }
+        
+        // Extract language (dc:language)
+        if (metadataSection['dc:language']?.[0]) {
+          if (typeof metadataSection['dc:language'][0] === 'string') {
+            metadata.language = metadataSection['dc:language'][0].trim();
+          } else if (metadataSection['dc:language'][0]._) {
+            metadata.language = metadataSection['dc:language'][0]._.trim();
+          }
+        }
+        
+        // Extract publisher (dc:publisher)
+        if (metadataSection['dc:publisher']?.[0]) {
+          if (typeof metadataSection['dc:publisher'][0] === 'string') {
+            metadata.publisher = metadataSection['dc:publisher'][0].trim();
+          } else if (metadataSection['dc:publisher'][0]._) {
+            metadata.publisher = metadataSection['dc:publisher'][0]._.trim();
+          }
+        }
+        
+        // Extract description (dc:description)
+        if (metadataSection['dc:description']?.[0]) {
+          if (typeof metadataSection['dc:description'][0] === 'string') {
+            metadata.description = metadataSection['dc:description'][0].trim();
+          } else if (metadataSection['dc:description'][0]._) {
+            metadata.description = metadataSection['dc:description'][0]._.trim();
+          }
+        }
+      }
+      
+      logger.debug('Extracted EPUB metadata', {
+        title: metadata.title ? `"${metadata.title}"` : 'Not found',
+        author: metadata.author ? `"${metadata.author}"` : 'Not found',
+        language: metadata.language || 'Not found',
+        publisher: metadata.publisher ? `"${metadata.publisher}"` : 'Not found'
+      });
+      
+    } catch (error) {
+      logger.error('Error extracting EPUB metadata:', error);
+    }
+    
+    return metadata;
   }
 
   private async createPagesFromBreaks(
@@ -203,7 +290,10 @@ export class PageBasedEPUBParser {
       if (!breaksByChapter.has(pb.chapterNumber)) {
         breaksByChapter.set(pb.chapterNumber, []);
       }
-      breaksByChapter.get(pb.chapterNumber)!.push(pb);
+      const chapterBreaks = breaksByChapter.get(pb.chapterNumber);
+      if (chapterBreaks) {
+        chapterBreaks.push(pb);
+      }
     });
 
     logger.debug('📊 Page breaks grouped by chapter', {

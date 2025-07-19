@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useApiClient } from '../../../hooks/useApiClient';
-import { BulkFixSuggestion, BulkFixRequest } from '../../types/api';
-import { ApiClient } from '../../utils/api';
+import { BulkFixSuggestion } from '../../types/api';
 import { createLogger } from '../../utils/logger';
 
 const logger = createLogger('BulkFixModal');

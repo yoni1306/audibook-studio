@@ -35,14 +35,22 @@ async function bootstrap() {
   );
 
   // CORS configuration
+  const webServiceUrl = process.env.RAILWAY_SERVICE_WEB_URL 
+    ? `https://${process.env.RAILWAY_SERVICE_WEB_URL}` 
+    : process.env.WEB_URL;
+    
+  const corsOrigins = process.env.NODE_ENV === 'production'
+    ? [
+        webServiceUrl,
+        'https://audibook.app', // Your domain
+      ].filter(Boolean)
+    : true; // Allow all origins in development
+  
   app.enableCors({
-    origin: process.env.NODE_ENV === 'production'
-      ? [
-          process.env.WEB_URL, // Your production web URL
-          'https://audibook.app', // Your domain
-        ].filter(Boolean)
-      : true, // Allow all origins in development
+    origin: corsOrigins,
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-ID'],
   });
 
   // Swagger/OpenAPI setup

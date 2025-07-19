@@ -1,4 +1,5 @@
 {
+  "type": "module",
   "scripts": {
     "// Local Development": "",
     "setup:local": "./scripts/deploy/local-dev-setup.sh",

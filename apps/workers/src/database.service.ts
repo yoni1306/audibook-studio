@@ -96,6 +96,76 @@ export async function updateBookStatus(
 }
 
 /**
+ * Update book metadata with extracted EPUB information
+ */
+export async function updateBookMetadata(
+  bookId: string,
+  metadata: {
+    title?: string;
+    author?: string;
+    language?: string;
+    publisher?: string;
+    description?: string;
+  }
+): Promise<void> {
+  try {
+    logger.info(`Updating book metadata for ${bookId}`, {
+      title: metadata.title ? `"${metadata.title}"` : 'Not provided',
+      author: metadata.author ? `"${metadata.author}"` : 'Not provided',
+      language: metadata.language || 'Not provided',
+      publisher: metadata.publisher ? `"${metadata.publisher}"` : 'Not provided'
+    });
+
+    // Only update fields that are provided and not empty
+    const updateData: Record<string, string> = {};
+    
+    if (metadata.title && metadata.title.trim()) {
+      updateData.title = metadata.title.trim();
+    }
+    
+    if (metadata.author && metadata.author.trim()) {
+      updateData.author = metadata.author.trim();
+    }
+    
+    if (metadata.language && metadata.language.trim()) {
+      updateData.language = metadata.language.trim();
+    }
+    
+    if (metadata.publisher && metadata.publisher.trim()) {
+      updateData.publisher = metadata.publisher.trim();
+    }
+    
+    if (metadata.description && metadata.description.trim()) {
+      updateData.description = metadata.description.trim();
+    }
+
+    // Only perform update if there's data to update
+    if (Object.keys(updateData).length > 0) {
+      await prisma.book.update({
+        where: { id: bookId },
+        data: updateData,
+      });
+
+      logger.info(`Successfully updated book metadata for ${bookId}`, {
+        updatedFields: Object.keys(updateData),
+        title: updateData.title,
+        author: updateData.author
+      });
+    } else {
+      logger.info(`No metadata to update for book ${bookId} - all fields were empty`);
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Failed to update book metadata for ${bookId}: ${errorMessage}`, {
+      bookId,
+      metadata,
+      error: errorMessage
+    });
+    throw error;
+  }
+}
+
+/**
  * Get paragraph with related page and book data
  */
 export async function getParagraph(paragraphId: string) {

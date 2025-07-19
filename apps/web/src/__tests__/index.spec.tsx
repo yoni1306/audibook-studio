@@ -4,7 +4,7 @@ import App from '../App';
 
 // Mock the Material-UI DataGrid component that causes CSS import issues
 vi.mock('@mui/x-data-grid', () => ({
-  DataGrid: ({ children, ...props }: any) => <div data-testid="mocked-datagrid" {...props}>{children}</div>,
+  DataGrid: ({ children, ...props }: { children?: React.ReactNode; [key: string]: unknown }) => <div data-testid="mocked-datagrid" {...props}>{children}</div>,
   GridColDef: {},
   GridSortModel: {},
   GridToolbar: () => <div data-testid="mocked-grid-toolbar" />,
