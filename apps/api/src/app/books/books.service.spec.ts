@@ -3,6 +3,8 @@ import { BooksService } from './books.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { TextFixesService } from './text-fixes.service';
+import { BulkTextFixesService } from './bulk-text-fixes.service';
+import { S3Service } from '../s3/s3.service';
 import { BookStatus } from '@prisma/client';
 
 describe('BooksService', () => {
@@ -10,6 +12,7 @@ describe('BooksService', () => {
   let prismaService: jest.Mocked<PrismaService>;
   let queueService: jest.Mocked<QueueService>;
   let textFixesService: jest.Mocked<TextFixesService>;
+  let bulkTextFixesService: jest.Mocked<BulkTextFixesService>;
 
   const mockBook = {
     id: 'book-1',
@@ -85,6 +88,15 @@ describe('BooksService', () => {
       findSimilarFixes: jest.fn(),
     };
 
+    const mockS3Service = {
+      deleteFile: jest.fn(),
+      deleteFolder: jest.fn(),
+    };
+
+    const mockBulkTextFixesService = {
+      findSimilarFixesInBook: jest.fn().mockResolvedValue([]),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         BooksService,
@@ -100,6 +112,14 @@ describe('BooksService', () => {
           provide: TextFixesService,
           useValue: mockTextFixesService,
         },
+        {
+          provide: BulkTextFixesService,
+          useValue: mockBulkTextFixesService,
+        },
+        {
+          provide: S3Service,
+          useValue: mockS3Service,
+        },
       ],
     }).compile();
 
@@ -107,6 +127,7 @@ describe('BooksService', () => {
     prismaService = module.get(PrismaService);
     queueService = module.get(QueueService);
     textFixesService = module.get(TextFixesService);
+    bulkTextFixesService = module.get(BulkTextFixesService);
   });
 
   it('should be defined', () => {
@@ -233,7 +254,7 @@ describe('BooksService', () => {
         },
       });
       expect(queueService.addAudioGenerationJob).not.toHaveBeenCalled();
-      expect(result).toEqual({ ...updatedParagraph, textChanges: [] });
+      expect(result).toEqual({ ...updatedParagraph, textChanges: [], bulkSuggestions: [] });
     });
 
     it('should update paragraph content and generate audio when requested', async () => {
@@ -258,7 +279,7 @@ describe('BooksService', () => {
         bookId: mockBook.id,
         content: newContent,
       });
-      expect(result).toEqual({ ...updatedParagraph, textChanges: [] });
+      expect(result).toEqual({ ...updatedParagraph, textChanges: [], bulkSuggestions: [] });
     });
 
     it('should send full paragraph text for audio generation - long content', async () => {
@@ -299,7 +320,102 @@ describe('BooksService', () => {
       expect(audioJobCall.content).toHaveLength(longContent.length);
       expect(audioJobCall.content).toBe(longContent);
       
-      expect(result).toEqual({ ...updatedParagraph, textChanges: [] });
+      expect(result).toEqual({ ...updatedParagraph, textChanges: [], bulkSuggestions: [] });
+    });
+
+    it('should generate bulk suggestions when text changes are detected', async () => {
+      const existingParagraph = { ...mockParagraph, content: 'Original content with word' };
+      const newContent = 'Updated content with correction';
+      const updatedParagraph = {
+        ...mockParagraph,
+        content: newContent,
+        page: {
+          ...mockPage,
+          book: mockBook,
+        },
+        textCorrections: [],
+      };
+
+      // Mock text changes detected
+      const mockTextChanges = [
+        {
+          originalWord: 'word',
+          correctedWord: 'correction',
+          position: 20,
+          fixType: 'MANUAL' as const,
+          sentenceContext: 'Original content with word',
+        },
+      ];
+
+      // Mock bulk suggestions response
+      const mockBulkSuggestions = [
+        {
+          originalWord: 'word',
+          correctedWord: 'correction',
+          fixType: 'MANUAL' as const,
+          paragraphs: [
+            {
+              id: 'paragraph-2',
+              previewBefore: 'Another word here',
+              previewAfter: 'Another correction here',
+              occurrences: 1,
+            },
+            {
+              id: 'paragraph-3',
+              previewBefore: 'Yet another word',
+              previewAfter: 'Yet another correction',
+              occurrences: 1,
+            },
+          ],
+        },
+      ];
+
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(existingParagraph);
+      (prismaService.paragraph.update as jest.Mock).mockResolvedValue(updatedParagraph);
+      (textFixesService.processParagraphUpdate as jest.Mock).mockResolvedValue(mockTextChanges);
+      (bulkTextFixesService.findSimilarFixesInBook as jest.Mock).mockResolvedValue(mockBulkSuggestions);
+
+      const result = await service.updateParagraph(paragraphId, newContent, false);
+
+      // Verify text changes were processed
+      expect(textFixesService.processParagraphUpdate).toHaveBeenCalledWith(
+        paragraphId,
+        existingParagraph.content,
+        newContent
+      );
+
+      // Verify bulk suggestions service was called with correct parameters
+      expect(bulkTextFixesService.findSimilarFixesInBook).toHaveBeenCalledWith(
+        mockBook.id,
+        paragraphId,
+        mockTextChanges
+      );
+      
+      // Verify the response includes the mapped bulk suggestions
+      expect(result.textChanges).toEqual(mockTextChanges);
+      expect(result.bulkSuggestions).toHaveLength(1);
+      expect(result.bulkSuggestions[0]).toEqual({
+        originalWord: 'word',
+        correctedWord: 'correction',
+        fixType: 'MANUAL',
+        paragraphIds: ['paragraph-2', 'paragraph-3'],
+        count: 2, // Sum of occurrences from both paragraphs
+        previewBefore: 'Another word here', // First paragraph's preview
+        previewAfter: 'Another correction here',
+        occurrences: [
+          {
+            paragraphId: 'paragraph-2',
+            previewBefore: 'Another word here',
+            previewAfter: 'Another correction here',
+          },
+          {
+            paragraphId: 'paragraph-3',
+            previewBefore: 'Yet another word',
+            previewAfter: 'Yet another correction',
+          },
+        ],
+        paragraphs: mockBulkSuggestions[0].paragraphs,
+      });
     });
 
     it('should send full paragraph text for audio generation - mixed languages', async () => {
@@ -338,7 +454,7 @@ describe('BooksService', () => {
       expect(audioJobCall.content).toContain('123, 456.78');
       expect(audioJobCall.content).toContain('@#$%^&*()[]{}|;:,.<>?');
       
-      expect(result).toEqual({ ...updatedParagraph, textChanges: [] });
+      expect(result).toEqual({ ...updatedParagraph, textChanges: [], bulkSuggestions: [] });
     });
 
     it('should send full paragraph text for audio generation - with niqqud', async () => {
@@ -375,7 +491,7 @@ describe('BooksService', () => {
       expect(audioJobCall.content).toContain('נִקּוּד'); // Contains niqqud
       expect(audioJobCall.content).toContain('מְּיֻחָדִים'); // Contains complex niqqud
       
-      expect(result).toEqual({ ...updatedParagraph, textChanges: [] });
+      expect(result).toEqual({ ...updatedParagraph, textChanges: [], bulkSuggestions: [] });
     });
 
     it('should track text changes when content differs', async () => {
@@ -402,7 +518,7 @@ describe('BooksService', () => {
         'Old content',
         newContent
       );
-      expect(result).toEqual({ ...updatedParagraph, textChanges });
+      expect(result).toEqual({ ...updatedParagraph, textChanges, bulkSuggestions: [] });
     });
 
     it('should throw error when paragraph not found', async () => {

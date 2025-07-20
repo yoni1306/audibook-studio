@@ -267,6 +267,9 @@ export function createApiClient(baseUrl: string) {
       getWordCorrections: (data: GetWordCorrectionsRequest) =>
         client.POST('/books/word-corrections', { body: data }),
       getFixTypes: () => client.GET('/books/fix-types', {}),
+      deleteBook: (bookId: string) => client.DELETE('/books/{id}', {
+        params: { path: { id: bookId } },
+      }),
     },
 
     // Queue API

@@ -42,70 +42,121 @@ export default function ParagraphComponent({
 
   return (
     <div
+      className="card"
       style={{
-        marginBottom: '20px',
-        padding: '15px',
-        backgroundColor: '#f5f5f5',
-        borderRadius: '5px',
+        marginBottom: 'var(--spacing-5)',
+        padding: 'var(--spacing-4)',
         position: 'relative',
         cursor: !isEditing ? 'pointer' : 'default',
+        transition: 'all 0.2s ease',
+        border: isEditing ? '2px solid var(--color-primary-300)' : '1px solid var(--color-gray-200)',
+        backgroundColor: isEditing ? 'var(--color-primary-50)' : 'white'
       }}
       onClick={() => !isEditing && onStartEdit()}
     >
       <div
         style={{
           position: 'absolute',
-          top: '5px',
-          right: '10px',
-          fontSize: '12px',
-          color: '#666',
+          top: 'var(--spacing-3)',
+          right: 'var(--spacing-4)',
+          fontSize: 'var(--font-size-xs)',
+          color: 'var(--color-gray-500)',
           display: 'flex',
           alignItems: 'center',
-          gap: '10px',
+          gap: 'var(--spacing-2)',
+          backgroundColor: 'var(--color-gray-100)',
+          padding: 'var(--spacing-1) var(--spacing-2)',
+          borderRadius: 'var(--radius-sm)',
+          border: '1px solid var(--color-gray-200)'
         }}
       >
-        <span>{getAudioStatusIcon(paragraph.audioStatus)}</span>
-        <span>
-          Page {paragraph.pageNumber} | Paragraph #{paragraph.orderIndex + 1}
+        <span style={{ fontSize: 'var(--font-size-sm)' }}>{getAudioStatusIcon(paragraph.audioStatus)}</span>
+        <span style={{ fontWeight: '500' }}>
+          📖 Page {paragraph.pageNumber} | Paragraph {paragraph.orderIndex + 1}
         </span>
-        <span style={{ color: '#888', fontSize: '11px' }}>
+        <span style={{ color: 'var(--color-gray-400)', fontSize: 'var(--font-size-xs)' }}>•</span>
+        <span style={{ color: 'var(--color-gray-500)', fontSize: 'var(--font-size-xs)' }}>
           {countWords(paragraph.content)} words | {countCharacters(paragraph.content)} chars
         </span>
       </div>
 
       {isEditing ? (
-        <div style={{ marginTop: '20px' }}>
+        <div style={{ marginTop: 'var(--spacing-5)' }}>
+          <div style={{
+            marginBottom: 'var(--spacing-3)',
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-gray-600)',
+            fontWeight: '500'
+          }}>
+            ✏️ Editing Paragraph Content
+          </div>
           <textarea
             value={editContent}
             onChange={(e) => onContentChange(e.target.value)}
+            className="textarea"
             style={{
               width: '100%',
-              minHeight: '100px',
-              padding: '10px',
-              fontSize: '16px',
-              border: '1px solid #ddd',
-              borderRadius: '4px',
+              minHeight: '120px',
               resize: 'vertical',
               direction: getTextDirection(editContent),
-              textAlign: getTextAlign(editContent)
+              textAlign: getTextAlign(editContent),
+              fontSize: 'var(--font-size-base)',
+              lineHeight: '1.6'
             }}
             onClick={(e) => e.stopPropagation()}
+            placeholder="Enter paragraph content..."
           />
-          <div style={{ marginTop: '10px' }}>
+          <div 
+            style={{ 
+              marginTop: 'var(--spacing-4)',
+              display: 'flex',
+              gap: 'var(--spacing-3)',
+              flexWrap: 'wrap',
+              justifyContent: 'flex-start',
+              alignItems: 'center',
+              padding: 'var(--spacing-3)',
+              backgroundColor: 'var(--color-gray-50)',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--color-gray-200)',
+              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               onClick={onSaveEdit}
               disabled={saving}
+              className="btn btn-primary"
               style={{
-                padding: '8px 16px',
-                marginRight: '10px',
-                backgroundColor: '#0070f3',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
+                opacity: saving ? 0.7 : 1,
                 cursor: saving ? 'not-allowed' : 'pointer',
+                minWidth: '120px',
+                height: '44px',
+                fontSize: 'var(--font-size-sm)',
+                fontWeight: '600',
+                color: 'white',
+                backgroundColor: 'var(--color-primary-500)',
+                border: 'none',
+                borderRadius: 'var(--radius-md)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 'var(--spacing-2)',
+                transition: 'all 0.2s ease',
+                boxShadow: saving ? 'none' : '0 2px 4px rgba(0, 0, 0, 0.1)',
               }}
             >
-              {saving ? 'Saving...' : 'Save Text'}
+              {saving ? (
+                <>
+                  <span className="spinner" style={{
+                    width: '14px',
+                    height: '14px',
+                    marginRight: 'var(--spacing-1)'
+                  }}></span>
+                  Saving...
+                </>
+              ) : (
+                '💾 Save Text'
+              )}
             </button>
             <button
               onClick={(e) => {
@@ -114,86 +165,145 @@ export default function ParagraphComponent({
                 onGenerateAudio();
               }}
               disabled={saving}
+              className="btn btn-primary"
               style={{
-                padding: '8px 16px',
-                marginRight: '10px',
-                backgroundColor: '#4CAF50',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
+                opacity: saving ? 0.7 : 1,
                 cursor: saving ? 'not-allowed' : 'pointer',
+                minWidth: '180px',
+                height: '44px',
+                fontSize: 'var(--font-size-sm)',
+                fontWeight: '600',
+                color: 'white',
+                backgroundColor: 'var(--color-primary-500)',
+                border: 'none',
+                borderRadius: 'var(--radius-md)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 'var(--spacing-2)',
+                transition: 'all 0.2s ease',
+                boxShadow: saving ? 'none' : '0 2px 4px rgba(0, 0, 0, 0.1)',
               }}
             >
-              Save & Generate Audio
+              💾🎵 Save & Generate Audio
             </button>
             <button
               onClick={onCancelEdit}
               disabled={saving}
+              className="button button-secondary"
               style={{
-                padding: '8px 16px',
-                backgroundColor: '#ccc',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
+                cursor: saving ? 'not-allowed' : 'pointer',
+                minWidth: '100px',
+                height: '44px',
+                fontSize: 'var(--font-size-sm)',
+                fontWeight: '600',
+                color: 'var(--color-gray-700)',
+                backgroundColor: 'white',
+                border: '1px solid var(--color-gray-300)',
+                borderRadius: 'var(--radius-md)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 'var(--spacing-2)',
+                transition: 'all 0.2s ease',
+                opacity: saving ? 0.7 : 1,
+                boxShadow: saving ? 'none' : '0 2px 4px rgba(0, 0, 0, 0.1)',
               }}
             >
-              Cancel
+              ❌ Cancel
             </button>
           </div>
         </div>
       ) : (
         <>
-          <p style={{
-            marginTop: '20px',
-            marginBottom: '10px',
-            direction: getTextDirection(paragraph.content),
-            textAlign: getTextAlign(paragraph.content)
-          }}>
-            {paragraph.content}
-          </p>
+          <div
+            style={{
+              marginTop: 'var(--spacing-8)',
+              fontSize: 'var(--font-size-base)',
+              lineHeight: '1.7',
+              color: 'var(--color-gray-800)',
+              direction: getTextDirection(paragraph.content),
+              textAlign: getTextAlign(paragraph.content),
+              padding: 'var(--spacing-3)',
+              backgroundColor: 'var(--color-gray-50)',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--color-gray-200)',
+              minHeight: '60px'
+            }}
+          >
+            {paragraph.content || (
+              <span style={{ 
+                color: 'var(--color-gray-400)', 
+                fontStyle: 'italic' 
+              }}>
+                No content available
+              </span>
+            )}
+          </div>
           
           {/* Audio Section */}
-          <div style={{ marginTop: '15px' }}>
-            {paragraph.audioStatus === 'READY' && paragraph.audioS3Key ? (
-              <div
-                style={{
-                  padding: '10px',
-                  backgroundColor: '#e8f5e9',
-                  borderRadius: '5px',
-                }}
-              >
-                <audio controls style={{ width: '100%' }}>
+          <div style={{ marginTop: 'var(--spacing-4)' }}>
+            {paragraph.audioStatus === 'READY' ? (
+              <div className="card" style={{
+                padding: 'var(--spacing-4)',
+                backgroundColor: 'var(--color-green-50)',
+                border: '1px solid var(--color-green-200)'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--spacing-2)',
+                  marginBottom: 'var(--spacing-3)',
+                  fontSize: 'var(--font-size-sm)',
+                  color: 'var(--color-green-700)',
+                  fontWeight: '500'
+                }}>
+                  <span>🎵</span>
+                  <span>Audio Available</span>
+                </div>
+                <audio
+                  controls
+                  style={{ 
+                    width: '100%',
+                    borderRadius: 'var(--radius-md)',
+                    marginBottom: 'var(--spacing-3)'
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <source
                     src={`${getApiUrl()}/api/books/paragraphs/${paragraph.id}/audio`}
                     type="audio/mpeg"
                   />
                   Your browser does not support the audio element.
                 </audio>
-                <div
-                  style={{
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <span style={{ 
+                    fontSize: 'var(--font-size-xs)', 
+                    color: 'var(--color-gray-600)',
                     display: 'flex',
-                    justifyContent: 'space-between',
                     alignItems: 'center',
-                    marginTop: '5px',
-                  }}
-                >
-                  <span style={{ fontSize: '12px', color: '#666' }}>
-                    {paragraph.audioDuration &&
-                      `Duration: ${Math.round(paragraph.audioDuration)} seconds`}
+                    gap: 'var(--spacing-1)'
+                  }}>
+                    <span>⏱️</span>
+                    {paragraph.audioDuration
+                      ? `Duration: ${Math.round(paragraph.audioDuration)} seconds`
+                      : 'Duration: Unknown'}
                   </span>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       onGenerateAudio();
                     }}
+                    className="button button-sm"
                     style={{
-                      padding: '5px 10px',
-                      fontSize: '12px',
-                      backgroundColor: '#4CAF50',
+                      backgroundColor: 'var(--color-green-600)',
                       color: 'white',
                       border: 'none',
-                      borderRadius: '3px',
-                      cursor: 'pointer',
+                      fontSize: 'var(--font-size-xs)'
                     }}
                   >
                     🔄 Regenerate
@@ -201,77 +311,98 @@ export default function ParagraphComponent({
                 </div>
               </div>
             ) : paragraph.audioStatus === 'GENERATING' ? (
-              <div
-                style={{
-                  padding: '10px',
-                  backgroundColor: '#fff3e0',
-                  borderRadius: '5px',
-                  color: '#f57c00',
-                  textAlign: 'center',
-                }}
-              >
-                <div>🔊 Generating audio...</div>
-                <div style={{ fontSize: '12px', marginTop: '5px' }}>
+              <div className="card" style={{
+                padding: 'var(--spacing-4)',
+                backgroundColor: 'var(--color-yellow-50)',
+                border: '1px solid var(--color-yellow-200)',
+                textAlign: 'center'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 'var(--spacing-2)',
+                  color: 'var(--color-yellow-700)',
+                  fontSize: 'var(--font-size-base)',
+                  fontWeight: '500',
+                  marginBottom: 'var(--spacing-2)'
+                }}>
+                  <span className="spinner" style={{
+                    width: '20px',
+                    height: '20px'
+                  }}></span>
+                  <span>Generating audio...</span>
+                </div>
+                <div style={{ 
+                  fontSize: 'var(--font-size-sm)', 
+                  color: 'var(--color-yellow-600)'
+                }}>
                   This may take a moment. Page will auto-refresh.
                 </div>
               </div>
             ) : paragraph.audioStatus === 'ERROR' ? (
-              <div
-                style={{
-                  padding: '10px',
-                  backgroundColor: '#ffebee',
-                  borderRadius: '5px',
+              <div className="card" style={{
+                padding: 'var(--spacing-4)',
+                backgroundColor: 'var(--color-error-50)',
+                border: '1px solid var(--color-error-200)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <div style={{
                   display: 'flex',
-                  justifyContent: 'space-between',
                   alignItems: 'center',
-                }}
-              >
-                <span style={{ color: '#c62828' }}>
-                  ❌ Audio generation failed
-                </span>
+                  gap: 'var(--spacing-2)',
+                  color: 'var(--color-error-700)',
+                  fontSize: 'var(--font-size-sm)',
+                  fontWeight: '500'
+                }}>
+                  <span>❌</span>
+                  <span>Audio generation failed</span>
+                </div>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     onGenerateAudio();
                   }}
+                  className="button button-sm"
                   style={{
-                    padding: '5px 15px',
-                    backgroundColor: '#f44336',
+                    backgroundColor: 'var(--color-error-600)',
                     color: 'white',
                     border: 'none',
-                    borderRadius: '3px',
-                    cursor: 'pointer',
+                    fontSize: 'var(--font-size-xs)'
                   }}
                 >
                   🔄 Retry
                 </button>
               </div>
             ) : (
-              <div
-                style={{
-                  padding: '10px',
-                  backgroundColor: '#f5f5f5',
-                  borderRadius: '5px',
+              <div className="card" style={{
+                padding: 'var(--spacing-4)',
+                backgroundColor: 'var(--color-gray-50)',
+                border: '1px solid var(--color-gray-200)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <div style={{
                   display: 'flex',
-                  justifyContent: 'space-between',
                   alignItems: 'center',
-                }}
-              >
-                <span style={{ color: '#666', fontSize: '14px' }}>
-                  ⏸️ No audio generated
-                </span>
+                  gap: 'var(--spacing-2)',
+                  color: 'var(--color-gray-600)',
+                  fontSize: 'var(--font-size-sm)'
+                }}>
+                  <span>⏸️</span>
+                  <span>No audio generated</span>
+                </div>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     onGenerateAudio();
                   }}
+                  className="button button-primary button-sm"
                   style={{
-                    padding: '5px 15px',
-                    backgroundColor: '#2196F3',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '3px',
-                    cursor: 'pointer',
+                    fontSize: 'var(--font-size-xs)'
                   }}
                 >
                   🎵 Generate Audio

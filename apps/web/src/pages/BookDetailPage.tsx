@@ -273,45 +273,154 @@ export default function BookDetailPage() {
     setPendingBulkFix(null);
   };
 
-  if (loading) return <div>Loading book...</div>;
-  if (error) return <div style={{ color: 'red' }}>{error}</div>;
-  if (!book) return <div>Book not found</div>;
+  if (loading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        minHeight: '400px',
+        gap: 'var(--spacing-3)'
+      }}>
+        <span className="spinner" />
+        <span style={{ color: 'var(--color-gray-600)', fontSize: 'var(--font-size-base)' }}>
+          Loading book details...
+        </span>
+      </div>
+    );
+  }
+  
+  if (error) {
+    return (
+      <div className="card error" style={{
+        maxWidth: '600px',
+        margin: '0 auto',
+        padding: 'var(--spacing-6)',
+        backgroundColor: 'var(--color-error-50)',
+        border: '1px solid var(--color-error-200)',
+        borderRadius: 'var(--radius-lg)',
+        textAlign: 'center'
+      }}>
+        <div style={{
+          fontSize: 'var(--font-size-3xl)',
+          marginBottom: 'var(--spacing-4)'
+        }}>❌</div>
+        <h2 style={{
+          margin: '0 0 var(--spacing-3) 0',
+          fontSize: 'var(--font-size-xl)',
+          fontWeight: '600',
+          color: 'var(--color-error-700)'
+        }}>Error Loading Book</h2>
+        <p style={{
+          margin: 0,
+          fontSize: 'var(--font-size-base)',
+          color: 'var(--color-error-600)',
+          lineHeight: '1.5'
+        }}>{error}</p>
+      </div>
+    );
+  }
+  
+  if (!book) {
+    return (
+      <div className="card" style={{
+        maxWidth: '600px',
+        margin: '0 auto',
+        padding: 'var(--spacing-6)',
+        textAlign: 'center'
+      }}>
+        <div style={{
+          fontSize: 'var(--font-size-3xl)',
+          marginBottom: 'var(--spacing-4)'
+        }}>📚</div>
+        <h2 style={{
+          margin: '0 0 var(--spacing-3) 0',
+          fontSize: 'var(--font-size-xl)',
+          fontWeight: '600',
+          color: 'var(--color-gray-700)'
+        }}>Book Not Found</h2>
+        <p style={{
+          margin: 0,
+          fontSize: 'var(--font-size-base)',
+          color: 'var(--color-gray-600)'
+        }}>The requested book could not be found.</p>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
+    <div style={{ maxWidth: '900px', margin: '0 auto' }}>
       <BookHeader book={book} />
       
       <AudioStats paragraphs={book.paragraphs} book={book} />
 
       {/* Bulk Fix Notification */}
       {pendingBulkFix && (
-        <BulkFixNotification
-          suggestions={pendingBulkFix.suggestions}
-          onReviewFixes={() => setShowBulkFixModal(true)}
-          onSkip={handleSkipBulkFix}
-        />
+        <div style={{ marginBottom: 'var(--spacing-6)' }}>
+          <BulkFixNotification
+            suggestions={pendingBulkFix.suggestions}
+            onReviewFixes={() => setShowBulkFixModal(true)}
+            onSkip={handleSkipBulkFix}
+          />
+        </div>
       )}
 
-      <h2>Content</h2>
-      <p style={{ fontSize: '14px', color: '#666' }}>
-        Click on any paragraph to edit. Changes will queue audio regeneration and suggest bulk fixes.
-      </p>
+      {/* Content Section */}
+      <div className="card" style={{ padding: 'var(--spacing-6)' }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--spacing-3)',
+          marginBottom: 'var(--spacing-4)',
+          paddingBottom: 'var(--spacing-4)',
+          borderBottom: '1px solid var(--color-gray-200)'
+        }}>
+          <span style={{ fontSize: 'var(--font-size-xl)' }}>📝</span>
+          <h2 style={{
+            margin: 0,
+            fontSize: 'var(--font-size-2xl)',
+            fontWeight: '700',
+            color: 'var(--color-gray-900)'
+          }}>Content</h2>
+        </div>
+        
+        <div className="card" style={{
+          padding: 'var(--spacing-4)',
+          backgroundColor: 'var(--color-blue-50)',
+          border: '1px solid var(--color-blue-200)',
+          borderRadius: 'var(--radius-md)',
+          marginBottom: 'var(--spacing-6)'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--spacing-2)',
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-blue-700)'
+          }}>
+            <span>💡</span>
+            <span>
+              Click on any paragraph to edit. Changes will queue audio regeneration and suggest bulk fixes.
+            </span>
+          </div>
+        </div>
 
-      <div style={{ marginTop: '30px' }}>
-        {book.paragraphs.map((paragraph) => (
-          <ParagraphComponent
-            key={paragraph.id}
-            paragraph={paragraph}
-            isEditing={editingId === paragraph.id}
-            editContent={editContent}
-            saving={saving}
-            onStartEdit={() => startEdit(paragraph)}
-            onCancelEdit={cancelEdit}
-            onSaveEdit={() => saveEdit(paragraph.id)}
-            onContentChange={setEditContent}
-            onGenerateAudio={() => generateAudioForParagraph(paragraph.id, paragraph.content)}
-          />
-        ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)' }}>
+          {book.paragraphs.map((paragraph) => (
+            <ParagraphComponent
+              key={paragraph.id}
+              paragraph={paragraph}
+              isEditing={editingId === paragraph.id}
+              editContent={editContent}
+              saving={saving}
+              onStartEdit={() => startEdit(paragraph)}
+              onCancelEdit={cancelEdit}
+              onSaveEdit={() => saveEdit(paragraph.id)}
+              onContentChange={setEditContent}
+              onGenerateAudio={() => generateAudioForParagraph(paragraph.id, paragraph.content)}
+            />
+          ))}
+        </div>
       </div>
 
       {/* Bulk Fix Modal */}

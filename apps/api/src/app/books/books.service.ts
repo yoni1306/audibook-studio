@@ -3,16 +3,42 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BookStatus } from '@prisma/client';
 import { QueueService } from '../queue/queue.service';
 import { TextFixesService } from './text-fixes.service';
-import { UpdateParagraphResponseDto } from './dto/paragraph-update.dto';
+import { UpdateParagraphResponseDto, BulkFixSuggestion as BulkFixSuggestionDto } from './dto/paragraph-update.dto';
+import { S3Service } from '../s3/s3.service';
+import { BulkTextFixesService, BulkFixSuggestion as ServiceBulkFixSuggestion } from './bulk-text-fixes.service';
 
 @Injectable()
 export class BooksService {
   private readonly logger = new Logger(BooksService.name);
 
+  /**
+   * Maps service BulkFixSuggestion to DTO format
+   */
+  private mapBulkSuggestionsToDto(suggestions: ServiceBulkFixSuggestion[]): BulkFixSuggestionDto[] {
+    return suggestions.map(suggestion => ({
+      originalWord: suggestion.originalWord,
+      correctedWord: suggestion.correctedWord,
+      fixType: suggestion.fixType,
+      paragraphIds: suggestion.paragraphs.map(p => p.id),
+      count: suggestion.paragraphs.reduce((total, p) => total + p.occurrences, 0),
+      previewBefore: suggestion.paragraphs[0]?.previewBefore || '',
+      previewAfter: suggestion.paragraphs[0]?.previewAfter || '',
+      occurrences: suggestion.paragraphs.map(p => ({
+        paragraphId: p.id,
+        previewBefore: p.previewBefore,
+        previewAfter: p.previewAfter
+      })),
+      paragraphs: suggestion.paragraphs
+    }));
+  }
+
+
   constructor(
     private prisma: PrismaService,
     private queueService: QueueService,
-    private textFixesService: TextFixesService
+    private textFixesService: TextFixesService,
+    private s3Service: S3Service,
+    private bulkTextFixesService: BulkTextFixesService
   ) {}
 
   async createBook(data: { title: string; author?: string; s3Key: string }) {
@@ -48,6 +74,7 @@ export class BooksService {
 
     // Track text changes if content is different
     let textChanges = [];
+  
     if (existingParagraph.content !== content) {
       this.logger.log(`Tracking text changes for paragraph ${paragraphId}`);
       textChanges = await this.textFixesService.processParagraphUpdate(
@@ -55,9 +82,6 @@ export class BooksService {
         existingParagraph.content,
         content
       );
-      
-      // Log all text changes for debugging
-
       
       this.logger.log(
         `Detected ${textChanges.length} text changes for paragraph ${paragraphId}`
@@ -100,9 +124,25 @@ export class BooksService {
       );
     }
 
+    // Generate bulk fix suggestions after saving the text (only if there were text changes)
+    let mappedBulkSuggestions: BulkFixSuggestionDto[] = [];
+    if (textChanges.length > 0) {
+      // textChanges already have the correct WordChange format (including position property)
+      const bulkSuggestions = await this.bulkTextFixesService.findSimilarFixesInBook(
+        paragraph.page.bookId,
+        paragraphId,
+        textChanges
+      );
+
+      // Map service response to DTO format
+      mappedBulkSuggestions = this.mapBulkSuggestionsToDto(bulkSuggestions);
+    }
+
     return {
       ...paragraph,
-      textChanges, // Include the changes in the response
+      textChanges,
+      textCorrections: paragraph.textCorrections,
+      bulkSuggestions: mappedBulkSuggestions, // Include bulk fix suggestions in the response
     } as UpdateParagraphResponseDto;
   }
 
@@ -228,5 +268,83 @@ export class BooksService {
         book: fix.book,
       },
     }));
+  }
+
+  async deleteBook(bookId: string): Promise<void> {
+    this.logger.log(`🗑️ Starting deletion of book: ${bookId}`);
+
+    try {
+      // First, get the book with all related data to collect S3 keys
+      const book = await this.prisma.book.findUnique({
+        where: { id: bookId },
+        include: {
+          pages: {
+            include: {
+              paragraphs: {
+                select: {
+                  audioS3Key: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!book) {
+        this.logger.error(`Book not found: ${bookId}`);
+        throw new Error(`Book not found: ${bookId}`);
+      }
+
+      this.logger.log(`📚 Found book "${book.title}" with ${book.pages.length} pages`);
+
+      // Collect all S3 keys that need to be deleted
+      const s3KeysToDelete: string[] = [];
+      
+      // Add the original EPUB file
+      if (book.s3Key) {
+        s3KeysToDelete.push(book.s3Key);
+      }
+      
+      // Add page-level audio files
+      book.pages.forEach(page => {
+        if (page.audioS3Key) {
+          s3KeysToDelete.push(page.audioS3Key);
+        }
+        
+        // Add paragraph-level audio files
+        page.paragraphs.forEach(paragraph => {
+          if (paragraph.audioS3Key) {
+            s3KeysToDelete.push(paragraph.audioS3Key);
+          }
+        });
+      });
+
+      this.logger.log(`🗂️ Found ${s3KeysToDelete.length} S3 files to delete`);
+
+      // Delete the book from database (cascade will handle related entities)
+      await this.prisma.book.delete({
+        where: { id: bookId },
+      });
+
+      this.logger.log(`✅ Book deleted from database: ${bookId}`);
+      this.logger.log(`📊 Cascade deletion will remove:`);
+      this.logger.log(`   - ${book.pages.length} pages`);
+      this.logger.log(`   - ${book.pages.reduce((sum, page) => sum + page.paragraphs.length, 0)} paragraphs`);
+      this.logger.log(`   - All related text corrections`);
+
+      // Delete S3 files (always call deleteFiles for consistency)
+      this.logger.log(`🗑️ Deleting ${s3KeysToDelete.length} files from S3...`);
+      await this.s3Service.deleteFiles(s3KeysToDelete);
+      if (s3KeysToDelete.length > 0) {
+        this.logger.log(`✅ S3 cleanup completed`);
+      } else {
+        this.logger.log(`ℹ️ No S3 files to delete`);
+      }
+
+      this.logger.log(`🎉 Book deletion completed successfully: ${bookId}`);
+    } catch (error) {
+      this.logger.error(`❌ Failed to delete book ${bookId}:`, error.message);
+      throw error;
+    }
   }
 }
