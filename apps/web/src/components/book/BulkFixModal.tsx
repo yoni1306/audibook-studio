@@ -148,273 +148,307 @@ export default function BulkFixModal({
   if (suggestions.length === 0) return null;
 
   return (
-    <div style={{
-      position: 'fixed',
-      inset: '0',
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 50,
-      padding: '16px'
-    }}>
-      <div style={{
-        backgroundColor: 'white',
-        borderRadius: '8px',
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-        maxWidth: '1152px',
-        width: '100%',
-        maxHeight: '90vh',
-        overflow: 'hidden'
+    <div className="modal-overlay">
+      <div className="modal-container" style={{
+        width: '90%',
+        maxWidth: '900px',
+        maxHeight: '80vh'
       }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '24px',
-          borderBottom: '1px solid #e5e7eb'
-        }}>
+        <div className="modal-header">
           <div>
-            <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>
-              Apply Bulk Fixes ({suggestions.length} suggestions)
-            </h2>
-            <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '20px' }}>
-              Select which text corrections you&apos;d like to apply. All paragraphs are selected by default.
+            <h2 className="modal-title">📝 Apply Text Corrections</h2>
+            <p className="modal-subtitle">
+              Review and apply suggested text corrections to your book
             </p>
           </div>
-          <button
+          <button 
             onClick={onClose}
-            style={{
-              color: '#9ca3af',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '18px'
-            }}
+            className="modal-close-button"
+            disabled={applying}
           >
             ✕
           </button>
         </div>
-
-        <div style={{
-          padding: '24px',
+        <div className="modal-content" style={{
+          flex: 1,
           overflowY: 'auto',
-          maxHeight: '60vh'
+          padding: 'var(--spacing-6)'
         }}>
-          {suggestions.map(suggestion => {
+          {suggestions.map((suggestion, index) => {
             const wordKey = `${suggestion.originalWord}:${suggestion.correctedWord}`;
-            const selectedParagraphs = selectedFixes[wordKey] || [];
-            
-            // Use the new API format with full paragraph details
-            const allParagraphIds = suggestion.paragraphIds || [];
-            
-            // Use the paragraphs field which contains full paragraph details
-            const paragraphsToRender = suggestion.paragraphs?.map(paragraph => ({
-              id: paragraph.id || '',
-              pageId: paragraph.pageId || '',
-              pageNumber: paragraph.pageNumber || 0,
-              orderIndex: paragraph.orderIndex || 0,
-              content: paragraph.content || '',
-              occurrences: paragraph.occurrences || 1,
-              previewBefore: paragraph.previewBefore || '',
-              previewAfter: paragraph.previewAfter || ''
-            })) || [];
-            
-            const allSelected = allParagraphIds.length === selectedParagraphs.length;
+            const paragraphIds = suggestion.paragraphIds || [];
+            const selectedCount = (selectedFixes[wordKey] || []).length;
+            const totalCount = paragraphIds.length;
             const isExpanded = expandedWord === wordKey;
 
             return (
-              <div key={wordKey} style={{
-                marginBottom: '24px',
-                border: '1px solid #e5e7eb',
-                borderRadius: '8px'
+              <div key={index} className="card" style={{
+                marginBottom: 'var(--spacing-6)',
+                overflow: 'hidden',
+                transition: 'all 0.2s ease'
               }}>
                 <div style={{
-                  padding: '16px',
-                  backgroundColor: '#f9fafb',
-                  borderBottom: '1px solid #e5e7eb'
+                  padding: 'var(--spacing-4) var(--spacing-5)',
+                  backgroundColor: 'var(--color-gray-50)',
+                  borderBottom: '1px solid var(--color-gray-200)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 'var(--spacing-3)'
                 }}>
                   <div style={{
+                    fontSize: 'var(--font-size-lg)',
+                    fontWeight: '600',
+                    color: 'var(--color-gray-900)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between'
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ color: '#dc2626', fontWeight: '500', fontSize: '15px' }}>&quot;{suggestion.originalWord}&quot;</span>
-                        <span style={{ color: '#9ca3af', fontSize: '15px' }}>→</span>
-                        <span style={{ color: '#16a34a', fontWeight: '500', fontSize: '15px' }}>&quot;{suggestion.correctedWord}&quot;</span>
-                      </div>
-                      <span style={{ fontSize: '15px', color: '#6b7280' }}>
-                        Found in {suggestion.paragraphIds?.length || 0} paragraphs
-                      </span>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 'var(--spacing-2)'
+                    }}>
+                      <span style={{
+                        color: 'var(--color-error-600)',
+                        textDecoration: 'line-through'
+                      }}>"{suggestion.originalWord}"</span>
+                      <span style={{ color: 'var(--color-gray-400)' }}>→</span>
+                      <span style={{
+                        color: 'var(--color-green-600)',
+                        fontWeight: '700'
+                      }}>"{suggestion.correctedWord}"</span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                        <input
-                          type="checkbox"
-                          checked={allSelected}
-                          onChange={() => handleToggleAll(wordKey, allParagraphIds)}
-                          style={{ borderRadius: '4px' }}
-                        />
-                        <span style={{ fontSize: '15px', color: '#374151' }}>Select all</span>
-                      </label>
-                      <button
-                        onClick={() => setExpandedWord(isExpanded ? null : wordKey)}
-                        style={{
-                          color: '#2563eb',
-                          fontSize: '15px',
-                          background: 'none',
-                          border: 'none',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {isExpanded ? 'Show less' : 'Show details'}
-                      </button>
+                    <div className="badge" style={{
+                      backgroundColor: selectedCount === totalCount 
+                        ? 'var(--color-green-100)' 
+                        : selectedCount > 0 
+                        ? 'var(--color-yellow-100)' 
+                        : 'var(--color-gray-100)',
+                      color: selectedCount === totalCount 
+                        ? 'var(--color-green-700)' 
+                        : selectedCount > 0 
+                        ? 'var(--color-yellow-700)' 
+                        : 'var(--color-gray-700)'
+                    }}>
+                      {selectedCount}/{totalCount} selected
                     </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-3)' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedCount === totalCount}
+                        onChange={() => handleToggleAll(wordKey, paragraphIds)}
+                        style={{ borderRadius: 'var(--radius-sm)' }}
+                      />
+                      <span style={{ fontSize: '15px', color: '#374151' }}>Select all</span>
+                    </label>
+                    <button
+                      onClick={() => setExpandedWord(isExpanded ? null : wordKey)}
+                      style={{
+                        color: '#2563eb',
+                        fontSize: '15px',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {isExpanded ? 'Show less' : 'Show details'}
+                    </button>
                   </div>
                 </div>
 
-                <div style={{ padding: '16px' }}>
-                  <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                    {paragraphsToRender.map((paragraph, pIdx) => (
-                      <li key={paragraph.id} style={{ marginBottom: '12px' }}>
-                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer' }}>
-                          <input
-                            type="checkbox"
-                            checked={selectedFixes[wordKey]?.includes(paragraph.id) || false}
-                            onChange={() => handleToggleParagraph(wordKey, paragraph.id)}
-                            style={{ marginTop: '4px' }}
-                          />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px',
-                              fontSize: '15px',
-                              color: '#6b7280',
-                              marginBottom: '4px'
-                            }}>
-                              <span>Page {paragraph.pageNumber}</span>
-                              <span>Paragraph #{paragraph.orderIndex + 1}</span>
-                              <span style={{
-                                backgroundColor: '#fef3c7',
-                                color: '#d97706',
-                                padding: '2px 6px',
-                                borderRadius: '4px',
-                                fontSize: '12px'
+                {isExpanded && (
+                  <div style={{ padding: 'var(--spacing-4) var(--spacing-5)' }}>
+                    <div style={{
+                      fontSize: 'var(--font-size-sm)',
+                      color: 'var(--color-gray-600)',
+                      marginBottom: 'var(--spacing-3)',
+                      fontWeight: '500'
+                    }}>
+                      📄 Found in {suggestion.paragraphs?.length || 0} paragraphs:
+                    </div>
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 'var(--spacing-3)',
+                      maxHeight: '400px',
+                      overflowY: 'auto'
+                    }}>
+                      {suggestion.paragraphs?.map((paragraph, pIdx) => (
+                        <div key={paragraph.id} className="card" style={{
+                          padding: 'var(--spacing-3)',
+                          backgroundColor: (selectedFixes[wordKey] || []).includes(paragraph.id) 
+                            ? 'var(--color-blue-50)' 
+                            : 'var(--color-gray-50)',
+                          border: `1px solid ${(selectedFixes[wordKey] || []).includes(paragraph.id) 
+                            ? 'var(--color-blue-200)' 
+                            : 'var(--color-gray-200)'}`,
+                          transition: 'all 0.2s ease'
+                        }}>
+                          <label style={{ 
+                            display: 'flex', 
+                            alignItems: 'flex-start', 
+                            gap: 'var(--spacing-3)', 
+                            cursor: 'pointer',
+                            width: '100%'
+                          }}>
+                            <input
+                              type="checkbox"
+                              checked={(selectedFixes[wordKey] || []).includes(paragraph.id)}
+                              onChange={() => handleToggleParagraph(wordKey, paragraph.id)}
+                              style={{ 
+                                marginTop: '2px', 
+                                borderRadius: 'var(--radius-sm)',
+                                transform: 'scale(1.1)'
+                              }}
+                            />
+                            <div style={{ flex: 1 }}>
+                              <div style={{
+                                fontSize: 'var(--font-size-xs)',
+                                color: 'var(--color-gray-500)',
+                                marginBottom: 'var(--spacing-2)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 'var(--spacing-2)'
                               }}>
-                                {paragraph.occurrences} occurrence{paragraph.occurrences > 1 ? 's' : ''}
-                              </span>
-                            </div>
-                            {isExpanded && (
-                              <div style={{ marginTop: '8px' }}>
-                                <div style={{ fontSize: '15px', marginBottom: '8px' }}>
-                                  <div style={{ color: '#6b7280', marginBottom: '4px' }}>Before:</div>
-                                  <div style={{
-                                    backgroundColor: '#fef2f2',
-                                    border: '1px solid #fecaca',
-                                    borderRadius: '4px',
-                                    padding: '8px',
-                                    color: '#374151',
-                                    maxHeight: '200px',
-                                    overflowY: 'auto',
-                                    whiteSpace: 'pre-wrap',
-                                    fontSize: '15px'
-                                  }}>
-                                    {paragraph.previewBefore.split('.').map((sentence, idx) => (
-                                      <div key={idx} style={{
-                                        padding: '2px 0',
-                                        direction: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'rtl' : 'ltr',
-                                        textAlign: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'right' : 'left'
-                                      }}>
-                                        {sentence.trim()}{idx < paragraph.previewBefore.split('.').length - 1 ? '.' : ''}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                                <div style={{ fontSize: '15px' }}>
-                                  <div style={{ color: '#6b7280', marginBottom: '4px' }}>After:</div>
-                                  <div style={{
-                                    backgroundColor: '#f0fdf4',
-                                    border: '1px solid #bbf7d0',
-                                    borderRadius: '4px',
-                                    padding: '8px',
-                                    color: '#374151',
-                                    maxHeight: '200px',
-                                    overflowY: 'auto',
-                                    whiteSpace: 'pre-wrap',
-                                    fontSize: '15px'
-                                  }}>
-                                    {paragraph.previewAfter.split('.').map((sentence, idx) => (
-                                      <div key={idx} style={{
-                                        padding: '2px 0',
-                                        direction: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'rtl' : 'ltr',
-                                        textAlign: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'right' : 'left'
-                                      }}>
-                                        {sentence.trim()}{idx < paragraph.previewAfter.split('.').length - 1 ? '.' : ''}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
+                                <span>📖 Page {paragraph.pageNumber}</span>
+                                <span>•</span>
+                                <span>¶ {paragraph.orderIndex}</span>
+                                <span>•</span>
+                                <span>{paragraph.occurrences} occurrence{paragraph.occurrences !== 1 ? 's' : ''}</span>
                               </div>
-                            )}
-                          </div>
-                        </label>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                              {paragraph.previewBefore && paragraph.previewAfter && (
+                                <div style={{ fontSize: 'var(--font-size-sm)' }}>
+                                  <div style={{
+                                    display: 'grid',
+                                    gap: 'var(--spacing-3)',
+                                    gridTemplateColumns: '1fr 1fr'
+                                  }}>
+                                    <div>
+                                      <div style={{
+                                        color: 'var(--color-gray-600)',
+                                        marginBottom: 'var(--spacing-1)',
+                                        fontSize: 'var(--font-size-xs)',
+                                        fontWeight: '500'
+                                      }}>Before:</div>
+                                      <div style={{
+                                        backgroundColor: 'var(--color-error-50)',
+                                        border: '1px solid var(--color-error-200)',
+                                        borderRadius: 'var(--radius-md)',
+                                        padding: 'var(--spacing-2)',
+                                        color: 'var(--color-gray-700)',
+                                        maxHeight: '150px',
+                                        overflowY: 'auto',
+                                        whiteSpace: 'pre-wrap',
+                                        fontSize: 'var(--font-size-xs)',
+                                        lineHeight: '1.4'
+                                      }}>
+                                        {paragraph.previewBefore.split('.').map((sentence, idx) => (
+                                          <div key={idx} style={{
+                                            padding: '1px 0',
+                                            direction: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'rtl' : 'ltr',
+                                            textAlign: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'right' : 'left'
+                                          }}>
+                                            {sentence.trim()}{idx < paragraph.previewBefore.split('.').length - 1 ? '.' : ''}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <div style={{
+                                        color: 'var(--color-gray-600)',
+                                        marginBottom: 'var(--spacing-1)',
+                                        fontSize: 'var(--font-size-xs)',
+                                        fontWeight: '500'
+                                      }}>After:</div>
+                                      <div style={{
+                                        backgroundColor: 'var(--color-green-50)',
+                                        border: '1px solid var(--color-green-200)',
+                                        borderRadius: 'var(--radius-md)',
+                                        padding: 'var(--spacing-2)',
+                                        color: 'var(--color-gray-700)',
+                                        maxHeight: '150px',
+                                        overflowY: 'auto',
+                                        whiteSpace: 'pre-wrap',
+                                        fontSize: 'var(--font-size-xs)',
+                                        lineHeight: '1.4'
+                                      }}>
+                                        {paragraph.previewAfter.split('.').map((sentence, idx) => (
+                                          <div key={idx} style={{
+                                            padding: '1px 0',
+                                            direction: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'rtl' : 'ltr',
+                                            textAlign: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'right' : 'left'
+                                          }}>
+                                            {sentence.trim()}{idx < paragraph.previewAfter.split('.').length - 1 ? '.' : ''}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
 
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '24px',
-          borderTop: '1px solid #e5e7eb',
-          backgroundColor: '#f9fafb'
-        }}>
-          <div style={{ fontSize: '15px', color: '#6b7280' }}>
-            {getTotalSelected()} paragraphs selected for fixing
+        <div className="modal-footer">
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--spacing-2)',
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-gray-600)'
+          }}>
+            <span>📊</span>
+            <span>{getTotalSelected()} paragraphs selected for fixing</span>
           </div>
-          <div style={{ display: 'flex', gap: '12px' }}>
+          <div style={{ display: 'flex', gap: 'var(--spacing-3)' }}>
             <button
               onClick={onClose}
               disabled={applying}
+              className="button button-secondary"
               style={{
-                padding: '10px 20px',
-                color: '#6b7280',
-                backgroundColor: 'white',
-                border: '1px solid #d1d5db',
-                borderRadius: '8px',
-                cursor: applying ? 'not-allowed' : 'pointer',
                 opacity: applying ? 0.5 : 1,
-                fontSize: '14px',
-                fontWeight: '500'
+                cursor: applying ? 'not-allowed' : 'pointer'
               }}
             >
-              Skip All Suggestions
+              ❌ Skip All Suggestions
             </button>
             <button
               onClick={handleApply}
               disabled={applying || getTotalSelected() === 0}
+              className="button button-primary"
               style={{
-                padding: '10px 20px',
-                backgroundColor: getTotalSelected() === 0 ? '#9ca3af' : '#2563eb',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: (applying || getTotalSelected() === 0) ? 'not-allowed' : 'pointer',
                 opacity: (applying || getTotalSelected() === 0) ? 0.7 : 1,
-                fontSize: '14px',
-                fontWeight: '500'
+                cursor: (applying || getTotalSelected() === 0) ? 'not-allowed' : 'pointer',
+                backgroundColor: getTotalSelected() === 0 
+                  ? 'var(--color-gray-400)' 
+                  : 'var(--color-primary-600)'
               }}
             >
-              {applying ? 'Applying Fixes...' : `Apply Selected Fixes (${getTotalSelected()})`}
+              {applying ? (
+                <>
+                  <span className="spinner" style={{
+                    width: '16px',
+                    height: '16px',
+                    marginRight: 'var(--spacing-2)'
+                  }}></span>
+                  Applying Fixes...
+                </>
+              ) : (
+                <>
+                  ✨ Apply Selected Fixes ({getTotalSelected()})
+                </>
+              )}
             </button>
           </div>
         </div>

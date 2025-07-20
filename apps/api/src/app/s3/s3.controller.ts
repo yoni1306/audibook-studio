@@ -17,6 +17,61 @@ export class S3Controller {
     private queueService: QueueService
   ) {}
 
+  /**
+   * Properly decode filename from multipart form data to handle Hebrew and other non-ASCII characters
+   * This fixes the mojibake issue where Hebrew filenames get corrupted during upload
+   */
+  private decodeFilename(filename: string): string {
+    try {
+      // First, check if the filename is already properly encoded
+      if (this.containsHebrewCharacters(filename)) {
+        return filename; // Already properly decoded
+      }
+
+      // Try to decode from Latin1 to UTF-8 (common multipart encoding issue)
+      const buffer = Buffer.from(filename, 'latin1');
+      const decoded = buffer.toString('utf8');
+      
+      // Verify the decoding worked by checking for Hebrew characters or valid UTF-8
+      if (this.containsHebrewCharacters(decoded) || this.isValidUTF8(decoded)) {
+        this.logger.log(`📝 [S3] Successfully decoded filename: ${filename} -> ${decoded}`);
+        return decoded;
+      }
+
+      // If decoding didn't help, return original
+      return filename;
+    } catch (error) {
+      this.logger.warn(`⚠️ [S3] Failed to decode filename ${filename}: ${error.message}`);
+      return filename; // Fallback to original
+    }
+  }
+
+  /**
+   * Check if string contains Hebrew characters (Unicode range U+0590-U+05FF)
+   */
+  private containsHebrewCharacters(text: string): boolean {
+    return /[\u0590-\u05FF]/.test(text);
+  }
+
+  /**
+   * Check if string is valid UTF-8 and doesn't contain replacement characters
+   */
+  private isValidUTF8(text: string): boolean {
+    // Check for replacement characters that indicate encoding issues
+    if (text.includes('\uFFFD') || text.includes('�')) {
+      return false;
+    }
+    
+    // Basic validation - if we can encode and decode without issues, it's likely valid
+    try {
+      const encoded = Buffer.from(text, 'utf8');
+      const decoded = encoded.toString('utf8');
+      return decoded === text;
+    } catch {
+      return false;
+    }
+  }
+
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
@@ -51,16 +106,19 @@ export class S3Controller {
       }
 
       const { parsingMethod = 'page-based' } = body;
-      const key = `raw/${Date.now()}-${file.originalname}`;
+      
+      // Properly decode the filename to handle Hebrew and other non-ASCII characters
+      const decodedFilename = this.decodeFilename(file.originalname);
+      const key = `raw/${Date.now()}-${decodedFilename}`;
 
-      this.logger.log(`📤 [API] Uploading file ${file.originalname} directly through API`);
+      this.logger.log(`📤 [API] Uploading file ${decodedFilename} directly through API (original: ${file.originalname})`);
 
       // Upload file directly to S3
       await this.s3Service.uploadFile(key, file.buffer, file.mimetype);
 
-      // Create book record
+      // Create book record with properly decoded title
       const book = await this.booksService.createBook({
-        title: file.originalname.replace('.epub', ''),
+        title: decodedFilename.replace('.epub', ''),
         s3Key: key,
       });
 
@@ -77,7 +135,7 @@ export class S3Controller {
 
       return {
         bookId: book.id,
-        filename: file.originalname,
+        filename: decodedFilename, // Return the properly decoded filename
         key,
         message: 'File uploaded and parsing started',
         timestamp: new Date().toISOString(),
@@ -112,16 +170,19 @@ export class S3Controller {
   ) {
     try {
       const { filename, contentType, parsingMethod = 'page-based' } = body;
-      const key = `raw/${Date.now()}-${filename}`;
+      
+      // Properly decode the filename to handle Hebrew and other non-ASCII characters
+      const decodedFilename = this.decodeFilename(filename);
+      const key = `raw/${Date.now()}-${decodedFilename}`;
 
-      this.logger.log(`📤 [API] Generating presigned URL for ${filename}`);
+      this.logger.log(`📤 [API] Generating presigned URL for ${decodedFilename} (original: ${filename})`);
 
       // Get presigned URL
       const result = await this.s3Service.getPresignedUploadUrl(key, contentType);
 
-      // Create book record
+      // Create book record with properly decoded title
       const book = await this.booksService.createBook({
-        title: filename.replace('.epub', ''),
+        title: decodedFilename.replace('.epub', ''),
         s3Key: key,
       });
 
@@ -139,7 +200,7 @@ export class S3Controller {
         uploadUrl: result.url,
         key: result.key,
         bookId: book.id,
-        filename,
+        filename: decodedFilename, // Return the properly decoded filename
         timestamp: new Date().toISOString(),
       };
     } catch (error) {

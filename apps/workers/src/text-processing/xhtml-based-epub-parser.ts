@@ -320,82 +320,227 @@ export class XHTMLBasedEPUBParser {
 
   // Custom splitting methods removed - now using shared ParagraphProcessor utility
 
+  /**
+   * Read XML file with proper encoding detection to avoid Hebrew text corruption
+   */
+  private async readFileWithProperEncoding(filePath: string): Promise<string> {
+    logger.info(`🔍 [XHTML Parser] Starting encoding detection for file: ${path.basename(filePath)}`);
+    
+    try {
+      // First, read the file as binary to detect encoding
+      const buffer = await fs.readFile(filePath);
+      logger.debug(`📁 [XHTML Parser] File size: ${buffer.length} bytes`);
+      
+      // Convert buffer to string with UTF-8 first to check for encoding declaration
+      const utf8Content = buffer.toString('utf-8');
+      logger.debug(`📝 [XHTML Parser] UTF-8 content preview (first 200 chars): ${utf8Content.substring(0, 200)}...`);
+      
+      // Look for XML encoding declaration
+      const encodingMatch = utf8Content.match(/<\?xml[^>]*encoding=["']([^"']*)["']/i);
+      
+      if (encodingMatch) {
+        const declaredEncoding = encodingMatch[1].toLowerCase();
+        logger.info(`🏷️  [XHTML Parser] Found XML encoding declaration: "${declaredEncoding}"`);
+        
+        // Handle common encoding variations
+        if (declaredEncoding === 'utf-8' || declaredEncoding === 'utf8') {
+          logger.info('✅ [XHTML Parser] Using declared UTF-8 encoding');
+          return utf8Content;
+        } else if (declaredEncoding === 'iso-8859-1' || declaredEncoding === 'latin1') {
+          const latin1Content = buffer.toString('latin1');
+          logger.info('✅ [XHTML Parser] Using declared Latin1 encoding');
+          logger.debug(`📝 [XHTML Parser] Latin1 content preview (first 200 chars): ${latin1Content.substring(0, 200)}...`);
+          return latin1Content;
+        } else if (declaredEncoding === 'windows-1252' || declaredEncoding === 'cp1252') {
+          const latin1Content = buffer.toString('latin1');
+          logger.info('✅ [XHTML Parser] Using Latin1 as fallback for Windows-1252 encoding');
+          logger.debug(`📝 [XHTML Parser] Latin1 content preview (first 200 chars): ${latin1Content.substring(0, 200)}...`);
+          return latin1Content;
+        } else {
+          logger.warn(`⚠️  [XHTML Parser] Unknown declared encoding: "${declaredEncoding}", continuing with detection`);
+        }
+      } else {
+        logger.debug('🔍 [XHTML Parser] No XML encoding declaration found, proceeding with content analysis');
+      }
+      
+      // If no encoding declaration or unknown encoding, try to detect Hebrew content
+      // Hebrew characters are in Unicode range U+0590-U+05FF
+      const hebrewMatches = utf8Content.match(/[\u0590-\u05FF]/g);
+      const hasHebrewChars = hebrewMatches && hebrewMatches.length > 0;
+      
+      if (hasHebrewChars) {
+        logger.info(`🔤 [XHTML Parser] Hebrew characters detected! Found ${hebrewMatches.length} Hebrew characters in UTF-8 content`);
+        logger.debug(`🔤 [XHTML Parser] Hebrew character samples: ${hebrewMatches.slice(0, 10).join(', ')}`);
+        logger.info('✅ [XHTML Parser] Using UTF-8 encoding for Hebrew content');
+        return utf8Content;
+      } else {
+        logger.debug('🔍 [XHTML Parser] No Hebrew characters detected in UTF-8 content');
+      }
+      
+      // Check if the UTF-8 content has replacement characters (�) which indicate encoding issues
+      const replacementMatches = utf8Content.match(/\uFFFD/g);
+      const hasReplacementChars = replacementMatches && replacementMatches.length > 0;
+      
+      if (hasReplacementChars) {
+        logger.warn(`⚠️  [XHTML Parser] Replacement characters detected in UTF-8! Found ${replacementMatches.length} replacement chars`);
+        logger.warn('🔄 [XHTML Parser] Trying Latin1 encoding as alternative...');
+        
+        const latin1Content = buffer.toString('latin1');
+        logger.debug(`📝 [XHTML Parser] Latin1 content preview (first 200 chars): ${latin1Content.substring(0, 200)}...`);
+        
+        // Check if latin1 version has Hebrew characters
+        const latin1HebrewMatches = latin1Content.match(/[\u0590-\u05FF]/g);
+        const latin1HasHebrew = latin1HebrewMatches && latin1HebrewMatches.length > 0;
+        
+        if (latin1HasHebrew) {
+          logger.info(`🔤 [XHTML Parser] Hebrew characters found in Latin1 version! Found ${latin1HebrewMatches.length} Hebrew characters`);
+          logger.debug(`🔤 [XHTML Parser] Hebrew character samples: ${latin1HebrewMatches.slice(0, 10).join(', ')}`);
+          logger.info('✅ [XHTML Parser] Using Latin1 encoding for Hebrew content');
+          return latin1Content;
+        } else {
+          logger.debug('🔍 [XHTML Parser] No Hebrew characters found in Latin1 version either');
+        }
+      } else {
+        logger.debug('✅ [XHTML Parser] No replacement characters detected in UTF-8 content');
+      }
+      
+      // Default to UTF-8 if no issues detected
+      logger.info('✅ [XHTML Parser] Using default UTF-8 encoding (no encoding issues detected)');
+      return utf8Content;
+      
+    } catch (error) {
+      logger.error('❌ [XHTML Parser] Error reading file with encoding detection:', error);
+      logger.warn('🔄 [XHTML Parser] Falling back to standard UTF-8 reading');
+      // Fallback to standard UTF-8 reading
+      return await fs.readFile(filePath, 'utf-8');
+    }
+  }
+
   private async extractBookMetadata(tempDir: string): Promise<XHTMLParseResult['bookMetadata']> {
+    logger.info('📖 [XHTML Parser] Starting book metadata extraction from OPF');
+    
     try {
       // Find the OPF file
       const opfPath = await this.findOPFFile(tempDir);
       if (!opfPath) {
-        logger.warn('No OPF file found - skipping metadata extraction');
+        logger.warn('⚠️  [XHTML Parser] No OPF file found - skipping metadata extraction');
         return undefined;
       }
+      logger.info(`📁 [XHTML Parser] Found OPF file: ${path.basename(opfPath)}`);
 
-      // Read and parse the OPF file
-      const opfContent = await fs.readFile(opfPath, 'utf-8');
+      // Read and parse the OPF file with proper encoding detection
+      const opfContent = await this.readFileWithProperEncoding(opfPath);
       const opfData = await parseStringPromise(opfContent);
+      logger.debug('📋 [XHTML Parser] Parsed OPF XML structure successfully');
 
       // Extract metadata from the OPF
       const metadata = opfData?.package?.metadata?.[0];
       if (!metadata) {
-        logger.warn('No metadata section found in OPF file');
+        logger.warn('⚠️  [XHTML Parser] No metadata section found in OPF');
         return undefined;
       }
+      logger.debug('📋 [XHTML Parser] OPF metadata section structure:', JSON.stringify(metadata, null, 2));
 
       const bookMetadata: XHTMLParseResult['bookMetadata'] = {};
 
       // Extract title
-      if (metadata['dc:title']) {
-        const titleEntry = Array.isArray(metadata['dc:title']) ? metadata['dc:title'][0] : metadata['dc:title'];
+      const titleEntry = metadata['dc:title']?.[0];
+      if (titleEntry) {
+        logger.debug('🏷️  [XHTML Parser] Found dc:title entry:', titleEntry);
         bookMetadata.title = typeof titleEntry === 'string' ? titleEntry : titleEntry._;
+        
+        if (bookMetadata.title) {
+          logger.info(`📚 [XHTML Parser] Extracted title: "${bookMetadata.title}"`);
+          
+          // Check for Hebrew characters in title
+          const hebrewMatches = bookMetadata.title.match(/[\u0590-\u05FF]/g);
+          if (hebrewMatches && hebrewMatches.length > 0) {
+            logger.info(`🔤 [XHTML Parser] Hebrew title detected! Found ${hebrewMatches.length} Hebrew characters`);
+            logger.debug(`🔤 [XHTML Parser] Hebrew characters in title: ${hebrewMatches.join(', ')}`);
+            logger.debug(`🔤 [XHTML Parser] Title Unicode codepoints: ${Array.from(bookMetadata.title).map(char => `U+${char.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}`).join(', ')}`);
+          } else {
+            logger.debug('🔍 [XHTML Parser] No Hebrew characters detected in title');
+          }
+        }
+      } else {
+        logger.warn('⚠️  [XHTML Parser] No dc:title found in metadata section');
       }
 
       // Extract author
-      if (metadata['dc:creator']) {
-        const creatorEntry = Array.isArray(metadata['dc:creator']) ? metadata['dc:creator'][0] : metadata['dc:creator'];
-        bookMetadata.author = typeof creatorEntry === 'string' ? creatorEntry : creatorEntry._;
+      const authorEntry = metadata['dc:creator']?.[0];
+      if (authorEntry) {
+        logger.debug('👤 [XHTML Parser] Found dc:creator entry:', authorEntry);
+        bookMetadata.author = typeof authorEntry === 'string' ? authorEntry : authorEntry._;
+        if (bookMetadata.author) {
+          logger.info(`👤 [XHTML Parser] Extracted author: "${bookMetadata.author}"`);
+        }
       }
 
       // Extract language
-      if (metadata['dc:language']) {
-        const languageEntry = Array.isArray(metadata['dc:language']) ? metadata['dc:language'][0] : metadata['dc:language'];
+      const languageEntry = metadata['dc:language']?.[0];
+      if (languageEntry) {
+        logger.debug('🌐 [XHTML Parser] Found dc:language entry:', languageEntry);
         bookMetadata.language = typeof languageEntry === 'string' ? languageEntry : languageEntry._;
+        if (bookMetadata.language) {
+          logger.info(`🌐 [XHTML Parser] Extracted language: "${bookMetadata.language}"`);
+        }
       }
 
       // Extract publisher
-      if (metadata['dc:publisher']) {
-        const publisherEntry = Array.isArray(metadata['dc:publisher']) ? metadata['dc:publisher'][0] : metadata['dc:publisher'];
+      const publisherEntry = metadata['dc:publisher']?.[0];
+      if (publisherEntry) {
+        logger.debug('🏢 [XHTML Parser] Found dc:publisher entry:', publisherEntry);
         bookMetadata.publisher = typeof publisherEntry === 'string' ? publisherEntry : publisherEntry._;
+        if (bookMetadata.publisher) {
+          logger.info(`🏢 [XHTML Parser] Extracted publisher: "${bookMetadata.publisher}"`);
+        }
       }
 
       // Extract published date
-      if (metadata['dc:date']) {
-        const dateEntry = Array.isArray(metadata['dc:date']) ? metadata['dc:date'][0] : metadata['dc:date'];
+      const dateEntry = metadata['dc:date']?.[0];
+      if (dateEntry) {
+        logger.debug('📅 [XHTML Parser] Found dc:date entry:', dateEntry);
         bookMetadata.publishedDate = typeof dateEntry === 'string' ? dateEntry : dateEntry._;
+        if (bookMetadata.publishedDate) {
+          logger.info(`📅 [XHTML Parser] Extracted published date: "${bookMetadata.publishedDate}"`);
+        }
       }
 
       // Extract description
-      if (metadata['dc:description']) {
-        const descriptionEntry = Array.isArray(metadata['dc:description']) ? metadata['dc:description'][0] : metadata['dc:description'];
+      const descriptionEntry = metadata['dc:description']?.[0];
+      if (descriptionEntry) {
+        logger.debug('📝 [XHTML Parser] Found dc:description entry:', descriptionEntry);
         bookMetadata.description = typeof descriptionEntry === 'string' ? descriptionEntry : descriptionEntry._;
+        if (bookMetadata.description) {
+          logger.info(`📝 [XHTML Parser] Extracted description: "${bookMetadata.description?.substring(0, 100)}..."`);
+        }
       }
 
       // Extract identifier
-      if (metadata['dc:identifier']) {
-        const identifierEntry = Array.isArray(metadata['dc:identifier']) ? metadata['dc:identifier'][0] : metadata['dc:identifier'];
+      const identifierEntry = metadata['dc:identifier']?.[0];
+      if (identifierEntry) {
+        logger.debug('🆔 [XHTML Parser] Found dc:identifier entry:', identifierEntry);
         bookMetadata.identifier = typeof identifierEntry === 'string' ? identifierEntry : identifierEntry._;
+        if (bookMetadata.identifier) {
+          logger.info(`🆔 [XHTML Parser] Extracted identifier: "${bookMetadata.identifier}"`);
+        }
       }
 
-      logger.info('Book metadata extracted from EPUB OPF', {
+      logger.info('✅ [XHTML Parser] Book metadata extraction completed:', {
         hasTitle: !!bookMetadata.title,
         hasAuthor: !!bookMetadata.author,
         hasLanguage: !!bookMetadata.language,
         hasPublisher: !!bookMetadata.publisher,
+        hasPublishedDate: !!bookMetadata.publishedDate,
+        hasDescription: !!bookMetadata.description,
+        hasIdentifier: !!bookMetadata.identifier,
         title: bookMetadata.title,
         author: bookMetadata.author
       });
 
       return bookMetadata;
     } catch (error) {
-      logger.error('Failed to extract book metadata from EPUB OPF:', error);
+      logger.error('❌ [XHTML Parser] Failed to extract book metadata from EPUB OPF:', error);
       return undefined;
     }
   }

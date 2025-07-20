@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Patch, Param, Body, NotFoundException, BadRequestException, Redirect, Logger, InternalServerErrorException } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Param, Body, NotFoundException, BadRequestException, Redirect, Logger, InternalServerErrorException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody } from '@nestjs/swagger';
 import { BooksService } from './books.service';
 import { BulkTextFixesService } from './bulk-text-fixes.service';
@@ -175,31 +175,7 @@ export class BooksController {
       const generateAudio = body.generateAudio !== undefined ? body.generateAudio : false;
       const result = await this.booksService.updateParagraph(paragraphId, body.content, generateAudio);
       
-      // If there were text changes, find similar fixes in the book
-      if (result.textChanges && result.textChanges.length > 0) {
-        // Convert TextChange[] to WordChange[] by adding default fixType
-        const wordChanges: WordChange[] = result.textChanges.map(change => ({
-          originalWord: change.originalWord,
-          correctedWord: change.correctedWord,
-          position: change.position,
-          fixType: FixType.default
-        }));
-        
-        const bulkSuggestions = await this.bulkTextFixesService.findSimilarFixesInBook(
-          result.bookId,
-          paragraphId,
-          wordChanges
-        );
-        
-        // Convert service format to DTO format
-        const mappedSuggestions = this.mapBulkSuggestionsToDto(bulkSuggestions);
-
-        return {
-          ...result,
-          bulkSuggestions: mappedSuggestions,
-        };
-      }
-
+      // BooksService already handles bulk suggestions, so just return the result
       return result;
     } catch (error) {
       if (error.message.includes('not found')) {
@@ -558,6 +534,51 @@ export class BooksController {
   }
 
 
+
+  /**
+   * Delete a book and all related data
+   */
+  @Delete(':id')
+  @ApiOperation({ 
+    summary: 'Delete a book', 
+    description: 'Delete a book and all related entities (pages, paragraphs, text corrections) and associated S3 audio files' 
+  })
+  @ApiParam({ name: 'id', description: 'Book ID to delete' })
+  @ApiResponse({ status: 200, description: 'Book deleted successfully' })
+  @ApiResponse({ status: 404, description: 'Book not found' })
+  @ApiResponse({ status: 500, description: 'Internal server error during deletion' })
+  async deleteBook(@Param('id') id: string) {
+    this.logger.log(`🗑️ [API] Deleting book: ${id}`);
+    
+    try {
+      await this.booksService.deleteBook(id);
+      
+      this.logger.log(`✅ [API] Book deleted successfully: ${id}`);
+      return {
+        message: 'Book deleted successfully',
+        bookId: id,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      this.logger.error(`❌ [API] Failed to delete book ${id}:`, error.message);
+      
+      if (error.message.includes('Book not found')) {
+        throw new NotFoundException({
+          error: 'Not Found',
+          message: `Book with ID ${id} not found`,
+          statusCode: 404,
+          timestamp: new Date().toISOString(),
+        });
+      }
+      
+      throw new InternalServerErrorException({
+        error: 'Internal Server Error',
+        message: 'Failed to delete book',
+        statusCode: 500,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
 
   /**
    * Test endpoint to verify routing
