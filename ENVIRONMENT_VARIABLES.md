@@ -20,8 +20,8 @@ PORT=3000
 
 ### Web Service Configuration
 ```bash
-NEXT_PUBLIC_API_URL=http://localhost:3000
-# No INTERNAL_API_URL needed for local dev - web app connects directly to localhost API
+VITE_API_URL=http://localhost:3000
+# Web app uses VITE_API_URL for API endpoint configuration
 ```
 
 ### Additional Services
@@ -74,8 +74,8 @@ Set these in your Railway Web service:
 
 ```bash
 NODE_ENV=production
-NEXT_PUBLIC_API_URL=https://api-production.up.railway.app  # Your API's public URL
-INTERNAL_API_URL=http://api:3000  # Internal Railway service communication
+VITE_API_URL=https://api-production.up.railway.app  # Your API's public URL
+# INTERNAL_API_URL no longer needed - web app uses VITE_API_URL for all API calls
 ```
 
 ## Key Concepts
@@ -87,8 +87,8 @@ INTERNAL_API_URL=http://api:3000  # Internal Railway service communication
 - **Simple setup**: Both services run on localhost
 
 #### Production (Railway)
-- **Browser → API**: Uses `NEXT_PUBLIC_API_URL` (public Railway URL)
-- **Server → API**: Uses `INTERNAL_API_URL` (internal Railway network)
+- **Browser → API**: Uses `VITE_API_URL` (public Railway URL)
+- **Simplified architecture**: Web app uses single API endpoint for all calls
 - **Internal communication**: Railway services can communicate using service names
 
 ### Environment-Aware API Client
@@ -138,8 +138,8 @@ In Railway, services can communicate internally using service names:
 
 ### Common Issues
 
-1. **API client can't connect**: Check `NEXT_PUBLIC_API_URL` matches your API service URL
-2. **Internal server errors**: Verify `INTERNAL_API_URL` uses correct Railway service name
+1. **API client can't connect**: Check `VITE_API_URL` matches your API service URL
+2. **Internal server errors**: Verify API service is running and accessible
 3. **CORS errors**: Ensure API service allows requests from web service domain
 4. **Environment not detected**: Check `NODE_ENV` is set correctly in all services
 

@@ -16,6 +16,14 @@ import { ParagraphProcessor, ProcessedParagraph } from './utils/paragraph-proces
 import { HTMLTextExtractor } from './utils/html-text-extractor';
 import { DEFAULT_EPUB_PARSER_CONFIG } from '../config/epub-parser-config';
 
+export interface EPUBMetadata {
+  title?: string;
+  author?: string;
+  language?: string;
+  publisher?: string;
+  description?: string;
+}
+
 const logger = createLogger('PageBasedEpubParser');
 
 export interface ParsedPage {
@@ -39,6 +47,7 @@ export interface EPUBParseResult {
     totalParagraphs: number;
     averageParagraphsPerPage: number;
   };
+  bookMetadata: EPUBMetadata;
 }
 
 export interface PageBasedParserOptions {
@@ -76,7 +85,7 @@ export class PageBasedEPUBParser {
       await this.extractEPUB(epubPath, tempDir);
       
       // Parse EPUB structure
-      const chapters = await this.parseEPUBStructure(tempDir);
+      const { chapters, metadata: bookMetadata } = await this.parseEPUBStructure(tempDir);
       
       // Detect page breaks
       const pageBreaks = await detectEPUBPageBreaks(chapters, this.options.pageBreakDetection);
@@ -95,7 +104,8 @@ export class PageBasedEPUBParser {
           totalPages: pages.length,
           totalParagraphs,
           averageParagraphsPerPage: pages.length > 0 ? totalParagraphs / pages.length : 0,
-        }
+        },
+        bookMetadata
       };
 
       logger.info('Page-based EPUB parsing completed', result.metadata);
@@ -123,7 +133,7 @@ export class PageBasedEPUBParser {
     logger.debug('EPUB extraction completed');
   }
 
-  private async parseEPUBStructure(tempDir: string): Promise<EPUBChapterContent[]> {
+  private async parseEPUBStructure(tempDir: string): Promise<{ chapters: EPUBChapterContent[]; metadata: EPUBMetadata }> {
     logger.debug('Parsing EPUB structure');
 
     // Read container.xml to find content.opf
@@ -133,8 +143,11 @@ export class PageBasedEPUBParser {
 
     const opfPath = container.container.rootfiles[0].rootfile[0].$['full-path'];
     const opfDir = path.dirname(path.join(tempDir, opfPath));
-    const opfContent = await fsPromises.readFile(path.join(tempDir, opfPath), 'utf-8');
+    const opfContent = await this.readFileWithProperEncoding(path.join(tempDir, opfPath));
     const opf = await parseStringPromise(opfContent);
+
+    // Extract book metadata from OPF
+    const metadata = this.extractBookMetadata(opf);
 
     // Get spine order (reading order)
     const spine = opf.package.spine[0].itemref;
@@ -178,7 +191,223 @@ export class PageBasedEPUBParser {
     }
 
     logger.debug(`Parsed ${chapters.length} chapters from EPUB structure`);
-    return chapters;
+    logger.info('Extracted book metadata', {
+      title: metadata.title,
+      author: metadata.author,
+      language: metadata.language
+    });
+    
+    return { chapters, metadata };
+  }
+
+  /**
+   * Read XML file with proper encoding detection to avoid Hebrew text corruption
+   */
+  private async readFileWithProperEncoding(filePath: string): Promise<string> {
+    logger.info(`🔍 Starting encoding detection for file: ${path.basename(filePath)}`);
+    
+    try {
+      // First, read the file as binary to detect encoding
+      const buffer = await fsPromises.readFile(filePath);
+      logger.debug(`📁 File size: ${buffer.length} bytes`);
+      
+      // Convert buffer to string with UTF-8 first to check for encoding declaration
+      const utf8Content = buffer.toString('utf-8');
+      logger.debug(`📝 UTF-8 content preview (first 200 chars): ${utf8Content.substring(0, 200)}...`);
+      
+      // Look for XML encoding declaration
+      const encodingMatch = utf8Content.match(/<\?xml[^>]*encoding=["']([^"']*)["']/i);
+      
+      if (encodingMatch) {
+        const declaredEncoding = encodingMatch[1].toLowerCase();
+        logger.info(`🏷️  Found XML encoding declaration: "${declaredEncoding}"`);
+        
+        // Handle common encoding variations
+        if (declaredEncoding === 'utf-8' || declaredEncoding === 'utf8') {
+          logger.info('✅ Using declared UTF-8 encoding');
+          return utf8Content;
+        } else if (declaredEncoding === 'iso-8859-1' || declaredEncoding === 'latin1') {
+          const latin1Content = buffer.toString('latin1');
+          logger.info('✅ Using declared Latin1 encoding');
+          logger.debug(`📝 Latin1 content preview (first 200 chars): ${latin1Content.substring(0, 200)}...`);
+          return latin1Content;
+        } else if (declaredEncoding === 'windows-1252' || declaredEncoding === 'cp1252') {
+          const latin1Content = buffer.toString('latin1');
+          logger.info('✅ Using Latin1 as fallback for Windows-1252 encoding');
+          logger.debug(`📝 Latin1 content preview (first 200 chars): ${latin1Content.substring(0, 200)}...`);
+          return latin1Content;
+        } else {
+          logger.warn(`⚠️  Unknown declared encoding: "${declaredEncoding}", continuing with detection`);
+        }
+      } else {
+        logger.debug('🔍 No XML encoding declaration found, proceeding with content analysis');
+      }
+      
+      // If no encoding declaration or unknown encoding, try to detect Hebrew content
+      // Hebrew characters are in Unicode range U+0590-U+05FF
+      const hebrewMatches = utf8Content.match(/[\u0590-\u05FF]/g);
+      const hasHebrewChars = hebrewMatches && hebrewMatches.length > 0;
+      
+      if (hasHebrewChars) {
+        logger.info(`🔤 Hebrew characters detected! Found ${hebrewMatches.length} Hebrew characters in UTF-8 content`);
+        logger.debug(`🔤 Hebrew character samples: ${hebrewMatches.slice(0, 10).join(', ')}`);
+        logger.info('✅ Using UTF-8 encoding for Hebrew content');
+        return utf8Content;
+      } else {
+        logger.debug('🔍 No Hebrew characters detected in UTF-8 content');
+      }
+      
+      // Check if the UTF-8 content has replacement characters (�) which indicate encoding issues
+      const replacementMatches = utf8Content.match(/\uFFFD/g);
+      const hasReplacementChars = replacementMatches && replacementMatches.length > 0;
+      
+      if (hasReplacementChars) {
+        logger.warn(`⚠️  Replacement characters detected in UTF-8! Found ${replacementMatches.length} replacement chars`);
+        logger.warn('🔄 Trying Latin1 encoding as alternative...');
+        
+        const latin1Content = buffer.toString('latin1');
+        logger.debug(`📝 Latin1 content preview (first 200 chars): ${latin1Content.substring(0, 200)}...`);
+        
+        // Check if latin1 version has Hebrew characters
+        const latin1HebrewMatches = latin1Content.match(/[\u0590-\u05FF]/g);
+        const latin1HasHebrew = latin1HebrewMatches && latin1HebrewMatches.length > 0;
+        
+        if (latin1HasHebrew) {
+          logger.info(`🔤 Hebrew characters found in Latin1 version! Found ${latin1HebrewMatches.length} Hebrew characters`);
+          logger.debug(`🔤 Hebrew character samples: ${latin1HebrewMatches.slice(0, 10).join(', ')}`);
+          logger.info('✅ Using Latin1 encoding for Hebrew content');
+          return latin1Content;
+        } else {
+          logger.debug('🔍 No Hebrew characters found in Latin1 version either');
+        }
+      } else {
+        logger.debug('✅ No replacement characters detected in UTF-8 content');
+      }
+      
+      // Default to UTF-8 if no issues detected
+      logger.info('✅ Using default UTF-8 encoding (no encoding issues detected)');
+      return utf8Content;
+      
+    } catch (error) {
+      logger.error('❌ Error reading file with encoding detection:', error);
+      logger.warn('🔄 Falling back to standard UTF-8 reading');
+      // Fallback to standard UTF-8 reading
+      return await fsPromises.readFile(filePath, 'utf-8');
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private extractBookMetadata(opf: Record<string, any>): EPUBMetadata {
+    logger.info('📖 Starting book metadata extraction from OPF');
+    const metadata: EPUBMetadata = {};
+    
+    try {
+      // Extract metadata from OPF package
+      const metadataSection = opf.package?.metadata?.[0];
+      logger.debug('📋 OPF metadata section structure:', JSON.stringify(metadataSection, null, 2));
+      
+      if (metadataSection) {
+        // Extract title (dc:title)
+        if (metadataSection['dc:title']?.[0]) {
+          logger.debug('🏷️  Found dc:title entry:', metadataSection['dc:title'][0]);
+          
+          if (typeof metadataSection['dc:title'][0] === 'string') {
+            metadata.title = metadataSection['dc:title'][0].trim();
+            logger.info(`📚 Extracted title (string): "${metadata.title}"`);
+          } else if (metadataSection['dc:title'][0]._) {
+            metadata.title = metadataSection['dc:title'][0]._.trim();
+            logger.info(`📚 Extracted title (object._): "${metadata.title}"`);
+          } else {
+            logger.warn('⚠️  dc:title found but could not extract string value');
+          }
+          
+          // Check for Hebrew characters in title
+          if (metadata.title) {
+            const hebrewMatches = metadata.title.match(/[\u0590-\u05FF]/g);
+            if (hebrewMatches && hebrewMatches.length > 0) {
+              logger.info(`🔤 Hebrew title detected! Found ${hebrewMatches.length} Hebrew characters`);
+              logger.debug(`🔤 Hebrew characters in title: ${hebrewMatches.join(', ')}`);
+              logger.debug(`🔤 Title Unicode codepoints: ${Array.from(metadata.title).map(char => `U+${char.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}`).join(', ')}`);
+            } else {
+              logger.debug('🔍 No Hebrew characters detected in title');
+            }
+          }
+        } else {
+          logger.warn('⚠️  No dc:title found in metadata section');
+        }
+        
+        // Extract author (dc:creator)
+        if (metadataSection['dc:creator']?.[0]) {
+          logger.debug('👤 Found dc:creator entry:', metadataSection['dc:creator'][0]);
+          
+          if (typeof metadataSection['dc:creator'][0] === 'string') {
+            metadata.author = metadataSection['dc:creator'][0].trim();
+            logger.info(`👤 Extracted author (string): "${metadata.author}"`);
+          } else if (metadataSection['dc:creator'][0]._) {
+            metadata.author = metadataSection['dc:creator'][0]._.trim();
+            logger.info(`👤 Extracted author (object._): "${metadata.author}"`);
+          }
+        }
+        
+        // Extract language (dc:language)
+        if (metadataSection['dc:language']?.[0]) {
+          logger.debug('🌐 Found dc:language entry:', metadataSection['dc:language'][0]);
+          
+          if (typeof metadataSection['dc:language'][0] === 'string') {
+            metadata.language = metadataSection['dc:language'][0].trim();
+            logger.info(`🌐 Extracted language (string): "${metadata.language}"`);
+          } else if (metadataSection['dc:language'][0]._) {
+            metadata.language = metadataSection['dc:language'][0]._.trim();
+            logger.info(`🌐 Extracted language (object._): "${metadata.language}"`);
+          }
+        }
+        
+        // Extract publisher (dc:publisher)
+        if (metadataSection['dc:publisher']?.[0]) {
+          logger.debug('🏢 Found dc:publisher entry:', metadataSection['dc:publisher'][0]);
+          
+          if (typeof metadataSection['dc:publisher'][0] === 'string') {
+            metadata.publisher = metadataSection['dc:publisher'][0].trim();
+            logger.info(`🏢 Extracted publisher (string): "${metadata.publisher}"`);
+          } else if (metadataSection['dc:publisher'][0]._) {
+            metadata.publisher = metadataSection['dc:publisher'][0]._.trim();
+            logger.info(`🏢 Extracted publisher (object._): "${metadata.publisher}"`);
+          }
+        }
+        
+        // Extract description (dc:description)
+        if (metadataSection['dc:description']?.[0]) {
+          logger.debug('📝 Found dc:description entry:', metadataSection['dc:description'][0]);
+          
+          if (typeof metadataSection['dc:description'][0] === 'string') {
+            metadata.description = metadataSection['dc:description'][0].trim();
+            logger.info(`📝 Extracted description (string): "${metadata.description?.substring(0, 100)}..."`);
+          } else if (metadataSection['dc:description'][0]._) {
+            metadata.description = metadataSection['dc:description'][0]._.trim();
+            logger.info(`📝 Extracted description (object._): "${metadata.description?.substring(0, 100)}..."`);
+          }
+        }
+      } else {
+        logger.warn('⚠️  No metadata section found in OPF package');
+      }
+      
+      logger.info('✅ EPUB metadata extraction completed:', {
+        hasTitle: !!metadata.title,
+        hasAuthor: !!metadata.author,
+        hasLanguage: !!metadata.language,
+        hasPublisher: !!metadata.publisher,
+        hasDescription: !!metadata.description,
+        title: metadata.title ? `"${metadata.title}"` : 'Not found',
+        author: metadata.author ? `"${metadata.author}"` : 'Not found',
+        language: metadata.language || 'Not found',
+        publisher: metadata.publisher ? `"${metadata.publisher}"` : 'Not found'
+      });
+      
+    } catch (error) {
+      logger.error('❌ Error extracting EPUB metadata:', error);
+    }
+    
+    return metadata;
   }
 
   private async createPagesFromBreaks(
@@ -203,7 +432,10 @@ export class PageBasedEPUBParser {
       if (!breaksByChapter.has(pb.chapterNumber)) {
         breaksByChapter.set(pb.chapterNumber, []);
       }
-      breaksByChapter.get(pb.chapterNumber)!.push(pb);
+      const chapterBreaks = breaksByChapter.get(pb.chapterNumber);
+      if (chapterBreaks) {
+        chapterBreaks.push(pb);
+      }
     });
 
     logger.debug('📊 Page breaks grouped by chapter', {

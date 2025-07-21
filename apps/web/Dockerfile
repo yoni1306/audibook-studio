@@ -1,6 +1,10 @@
 # Multi-stage build for Web service
 FROM node:20-alpine AS base
 
+# Build arguments for environment variables
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+
 # Install pnpm globally
 RUN npm install -g pnpm
 
@@ -31,8 +35,8 @@ RUN npm install -g pnpm
 WORKDIR /app
 
 # Copy built application and dependencies
-COPY --from=base /app/apps/web/.next ./apps/web/.next
-COPY --from=base /app/apps/web/public ./apps/web/public
+COPY --from=base /app/apps/web/dist ./apps/web/dist
+COPY --from=base /app/apps/web/server.js ./apps/web/server.js
 COPY --from=base /app/node_modules ./node_modules
 COPY --from=base /app/package.json ./
 
@@ -56,4 +60,4 @@ USER nodejs
 
 # Start the application
 WORKDIR /app/apps/web
-CMD ["pnpm", "start"]
+CMD ["node", "server.js"]
