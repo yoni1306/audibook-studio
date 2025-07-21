@@ -233,6 +233,82 @@ export default function BookDetailPage() {
     }
   };
 
+  const saveAndGenerateAudio = async (paragraphId: string) => {
+    setSaving(true);
+    try {
+      // Immediately update the paragraph status to 'GENERATING' for visual feedback
+      if (book) {
+        const updatedBook = {
+          ...book,
+          paragraphs: book.paragraphs.map(p => 
+            p.id === paragraphId 
+              ? { ...p, audioStatus: 'GENERATING' as const }
+              : p
+          )
+        };
+        setBook(updatedBook);
+      }
+
+      const { data: result, error } = await apiClient.books.updateParagraph(paragraphId, {
+        content: editContent,
+        generateAudio: true, // Save content AND generate audio in one call
+      });
+
+      if (!error && result) {
+        // Check if there are bulk fix suggestions
+        if (result.bulkSuggestions && result.bulkSuggestions.length > 0) {
+          setPendingBulkFix({
+            paragraphId,
+            content: editContent,
+            suggestions: result.bulkSuggestions,
+            audioRequested: true, // Audio was requested in this case
+          });
+          setShowBulkFixModal(true);
+        }
+        
+        // Clear editing state
+        setEditingId(null);
+        setEditContent('');
+        
+        // Refresh to show updated status
+        setTimeout(fetchBook, 1000);
+      } else {
+        alert('Failed to save changes and generate audio');
+        
+        // If there was an error, revert the status back
+        if (book) {
+          const revertedBook = {
+            ...book,
+            paragraphs: book.paragraphs.map(p => 
+              p.id === paragraphId 
+                ? { ...p, audioStatus: 'ERROR' as const }
+                : p
+            )
+          };
+          setBook(revertedBook);
+        }
+      }
+    } catch (error) {
+      logger.error('Error saving and generating audio:', error);
+      alert('Error saving changes and generating audio');
+      
+      // If there was an error, revert the status back
+      if (book) {
+        const revertedBook = {
+          ...book,
+          paragraphs: book.paragraphs.map(p => 
+            p.id === paragraphId 
+              ? { ...p, audioStatus: 'ERROR' as const }
+              : p
+        )
+        };
+        setBook(revertedBook);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleBulkFixComplete = () => {
     logger.info('Bulk fix completed');
 
@@ -418,6 +494,7 @@ export default function BookDetailPage() {
               onSaveEdit={() => saveEdit(paragraph.id)}
               onContentChange={setEditContent}
               onGenerateAudio={() => generateAudioForParagraph(paragraph.id, paragraph.content)}
+              onSaveAndGenerateAudio={() => saveAndGenerateAudio(paragraph.id)}
             />
           ))}
         </div>
