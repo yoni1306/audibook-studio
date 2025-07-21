@@ -44,6 +44,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/s3/upload': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Upload file directly through API
+     * @description Upload file through API proxy to S3, eliminating CORS issues
+     */
+    post: operations['S3Controller_uploadFile'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/s3/presigned-upload': {
     parameters: {
       query?: never;
@@ -830,6 +850,40 @@ export interface operations {
     responses: {
       /** @description Service is healthy */
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  S3Controller_uploadFile: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description File upload */
+    requestBody: {
+      content: {
+        'multipart/form-data': {
+          /**
+           * Format: binary
+           * @description EPUB file to upload
+           */
+          file: string;
+          /**
+           * @description Method to use for parsing the EPUB
+           * @enum {string}
+           */
+          parsingMethod?: 'page-based' | 'xhtml-based';
+        };
+      };
+    };
+    responses: {
+      /** @description File uploaded successfully */
+      201: {
         headers: {
           [name: string]: unknown;
         };

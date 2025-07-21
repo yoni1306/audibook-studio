@@ -138,6 +138,7 @@ describe('XHTMLBasedEPUBParser', () => {
   });
 
   describe('error handling', () => {
+
     it('should handle non-existent EPUB files', async () => {
       const nonExistentPath = '/path/to/non-existent.epub';
       

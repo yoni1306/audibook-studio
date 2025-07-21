@@ -3,10 +3,13 @@ import { ConfigService } from '@nestjs/config';
 import {
   S3Client,
   PutObjectCommand,
+  GetObjectCommand,
   HeadBucketCommand,
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { HeadObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { HeadObjectCommand } from '@aws-sdk/client-s3';
 
 @Injectable()
 export class S3Service {
@@ -42,6 +45,9 @@ export class S3Service {
         new HeadBucketCommand({ Bucket: this.bucketName })
       );
       this.logger.log(`✓ Bucket ${this.bucketName} is accessible`);
+      
+      // Note: No CORS configuration needed since we use API proxy uploads
+      // Browser never communicates directly with S3
     } catch (error) {
       this.logger.warn(
         `⚠ Bucket ${this.bucketName} is not accessible. Make sure the bucket exists and credentials have proper permissions.`,
@@ -49,6 +55,22 @@ export class S3Service {
       );
       // Don't try to create bucket - assume it exists and will be accessible when needed
     }
+  }
+
+
+
+  async uploadFile(key: string, buffer: Buffer, contentType: string) {
+    const command = new PutObjectCommand({
+      Bucket: this.bucketName,
+      Key: key,
+      Body: buffer,
+      ContentType: contentType,
+    });
+
+    await this.s3Client.send(command);
+    this.logger.log(`✅ File uploaded successfully to S3: ${key}`);
+    
+    return { key };
   }
 
   async getPresignedUploadUrl(key: string, contentType: string) {
@@ -113,5 +135,57 @@ export class S3Service {
     });
 
     return url;
+  }
+
+  async deleteFile(key: string): Promise<void> {
+    try {
+      const command = new DeleteObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+      });
+
+      await this.s3Client.send(command);
+      this.logger.log(`✅ File deleted successfully from S3: ${key}`);
+    } catch (error) {
+      this.logger.error(`❌ Failed to delete file from S3: ${key}`, error.message);
+      throw error;
+    }
+  }
+
+  async deleteFiles(keys: string[]): Promise<void> {
+    if (keys.length === 0) {
+      this.logger.log('No files to delete from S3');
+      return;
+    }
+
+    try {
+      const command = new DeleteObjectsCommand({
+        Bucket: this.bucketName,
+        Delete: {
+          Objects: keys.map(key => ({ Key: key })),
+          Quiet: false,
+        },
+      });
+
+      const result = await this.s3Client.send(command);
+      
+      if (result.Deleted && result.Deleted.length > 0) {
+        this.logger.log(`✅ Successfully deleted ${result.Deleted.length} files from S3:`);
+        result.Deleted.forEach(deleted => {
+          this.logger.log(`  - ${deleted.Key}`);
+        });
+      }
+      
+      if (result.Errors && result.Errors.length > 0) {
+        this.logger.error(`❌ Failed to delete ${result.Errors.length} files from S3:`);
+        result.Errors.forEach(error => {
+          this.logger.error(`  - ${error.Key}: ${error.Message}`);
+        });
+        throw new Error(`Failed to delete ${result.Errors.length} files from S3`);
+      }
+    } catch (error) {
+      this.logger.error(`❌ Failed to delete files from S3:`, error.message);
+      throw error;
+    }
   }
 }

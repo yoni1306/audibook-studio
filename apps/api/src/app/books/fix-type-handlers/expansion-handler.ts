@@ -65,7 +65,7 @@ export class ExpansionHandler extends BaseFixTypeHandler {
   
   // Time and date patterns
   private readonly timePattern = /\b\d{1,2}:\d{2}(?::\d{2})?\b/g;
-  private readonly datePattern = /\b\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}\b/g;
+  private readonly datePattern = /\b\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}\b/g;
   
   canHandle(originalWord: string, correctedWord: string): FixTypeMatch | null {
     this.logDebug(originalWord, correctedWord, 'Checking for expansion changes');
@@ -77,7 +77,7 @@ export class ExpansionHandler extends BaseFixTypeHandler {
       return null;
     }
     
-    const { expansionType, confidence, reason, debugInfo } = expansionAnalysis;
+    const { confidence, reason, debugInfo } = expansionAnalysis;
     
     this.logMatch(originalWord, correctedWord, reason, confidence);
     return {
@@ -93,7 +93,7 @@ export class ExpansionHandler extends BaseFixTypeHandler {
     expansionType?: string;
     confidence: number;
     reason: string;
-    debugInfo: any;
+    debugInfo: Record<string, unknown>;
   } {
     const debugInfo = {
       originalLength: originalWord.length,
@@ -162,7 +162,7 @@ export class ExpansionHandler extends BaseFixTypeHandler {
     hasExpansion: boolean;
     confidence: number;
     reason: string;
-    debugInfo: any;
+    debugInfo: Record<string, unknown>;
   } {
     const originalNumbers = originalWord.match(this.numberPattern) || [];
     const correctedNumbers = correctedWord.match(this.numberPattern) || [];
@@ -209,7 +209,7 @@ export class ExpansionHandler extends BaseFixTypeHandler {
     hasExpansion: boolean;
     confidence: number;
     reason: string;
-    debugInfo: any;
+    debugInfo: Record<string, unknown>;
   } {
     const originalCurrencySymbols = originalWord.match(this.currencySymbols) || [];
     const correctedCurrencySymbols = correctedWord.match(this.currencySymbols) || [];
@@ -251,7 +251,7 @@ export class ExpansionHandler extends BaseFixTypeHandler {
     hasExpansion: boolean;
     confidence: number;
     reason: string;
-    debugInfo: any;
+    debugInfo: Record<string, unknown>;
   } {
     const originalHebrewAcronyms = originalWord.match(this.hebrewAcronyms) || [];
     const originalEnglishAcronyms = originalWord.match(this.englishAcronyms) || [];
@@ -289,7 +289,7 @@ export class ExpansionHandler extends BaseFixTypeHandler {
     hasExpansion: boolean;
     confidence: number;
     reason: string;
-    debugInfo: any;
+    debugInfo: Record<string, unknown>;
   } {
     const originalTimes = originalWord.match(this.timePattern) || [];
     const originalDates = originalWord.match(this.datePattern) || [];

@@ -267,6 +267,9 @@ export function createApiClient(baseUrl: string) {
       getWordCorrections: (data: GetWordCorrectionsRequest) =>
         client.POST('/books/word-corrections', { body: data }),
       getFixTypes: () => client.GET('/books/fix-types', {}),
+      deleteBook: (bookId: string) => client.DELETE('/books/{id}', {
+        params: { path: { id: bookId } },
+      }),
     },
 
     // Queue API
@@ -309,6 +312,11 @@ export function createApiClient(baseUrl: string) {
     s3: {
       getPresignedUpload: (data: { filename: string; contentType: string }) =>
         client.POST('/s3/presigned-upload', { body: data }),
+      uploadFile: (formData: FormData) =>
+        client.POST('/s3/upload', { 
+          body: formData as unknown,
+          bodySerializer: () => formData // Pass FormData directly
+        }),
     },
 
     // Logs API
