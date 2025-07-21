@@ -12,6 +12,7 @@ interface ParagraphComponentProps {
   onSaveEdit: () => void;
   onContentChange: (content: string) => void;
   onGenerateAudio: () => void;
+  onSaveAndGenerateAudio: () => void;
 }
 
 export default function ParagraphComponent({
@@ -24,6 +25,7 @@ export default function ParagraphComponent({
   onSaveEdit,
   onContentChange,
   onGenerateAudio,
+  onSaveAndGenerateAudio,
 }: ParagraphComponentProps) {
   const getAudioStatusIcon = (status: string) => {
     switch (status) {
@@ -161,8 +163,7 @@ export default function ParagraphComponent({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onSaveEdit();
-                onGenerateAudio();
+                onSaveAndGenerateAudio();
               }}
               disabled={saving}
               className="btn btn-primary"
