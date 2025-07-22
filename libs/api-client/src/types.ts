@@ -868,20 +868,11 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    /** @description File upload */
+    /** @description File upload (multipart/form-data) */
     requestBody: {
       content: {
         'multipart/form-data': {
-          /**
-           * Format: binary
-           * @description EPUB file to upload
-           */
-          file: string;
-          /**
-           * @description Method to use for parsing the EPUB
-           * @enum {string}
-           */
-          parsingMethod?: 'page-based' | 'xhtml-based';
+          [key: string]: unknown;
         };
       };
     };

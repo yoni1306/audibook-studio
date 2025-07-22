@@ -189,48 +189,7 @@ export default function CorrectionsPage() {
     });
   };
 
-  const highlightCorrectedWords = (context: string, originalWord: string) => {
-    if (!context || !originalWord) return [{ text: context, highlighted: false }];
-    
-    // Create a case-insensitive regex to find the original word with word boundaries
-    // Handle both Hebrew and English text
-    const escapedOriginal = originalWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const wordBoundary = /[\u0590-\u05FF]/.test(originalWord) ? '' : '\\b'; // No word boundaries for Hebrew
-    const regex = new RegExp(`(${wordBoundary}${escapedOriginal}${wordBoundary})`, 'gi');
-    
-    // Split the context into parts, highlighting matches
-    const parts = [];
-    let lastIndex = 0;
-    let match;
-    
-    while ((match = regex.exec(context)) !== null) {
-      // Add text before the match
-      if (match.index > lastIndex) {
-        parts.push({
-          text: context.slice(lastIndex, match.index),
-          highlighted: false
-        });
-      }
-      
-      // Add the highlighted match
-      parts.push({
-        text: match[1],
-        highlighted: true
-      });
-      
-      lastIndex = regex.lastIndex;
-    }
-    
-    // Add remaining text
-    if (lastIndex < context.length) {
-      parts.push({
-        text: context.slice(lastIndex),
-        highlighted: false
-      });
-    }
-    
-    return parts.length > 1 ? parts : [{ text: context, highlighted: false }];
-  };
+
 
   const columns: GridColDef[] = [
     {
@@ -297,8 +256,6 @@ export default function CorrectionsPage() {
       width: 350,
       renderCell: (params) => {
         const isRTL = detectTextDirection(params.value) === 'rtl';
-        const row = params.row as TextCorrection;
-        const highlightedParts = highlightCorrectedWords(params.value, row.originalWord);
         
         return (
           <Box 
@@ -315,41 +272,16 @@ export default function CorrectionsPage() {
             <Typography
               variant="body2"
               sx={{
-                direction: isRTL ? 'rtl' : 'ltr',
-                textAlign: isRTL ? 'right' : 'left',
+                fontSize: '0.875rem',
+                lineHeight: 1.43,
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
-                overflowWrap: 'break-word',
-                lineHeight: '1.6',
-                width: '100%',
-                unicodeBidi: 'embed',
-                fontSize: '0.875rem',
-                color: 'text.primary',
-                maxHeight: 'none',
-                overflow: 'visible',
+                direction: isRTL ? 'rtl' : 'ltr',
+                textAlign: isRTL ? 'right' : 'left',
+                width: '100%'
               }}
             >
-              {Array.isArray(highlightedParts) ? (
-                highlightedParts.map((part, index) => (
-                  part.highlighted ? (
-                    <span
-                      key={index}
-                      style={{
-                        backgroundColor: '#ffeb3b',
-                        padding: '2px 4px',
-                        borderRadius: '3px',
-                        fontWeight: 'bold'
-                      }}
-                    >
-                      {part.text}
-                    </span>
-                  ) : (
-                    <span key={index}>{part.text}</span>
-                  )
-                ))
-              ) : (
-                params.value
-              )}
+              {params.value}
             </Typography>
           </Box>
         );

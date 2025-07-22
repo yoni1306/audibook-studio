@@ -610,7 +610,86 @@ export class BulkTextFixesService {
   }
 
   /**
-   * Escapes special regex characters
+   * Generates a consistent word boundary regex pattern for Hebrew, English, and number words
+   * This ensures findWordMatches and replaceWordMatches use identical logic
+   * @param word The word to create a pattern for
+   * @param allowPrefixes Whether to allow Hebrew prefixes in the regex
+   * @param advancedHebrewMatching Whether to allow matching Hebrew words adjacent to other Hebrew characters
+   * @returns Object containing the regex pattern and match extraction info
+   */
+  private createWordBoundaryPattern(
+    word: string,
+    allowPrefixes = false,
+    advancedHebrewMatching = false
+  ): {
+    pattern: string;
+    hasCapturingGroups: boolean;
+    wordCaptureIndex: number;
+  } {
+    const escapedWord = this.escapeRegExp(word);
+    const hebrewPrefixes = '[ובלכמשה]';
+    
+    // Detect if the word contains Hebrew characters
+    const isHebrewWord = /[\u0590-\u05FF]/.test(word);
+    // Detect if the word is a number
+    const isNumber = /^\d+$/.test(word);
+    
+    if (isHebrewWord) {
+      // Hebrew word boundary detection
+      if (advancedHebrewMatching) {
+        // Advanced matching: allow Hebrew words adjacent to other Hebrew characters
+        if (allowPrefixes) {
+          return {
+            pattern: `(?:${hebrewPrefixes})?(${escapedWord})`,
+            hasCapturingGroups: true,
+            wordCaptureIndex: 1
+          };
+        } else {
+          return {
+            pattern: `(${escapedWord})`,
+            hasCapturingGroups: true,
+            wordCaptureIndex: 1
+          };
+        }
+      } else {
+        // Default: use punctuation and whitespace boundaries (safer, less false positives)
+        const wordBoundaryPunctuation = '[.,;:!?()\\[\\]{}"\'\u0027\u2013\u2014\u2015\u2016\u2017\u2018\u2019\u201C\u201D]';
+        if (allowPrefixes) {
+          return {
+            pattern: `(^|\\s|${wordBoundaryPunctuation}|${hebrewPrefixes})(${escapedWord})(?=\\s|${wordBoundaryPunctuation}|$)`,
+            hasCapturingGroups: true,
+            wordCaptureIndex: 2
+          };
+        } else {
+          return {
+            pattern: `(^|\\s|${wordBoundaryPunctuation})(${escapedWord})(?=\\s|${wordBoundaryPunctuation}|$)`,
+            hasCapturingGroups: true,
+            wordCaptureIndex: 2
+          };
+        }
+      }
+    } else if (isNumber) {
+      // Number boundary detection - prevent matching digits that are part of larger numbers
+      // This includes decimal numbers with dots (.) or commas (,) as separators
+      // Also excludes Hebrew hyphen (־) to prevent matching numbers in compound expressions like "ב־2"
+      return {
+        pattern: `(?<![\\d.,־])(${escapedWord})(?![\\d.,])`,
+        hasCapturingGroups: true,
+        wordCaptureIndex: 1
+      };
+    } else {
+      // Non-Hebrew, non-number words (English, etc.) - use standard word boundaries
+      // Prevent matching inside other words
+      return {
+        pattern: `(?<!\\w)(${escapedWord})(?!\\w)`,
+        hasCapturingGroups: true,
+        wordCaptureIndex: 1
+      };
+    }
+  }
+
+  /**
+   * Escapes special regex characters in a string
    */
   private escapeRegExp(string: string): string {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -738,76 +817,7 @@ export class BulkTextFixesService {
     return positions;
   }
 
-  /**
-   * Replaces word matches in text using the same boundary logic as findWordMatches
-   * @param text The text to search and replace in
-   * @param originalWord The word to find and replace
-   * @param replacementWord The word to replace with
-   * @param allowPrefixes Whether to allow Hebrew prefixes in the regex
-   * @returns The text with replacements made
-   */
-  private replaceWordMatches(
-    text: string,
-    originalWord: string,
-    replacementWord: string,
-    allowPrefixes = false
-  ): string {
-    const escapedWord = this.escapeRegExp(originalWord);
-    const hebrewPrefixes = '[ובלכמשה]';
-    
-    // Detect if the word contains Hebrew characters
-    const isHebrewWord = /[\u0590-\u05FF]/.test(originalWord);
-    // Detect if the word is a number
-    const isNumber = /^\d+$/.test(originalWord);
-    
-    let pattern;
-    if (isHebrewWord) {
-      // Hebrew word boundary detection
-      if (allowPrefixes) {
-        // Allow optional Hebrew prefix
-        pattern = `(?<![\u0590-\u05FF-])(?:${hebrewPrefixes})?(${escapedWord})(?![\u0590-\u05FF-])`;
-      } else {
-        // No prefix allowed
-        pattern = `(?<![\u0590-\u05FF-])(${escapedWord})(?![\u0590-\u05FF-])`;
-      }
-    } else if (isNumber) {
-      // Number boundary detection - prevent matching digits that are part of larger numbers
-      // This includes decimal numbers with dots (.) or commas (,) as separators
-      // Also excludes Hebrew hyphen (־) to prevent matching numbers in compound expressions like "ב־2"
-      pattern = `(?<![\\d.,־])(${escapedWord})(?![\\d.,])`;
-    } else {
-      // Non-Hebrew, non-number words (English, etc.) - use standard word boundaries
-      // Prevent matching inside other words
-      pattern = `(?<!\\w)(${escapedWord})(?!\\w)`;
-    }
-    
-    try {
-      const regex = new RegExp(pattern, 'gu');
-      return text.replace(regex, replacementWord);
-    } catch {
-      // Fallback: match exact word boundaries if lookbehind is not supported
-      let fallbackPattern;
-      if (isHebrewWord) {
-        if (allowPrefixes) {
-          fallbackPattern = `(^|\\s|[\\p{P}])(?:${hebrewPrefixes})?(${escapedWord})(?=$|\\s|[\\p{P}])`;
-        } else {
-          fallbackPattern = `(^|\\s|[\\p{P}])(${escapedWord})(?=$|\\s|[\\p{P}])`;
-        }
-      } else if (isNumber) {
-        // For numbers, exclude decimal separators from punctuation boundaries
-        // Use whitespace and non-digit, non-decimal-separator characters as boundaries
-        fallbackPattern = `(^|\\s|[^\\d.,\\s])(${escapedWord})(?=$|\\s|[^\\d.,\\s])`;
-      } else {
-        // For non-Hebrew, non-number words, use word boundaries with whitespace/punctuation
-        fallbackPattern = `(^|\\s|[\\p{P}])(${escapedWord})(?=$|\\s|[\\p{P}])`;
-      }
-      const regex = new RegExp(fallbackPattern, 'gu');
-      return text.replace(regex, (match, prefix) => {
-        // Preserve the prefix/suffix in the replacement
-        return prefix + replacementWord;
-      });
-    }
-  }
+
 
   /**
    * Finds matches of a word in text, properly handling word boundaries
@@ -825,82 +835,94 @@ export class BulkTextFixesService {
     allowPrefixes = false,
     advancedHebrewMatching = false
   ): string[] {
-    const escapedWord = this.escapeRegExp(word);
-    const hebrewPrefixes = '[ובלכמשה]';
-    
-    // Detect if the word contains Hebrew characters
-    const isHebrewWord = /[\u0590-\u05FF]/.test(word);
-    // Detect if the word is a number
-    const isNumber = /^\d+$/.test(word);
-    
-    let pattern;
-    if (isHebrewWord) {
-      // Hebrew word boundary detection
-      if (advancedHebrewMatching) {
-        // Advanced matching: allow Hebrew words adjacent to other Hebrew characters
-        if (allowPrefixes) {
-          pattern = `(?:${hebrewPrefixes})?(${escapedWord})`;
-        } else {
-          pattern = `(${escapedWord})`;
-        }
-      } else {
-        // Default: use punctuation and whitespace boundaries (safer, less false positives)
-        const wordBoundaryPunctuation = '[.,;:!?()\\[\\]{}"\u0027\u2013\u2014\u2015\u2016\u2017\u2018\u2019\u201C\u201D]';
-        if (allowPrefixes) {
-          pattern = `(^|\\s|${wordBoundaryPunctuation}|${hebrewPrefixes})(${escapedWord})(?=\\s|${wordBoundaryPunctuation}|$)`;
-        } else {
-          pattern = `(^|\\s|${wordBoundaryPunctuation})(${escapedWord})(?=\\s|${wordBoundaryPunctuation}|$)`;
-        }
-      }
-    } else if (isNumber) {
-      // Number boundary detection - prevent matching digits that are part of larger numbers
-      // This includes decimal numbers with dots (.) or commas (,) as separators
-      // Also excludes Hebrew hyphen (־) to prevent matching numbers in compound expressions like "ב־2"
-      pattern = `(?<![\\d.,־])(${escapedWord})(?![\\d.,])`;
-    } else {
-      // Non-Hebrew, non-number words (English, etc.) - use standard word boundaries
-      // Prevent matching inside other words
-      pattern = `(?<!\\w)(${escapedWord})(?!\\w)`;
-    }
+    const patternInfo = this.createWordBoundaryPattern(word, allowPrefixes, advancedHebrewMatching);
     
     try {
-      const regex = new RegExp(pattern, 'gu');
+      const regex = new RegExp(patternInfo.pattern, 'gu');
       
-      // For patterns with capture groups, we need to extract the actual word matches
-      if (isHebrewWord && !advancedHebrewMatching) {
+      if (patternInfo.hasCapturingGroups) {
         // Extract the captured word from matches with boundary context
         const matches = [...text.matchAll(regex)];
-        return matches.length > 0 ? matches.map(match => match[match.length - 1]) : [];
+        return matches.length > 0 ? matches.map(match => match[patternInfo.wordCaptureIndex]) : [];
       } else {
-        // For simple patterns or advanced matching, use direct match
+        // For simple patterns without capture groups, use direct match
         const directMatches = text.match(regex);
         return directMatches ? Array.from(directMatches) : [];
       }
     } catch {
-      // Fallback: use simpler patterns that work across all environments
-      let fallbackPattern;
-      if (isHebrewWord) {
-        const wordBoundaryPunctuation = '[.,;:!?()\\[\\]{}"\u0027\u2013\u2014\u2015\u2016\u2017\u2018\u2019\u201C\u201D]';
-        if (allowPrefixes) {
-          fallbackPattern = `(^|\\s|${wordBoundaryPunctuation}|${hebrewPrefixes})(${escapedWord})(?=\\s|${wordBoundaryPunctuation}|$)`;
-        } else {
-          fallbackPattern = `(^|\\s|${wordBoundaryPunctuation})(${escapedWord})(?=\\s|${wordBoundaryPunctuation}|$)`;
-        }
-      } else if (isNumber) {
-        // For numbers, exclude decimal separators from punctuation boundaries
-        fallbackPattern = `(^|\\s|[^\\d.,\\s])(${escapedWord})(?=$|\\s|[^\\d.,\\s])`;
-      } else {
-        // For non-Hebrew, non-number words, use word boundaries with whitespace/punctuation
-        fallbackPattern = `(^|\\s|[.,;:!?()\\[\\]{}"'\u2013\u2014\u2015\u2016\u2017\u2018\u2019\u201C\u201D])(${escapedWord})(?=$|\\s|[.,;:!?()\\[\\]{}"'\u2013\u2014\u2015\u2016\u2017\u2018\u2019\u201C\u201D])`;
-      }
+      // Fallback: create a simpler pattern that works across all environments
+      const fallbackPatternInfo = this.createWordBoundaryPattern(word, false, false);
+      const fallbackRegex = new RegExp(fallbackPatternInfo.pattern, 'gu');
       
-      const regex = new RegExp(fallbackPattern, 'gu');
-      const matches = [...text.matchAll(regex)];
-      return matches.length > 0 ? matches.map(match => match[match.length - 1]) : [];
+      if (fallbackPatternInfo.hasCapturingGroups) {
+        const matches = [...text.matchAll(fallbackRegex)];
+        return matches.length > 0 ? matches.map(match => match[fallbackPatternInfo.wordCaptureIndex]) : [];
+      } else {
+        const directMatches = text.match(fallbackRegex);
+        return directMatches ? Array.from(directMatches) : [];
+      }
     }
   }
 
-  /**
+/**
+ * Replaces word matches in text using the same boundary logic as findWordMatches
+ * @param text The text to search and replace in
+ * @param originalWord The word to find and replace
+ * @param replacementWord The word to replace with
+ * @param allowPrefixes Whether to allow Hebrew prefixes in the regex
+ * @returns The text with replacements made
+ */
+private replaceWordMatches(
+  text: string,
+  originalWord: string,
+  replacementWord: string,
+  allowPrefixes = false
+): string {
+  const patternInfo = this.createWordBoundaryPattern(originalWord, allowPrefixes, false);
+  
+  try {
+    const regex = new RegExp(patternInfo.pattern, 'gu');
+    
+    if (patternInfo.hasCapturingGroups) {
+      // For patterns with capture groups, preserve the boundary context
+      return text.replace(regex, (...args) => {
+        const match = args[0];
+        const captureGroups = args.slice(1, -2); // Remove offset and string from args
+        
+        // Replace the word capture group with the replacement word
+        let result = match;
+        if (captureGroups[patternInfo.wordCaptureIndex - 1]) {
+          result = match.replace(captureGroups[patternInfo.wordCaptureIndex - 1], replacementWord);
+        }
+        return result;
+      });
+    } else {
+      // For simple patterns without capture groups, direct replacement
+      return text.replace(regex, replacementWord);
+    }
+  } catch {
+    // Fallback: create a simpler pattern that works across all environments
+    const fallbackPatternInfo = this.createWordBoundaryPattern(originalWord, false, false);
+    const fallbackRegex = new RegExp(fallbackPatternInfo.pattern, 'gu');
+    
+    if (fallbackPatternInfo.hasCapturingGroups) {
+      return text.replace(fallbackRegex, (...args) => {
+        const match = args[0];
+        const captureGroups = args.slice(1, -2);
+        
+        let result = match;
+        if (captureGroups[fallbackPatternInfo.wordCaptureIndex - 1]) {
+          result = match.replace(captureGroups[fallbackPatternInfo.wordCaptureIndex - 1], replacementWord);
+        }
+        return result;
+      });
+    } else {
+      return text.replace(fallbackRegex, replacementWord);
+    }
+  }
+}
+
+/**
    * Gets suggested fixes based on historical data
    */
   async getSuggestedFixes(
