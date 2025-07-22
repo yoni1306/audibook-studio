@@ -411,7 +411,10 @@ export class BulkTextFixesService {
                     bookId,
                     paragraphId,
                     originalWord: fix.originalWord,
+                    currentWord: fix.originalWord, // For bulk fixes, current word is same as original
                     correctedWord: fix.correctedWord,
+                    fixSequence: 1, // Bulk fixes start at sequence 1
+                    isLatestFix: true, // Bulk fixes are always the latest
                     sentenceContext: this.extractSentenceContext(paragraph.content, fix.originalWord, matchPosition),
                     fixType: fixType,
                   });

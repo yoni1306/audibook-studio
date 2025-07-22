@@ -5,8 +5,11 @@ import { TextCorrection, Prisma, FixType } from '@prisma/client';
 export interface CreateTextCorrectionData {
   bookId: string;
   paragraphId: string;
-  originalWord: string;
-  correctedWord: string;
+  originalWord: string; // The very first word before any corrections (immutable)
+  currentWord: string; // The word being fixed FROM in this step
+  correctedWord: string; // What the word was changed TO in this fix
+  fixSequence?: number; // Sequential number (defaults to 1)
+  isLatestFix?: boolean; // Flag to identify current active fix (defaults to true)
   sentenceContext: string;
   fixType: FixType; // Required - uses FixType enum from schema
   ttsModel?: string;
@@ -17,7 +20,10 @@ export interface TextCorrectionFilters {
   bookId?: string;
   paragraphId?: string;
   originalWord?: string;
+  currentWord?: string;
   correctedWord?: string;
+  fixSequence?: number;
+  isLatestFix?: boolean;
   fixType?: FixType;
   ttsModel?: string;
   ttsVoice?: string;
@@ -40,7 +46,10 @@ export interface CorrectionStats {
 export interface CorrectionWithBookInfo {
   id: string;
   originalWord: string;
+  currentWord: string;
   correctedWord: string;
+  fixSequence: number;
+  isLatestFix: boolean;
   sentenceContext: string;
   fixType: FixType;
   createdAt: Date;
@@ -78,7 +87,10 @@ export class TextCorrectionRepository {
           bookId: data.bookId,
           paragraphId: data.paragraphId,
           originalWord: data.originalWord,
+          currentWord: data.currentWord,
           correctedWord: data.correctedWord,
+          fixSequence: data.fixSequence ?? 1,
+          isLatestFix: data.isLatestFix ?? true,
           sentenceContext: data.sentenceContext,
           fixType: data.fixType,
           ttsModel: data.ttsModel,
@@ -106,7 +118,10 @@ export class TextCorrectionRepository {
           bookId: correction.bookId,
           paragraphId: correction.paragraphId,
           originalWord: correction.originalWord,
+          currentWord: correction.currentWord,
           correctedWord: correction.correctedWord,
+          fixSequence: correction.fixSequence ?? 1,
+          isLatestFix: correction.isLatestFix ?? true,
           sentenceContext: correction.sentenceContext,
           fixType: correction.fixType,
           ttsModel: correction.ttsModel,
@@ -118,6 +133,74 @@ export class TextCorrectionRepository {
       return result;
     } catch (error) {
       this.logger.error(`Failed to create text corrections in batch:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create or replace a text correction with history tracking
+   * This method implements the fix evolution logic:
+   * - For first fix: creates new record with originalWord = currentWord
+   * - For subsequent fixes: marks previous fixes as not latest, creates new record preserving originalWord
+   */
+  async createOrReplaceWithHistory(data: CreateTextCorrectionData): Promise<TextCorrection> {
+    this.logger.log(`Creating/replacing text correction with history: "${data.currentWord}" → "${data.correctedWord}"`);
+    
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        // Find existing corrections for this word in this paragraph
+        const existingCorrections = await tx.textCorrection.findMany({
+          where: {
+            paragraphId: data.paragraphId,
+            originalWord: data.originalWord || data.currentWord, // Use originalWord if provided, otherwise currentWord
+          },
+          orderBy: { fixSequence: 'desc' },
+        });
+
+        let originalWord: string;
+        let fixSequence: number;
+        
+        if (existingCorrections.length === 0) {
+          // First fix for this word
+          originalWord = data.currentWord;
+          fixSequence = 1;
+        } else {
+          // Subsequent fix - preserve original word from first correction
+          originalWord = existingCorrections[0].originalWord;
+          fixSequence = Math.max(...existingCorrections.map(c => c.fixSequence)) + 1;
+          
+          // Mark all existing corrections as not latest
+          await tx.textCorrection.updateMany({
+            where: {
+              paragraphId: data.paragraphId,
+              originalWord: originalWord,
+            },
+            data: { isLatestFix: false },
+          });
+        }
+
+        // Create new correction record
+        const correction = await tx.textCorrection.create({
+          data: {
+            bookId: data.bookId,
+            paragraphId: data.paragraphId,
+            originalWord: originalWord,
+            currentWord: data.currentWord,
+            correctedWord: data.correctedWord,
+            fixSequence: fixSequence,
+            isLatestFix: true,
+            sentenceContext: data.sentenceContext,
+            fixType: data.fixType,
+            ttsModel: data.ttsModel,
+            ttsVoice: data.ttsVoice,
+          },
+        });
+
+        this.logger.log(`Created text correction with history: ID ${correction.id}, sequence ${fixSequence}`);
+        return correction;
+      });
+    } catch (error) {
+      this.logger.error(`Failed to create/replace text correction with history:`, error);
       throw error;
     }
   }
@@ -209,7 +292,10 @@ export class TextCorrectionRepository {
       const transformedCorrections = corrections.map(correction => ({
         id: correction.id,
         originalWord: correction.originalWord,
+        currentWord: correction.currentWord,
         correctedWord: correction.correctedWord,
+        fixSequence: correction.fixSequence,
+        isLatestFix: correction.isLatestFix,
         sentenceContext: correction.sentenceContext,
         fixType: correction.fixType,
         createdAt: correction.createdAt,
@@ -468,6 +554,115 @@ export class TextCorrectionRepository {
       return result;
     } catch (error) {
       this.logger.error(`Failed to get top corrections:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Find the latest fix for a specific word in a paragraph
+   */
+  async findLatestFixForWord(paragraphId: string, originalWord: string): Promise<TextCorrection | null> {
+    this.logger.log(`Finding latest fix for word "${originalWord}" in paragraph ${paragraphId}`);
+    
+    try {
+      const latestFix = await this.prisma.textCorrection.findFirst({
+        where: {
+          paragraphId,
+          originalWord,
+          isLatestFix: true,
+        },
+        orderBy: { fixSequence: 'desc' },
+      });
+      
+      if (latestFix) {
+        this.logger.log(`Found latest fix: sequence ${latestFix.fixSequence}, "${latestFix.currentWord}" → "${latestFix.correctedWord}"`);
+      } else {
+        this.logger.log(`No fixes found for word "${originalWord}"`);
+      }
+      
+      return latestFix;
+    } catch (error) {
+      this.logger.error(`Failed to find latest fix for word:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get complete fix history for a specific word in a paragraph
+   */
+  async getFixHistoryForWord(paragraphId: string, originalWord: string): Promise<TextCorrection[]> {
+    this.logger.log(`Getting fix history for word "${originalWord}" in paragraph ${paragraphId}`);
+    
+    try {
+      const history = await this.prisma.textCorrection.findMany({
+        where: {
+          paragraphId,
+          originalWord,
+        },
+        orderBy: { fixSequence: 'asc' },
+      });
+      
+      this.logger.log(`Found ${history.length} fixes in history for word "${originalWord}"`);
+      return history;
+    } catch (error) {
+      this.logger.error(`Failed to get fix history for word:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Find words that have multiple fixes (for analytics)
+   */
+  async findWordsWithMultipleFixes(bookId?: string): Promise<Array<{ originalWord: string; fixCount: number; latestCorrection: string }>> {
+    this.logger.log(`Finding words with multiple fixes${bookId ? ` for book ${bookId}` : ''}`);
+    
+    try {
+      // First, get all latest corrections and count total fixes per word
+      const latestCorrections = await this.prisma.textCorrection.findMany({
+        where: {
+          isLatestFix: true,
+          ...(bookId ? { bookId } : {}),
+        },
+        select: {
+          originalWord: true,
+          correctedWord: true,
+        },
+      });
+
+      // Get fix counts for each word that has latest corrections
+      const originalWords = latestCorrections?.map(c => c.originalWord) || [];
+      const fixCounts = await this.prisma.textCorrection.groupBy({
+        by: ['originalWord'],
+        where: {
+          originalWord: { in: originalWords },
+          ...(bookId ? { bookId } : {}),
+        },
+        _count: {
+          id: true,
+        },
+        having: {
+          id: {
+            _count: {
+              gt: 1,
+            },
+          },
+        },
+      });
+
+      // Combine the data
+      const result = fixCounts.map(wordCount => {
+        const latestCorrection = latestCorrections.find(c => c.originalWord === wordCount.originalWord);
+        return {
+          originalWord: wordCount.originalWord,
+          fixCount: wordCount._count.id,
+          latestCorrection: latestCorrection?.correctedWord || '',
+        };
+      }).sort((a, b) => b.fixCount - a.fixCount); // Sort by fix count descending
+      
+      this.logger.log(`Found ${result.length} words with multiple fixes`);
+      return result;
+    } catch (error) {
+      this.logger.error(`Failed to find words with multiple fixes:`, error);
       throw error;
     }
   }
