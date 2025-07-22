@@ -372,21 +372,15 @@ export default function BulkFixModal({
                                           fontSize: 'var(--font-size-sm)',
                                           lineHeight: '1.5'
                                         }}>
-                                          {paragraph.previewBefore.split('.').map((sentence: string, idx: number) => {
-                                            const highlightedSentence = sentence.replace(
-                                              new RegExp(`(${suggestion.originalWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
-                                              '<mark style="background-color: #fef08a; padding: 1px 2px; border-radius: 2px;">$1</mark>'
-                                            );
-                                            return (
-                                              <div key={idx} style={{
-                                                padding: '2px 0',
-                                                direction: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'rtl' : 'ltr',
-                                                textAlign: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'right' : 'left'
-                                              }} dangerouslySetInnerHTML={{
-                                                __html: highlightedSentence.trim() + (idx < paragraph.previewBefore.split('.').length - 1 ? '.' : '')
-                                              }} />
-                                            );
-                                          })}
+                                          {paragraph.previewBefore.split('.').map((sentence: string, idx: number) => (
+                                            <div key={idx} style={{
+                                              padding: '2px 0',
+                                              direction: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'rtl' : 'ltr',
+                                              textAlign: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'right' : 'left'
+                                            }}>
+                                              {sentence.trim() + (idx < paragraph.previewBefore.split('.').length - 1 ? '.' : '')}
+                                            </div>
+                                          ))}
                                         </div>
                                       </div>
                                       <div>
@@ -408,21 +402,15 @@ export default function BulkFixModal({
                                           fontSize: 'var(--font-size-sm)',
                                           lineHeight: '1.5'
                                         }}>
-                                          {paragraph.previewAfter.split('.').map((sentence: string, idx: number) => {
-                                            const highlightedSentence = sentence.replace(
-                                              new RegExp(`(${suggestion.correctedWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
-                                              '<mark style="background-color: #fef08a; padding: 1px 2px; border-radius: 2px;">$1</mark>'
-                                            );
-                                            return (
-                                              <div key={idx} style={{
-                                                padding: '2px 0',
-                                                direction: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'rtl' : 'ltr',
-                                                textAlign: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'right' : 'left'
-                                              }} dangerouslySetInnerHTML={{
-                                                __html: highlightedSentence.trim() + (idx < paragraph.previewAfter.split('.').length - 1 ? '.' : '')
-                                              }} />
-                                            );
-                                          })}
+                                          {paragraph.previewAfter.split('.').map((sentence: string, idx: number) => (
+                                            <div key={idx} style={{
+                                              padding: '2px 0',
+                                              direction: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'rtl' : 'ltr',
+                                              textAlign: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'right' : 'left'
+                                            }}>
+                                              {sentence.trim() + (idx < paragraph.previewAfter.split('.').length - 1 ? '.' : '')}
+                                            </div>
+                                          ))}
                                         </div>
                                       </div>
                                     </div>
