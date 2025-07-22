@@ -122,7 +122,11 @@ export interface paths {
     get: operations['BooksController_getBook'];
     put?: never;
     post?: never;
-    delete?: never;
+    /**
+     * Delete a book
+     * @description Delete a book and all related entities (pages, paragraphs, text corrections) and associated S3 audio files
+     */
+    delete: operations['BooksController_deleteBook'];
     options?: never;
     head?: never;
     patch?: never;
@@ -983,6 +987,41 @@ export interface operations {
     responses: {
       /** @description Successfully retrieved book */
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BooksController_deleteBook: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Book ID to delete */
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Book deleted successfully */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Book not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error during deletion */
+      500: {
         headers: {
           [name: string]: unknown;
         };

@@ -78,21 +78,10 @@ export class S3Controller {
   @ApiOperation({ summary: 'Upload file directly through API', description: 'Upload file through API proxy to S3, eliminating CORS issues' })
   @ApiResponse({ status: 201, description: 'File uploaded successfully' })
   @ApiBody({
-    description: 'File upload',
+    description: 'File upload (multipart/form-data)',
     schema: {
       type: 'object',
-      properties: {
-        file: {
-          type: 'string',
-          format: 'binary',
-          description: 'EPUB file to upload'
-        },
-        parsingMethod: {
-          type: 'string',
-          enum: ['page-based', 'xhtml-based'],
-          description: 'Method to use for parsing the EPUB'
-        }
-      },
+      additionalProperties: true,
       required: ['file']
     }
   })

@@ -314,7 +314,7 @@ export function createApiClient(baseUrl: string) {
         client.POST('/s3/presigned-upload', { body: data }),
       uploadFile: (formData: FormData) =>
         client.POST('/s3/upload', { 
-          body: formData as unknown,
+          body: formData as any,
           bodySerializer: () => formData // Pass FormData directly
         }),
     },
