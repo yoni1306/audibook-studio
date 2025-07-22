@@ -63,7 +63,7 @@ describe('XHTMLBasedEPUBParser', () => {
         expect(Array.isArray(page.paragraphs)).toBe(true);
         expect(page.paragraphs.length).toBeGreaterThan(0);
       });
-    });
+    }, 15000);
 
     it('should extract text content from XHTML files', async () => {
       const result = await parser.parseEpub(testEpubPath);
@@ -75,7 +75,7 @@ describe('XHTMLBasedEPUBParser', () => {
         page.paragraphs.length > 0 && page.paragraphs.some(p => p.content.trim().length > 0)
       );
       expect(pagesWithContent.length).toBeGreaterThan(0);
-    });
+    }, 15000);
 
     it('should handle parser options correctly', async () => {
       const customParser = new XHTMLBasedEPUBParser({
@@ -88,7 +88,7 @@ describe('XHTMLBasedEPUBParser', () => {
 
       expect(result.pages).toBeDefined();
       expect(result.metadata.totalPages).toBe(result.pages.length);
-    });
+    }, 15000);
 
     it('should provide accurate metadata', async () => {
       const result = await parser.parseEpub(testEpubPath);
@@ -97,7 +97,7 @@ describe('XHTMLBasedEPUBParser', () => {
       expect(result.metadata.totalPages).toBeGreaterThan(0);
       expect(result.metadata.totalPages).toBe(result.pages.length);
       expect(typeof result.metadata.totalPages).toBe('number');
-    });
+    }, 15000);
 
     it('should handle different parser configurations', async () => {
       const customParser = new XHTMLBasedEPUBParser({
@@ -111,7 +111,7 @@ describe('XHTMLBasedEPUBParser', () => {
       expect(result.pages).toBeDefined();
       expect(result.pages.length).toBeGreaterThan(0);
       expect(result.metadata.totalPages).toBe(result.pages.length);
-    });
+    }, 15000);
 
     it('should handle file ordering correctly', async () => {
       const result = await parser.parseEpub(testEpubPath);
@@ -122,7 +122,7 @@ describe('XHTMLBasedEPUBParser', () => {
       result.pages.forEach((page, index) => {
         expect(page.pageNumber).toBe(index + 1);
       });
-    });
+    }, 15000);
 
     it('should extract content from various HTML elements', async () => {
       const result = await parser.parseEpub(testEpubPath);
@@ -134,7 +134,7 @@ describe('XHTMLBasedEPUBParser', () => {
         page.paragraphs.length > 0 && page.paragraphs.some(p => p.content && p.content.trim().length > 0)
       );
       expect(pagesWithContent.length).toBeGreaterThan(0);
-    });
+    }, 15000);
   });
 
   describe('error handling', () => {

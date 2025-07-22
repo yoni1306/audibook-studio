@@ -72,25 +72,30 @@ model Paragraph {
 }
 
 model TextCorrection {
-  id              String    @id @default(uuid())
-  paragraphId     String
-  paragraph       Paragraph @relation(fields: [paragraphId], references: [id], onDelete: Cascade)
-  bookId          String    // Direct reference to book for easier querying
-  book            Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  originalWord    String    // The specific word that was changed (e.g., "שלום")
-  correctedWord   String    // What the word was changed to (e.g., "שָׁלוֹם")
-  sentenceContext String    @db.Text // The full sentence context for better matching
-  fixType         FixType   // Categorization of the text correction type
-  ttsModel        String?   // TTS model used (e.g., "openai", "elevenlabs", "azure")
-  ttsVoice        String?   // Voice used for TTS (e.g., "alloy", "echo", "fable")
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                        String    @id @default(uuid())
+  paragraphId               String
+  paragraph                 Paragraph @relation(fields: [paragraphId], references: [id], onDelete: Cascade)
+  bookId                    String    // Direct reference to book for easier querying
+  book                      Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  originalWord              String    // The very first word before any corrections (immutable)
+  currentWord               String    // The word being fixed FROM in this step (original word for first fix, or previous corrected word)
+  correctedWord             String    // What the word was changed to in this fix (e.g., "שָׁלוֹם")
+  fixSequence               Int       @default(1) // Sequential number indicating the order of fixes
+  isLatestFix               Boolean   @default(true) // Flag to identify the current active fix
+  sentenceContext           String    @db.Text // The full sentence context for better matching (most up-to-date)
+  fixType                   FixType   // Categorization of the text correction type
+  ttsModel                  String?   // TTS model used (e.g., "openai", "elevenlabs", "azure")
+  ttsVoice                  String?   // Voice used for TTS (e.g., "alloy", "echo", "fable")
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
 
   @@index([paragraphId])
   @@index([bookId])
   @@index([originalWord])
   @@index([correctedWord])
   @@index([originalWord, correctedWord])
+  @@index([paragraphId, originalWord, isLatestFix]) // For finding latest fix
+  @@index([paragraphId, originalWord, fixSequence]) // For fix history
   @@map("text_corrections")
 }
 
