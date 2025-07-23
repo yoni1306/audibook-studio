@@ -29,6 +29,7 @@ describe('BooksController', () => {
   const mockTextCorrectionRepository = {
     findMany: jest.fn(),
     findManyWithBookInfo: jest.fn(),
+    findCorrectionsByAggregationKey: jest.fn(),
     create: jest.fn(),
     findGroupedCorrections: jest.fn(),
     getStats: jest.fn(),
@@ -132,6 +133,7 @@ describe('BooksController', () => {
 
       const mockCorrectionsWithBookInfo = mockCorrections.map(correction => ({
         ...correction,
+        aggregationKey: `${correction.originalWord}|${correction.correctedWord}`,
         bookTitle: correction.bookId,
         book: { id: correction.bookId, title: correction.bookId, author: 'Test Author' },
         location: { 
@@ -160,6 +162,7 @@ describe('BooksController', () => {
             originalWord: 'שגיאה',
             currentWord: 'שגיאה',
             correctedWord: 'תיקון',
+            aggregationKey: 'שגיאה|תיקון',
             fixSequence: 1,
             isLatestFix: true,
             sentenceContext: 'זה משפט עם שגיאה',
@@ -188,6 +191,7 @@ describe('BooksController', () => {
             originalWord: 'טעות',
             currentWord: 'טעות',
             correctedWord: 'נכון',
+            aggregationKey: 'טעות|נכון',
             fixSequence: 1,
             isLatestFix: true,
             sentenceContext: 'זה משפט עם טעות',
@@ -241,6 +245,7 @@ describe('BooksController', () => {
 
       const mockCorrectionsWithBookInfo = mockCorrections.map(correction => ({
         ...correction,
+        aggregationKey: `${correction.originalWord}|${correction.correctedWord}`,
         bookTitle: correction.bookId,
         book: { id: correction.bookId, title: correction.bookId, author: 'Test Author' },
         location: { 
@@ -308,6 +313,217 @@ describe('BooksController', () => {
         limit: 100,
         orderBy: 'desc',
       });
+    });
+  });
+
+  describe('getCorrectionHistory', () => {
+    it('should return correction history for aggregation key', async () => {
+      const aggregationKey = 'שלום|שָׁלוֹם';
+      const mockCorrections = [
+        {
+          id: '1',
+          originalWord: 'שלום',
+          correctedWord: 'שָׁלוֹם',
+          aggregationKey: 'שלום|שָׁלוֹם',
+          sentenceContext: 'שלום לכם',
+          fixType: FixType.vowelization,
+          createdAt: new Date('2025-01-01T10:00:00Z'),
+          ttsModel: 'test-model',
+          ttsVoice: 'test-voice',
+          book: { id: 'book-1', title: 'Test Book', author: 'Test Author' },
+          location: {
+            pageId: 'page-1',
+            pageNumber: 1,
+            paragraphId: 'para-1',
+            paragraphIndex: 1,
+          },
+        },
+        {
+          id: '2',
+          originalWord: 'שלום',
+          correctedWord: 'שָׁלוֹם',
+          aggregationKey: 'שלום|שָׁלוֹם',
+          sentenceContext: 'שלום עליכם',
+          fixType: FixType.vowelization,
+          createdAt: new Date('2025-01-01T11:00:00Z'),
+          ttsModel: 'test-model-2',
+          ttsVoice: 'test-voice-2',
+          book: { id: 'book-2', title: 'Another Book', author: 'Another Author' },
+          location: {
+            pageId: 'page-2',
+            pageNumber: 2,
+            paragraphId: 'para-2',
+            paragraphIndex: 2,
+          },
+        },
+      ];
+
+      textCorrectionRepository.findCorrectionsByAggregationKey.mockResolvedValue(mockCorrections);
+
+      const result = await controller.getCorrectionHistory(aggregationKey);
+
+      expect(textCorrectionRepository.findCorrectionsByAggregationKey).toHaveBeenCalledWith(aggregationKey, undefined);
+      expect(result).toEqual({
+        aggregationKey: 'שלום|שָׁלוֹם',
+        originalWord: 'שלום',
+        correctedWord: 'שָׁלוֹם',
+        corrections: [
+          {
+            id: '1',
+            originalWord: 'שלום',
+            correctedWord: 'שָׁלוֹם',
+            sentenceContext: 'שלום לכם',
+            fixType: FixType.vowelization,
+            ttsModel: 'test-model',
+            ttsVoice: 'test-voice',
+            createdAt: new Date('2025-01-01T10:00:00Z'),
+            bookTitle: 'Test Book',
+            bookAuthor: 'Test Author',
+            pageNumber: 1,
+            paragraphOrderIndex: 1,
+          },
+          {
+            id: '2',
+            originalWord: 'שלום',
+            correctedWord: 'שָׁלוֹם',
+            sentenceContext: 'שלום עליכם',
+            fixType: FixType.vowelization,
+            ttsModel: 'test-model-2',
+            ttsVoice: 'test-voice-2',
+            createdAt: new Date('2025-01-01T11:00:00Z'),
+            bookTitle: 'Another Book',
+            bookAuthor: 'Another Author',
+            pageNumber: 2,
+            paragraphOrderIndex: 2,
+          },
+        ],
+        total: 2,
+        timestamp: expect.any(String),
+      });
+    });
+
+    it('should filter by bookId when provided', async () => {
+      const aggregationKey = 'שלום|שָׁלוֹם';
+      const bookId = 'book-1';
+      const mockCorrections = [
+        {
+          id: '1',
+          originalWord: 'שלום',
+          correctedWord: 'שָׁלוֹם',
+          aggregationKey: 'שלום|שָׁלוֹם',
+          sentenceContext: 'שלום לכם',
+          fixType: FixType.vowelization,
+          createdAt: new Date('2025-01-01T10:00:00Z'),
+          ttsModel: 'test-model',
+          ttsVoice: 'test-voice',
+          book: { id: 'book-1', title: 'Test Book', author: 'Test Author' },
+          location: {
+            pageId: 'page-1',
+            pageNumber: 1,
+            paragraphId: 'para-1',
+            paragraphIndex: 1,
+          },
+        },
+      ];
+
+      textCorrectionRepository.findCorrectionsByAggregationKey.mockResolvedValue(mockCorrections);
+
+      const result = await controller.getCorrectionHistory(aggregationKey, bookId);
+
+      expect(textCorrectionRepository.findCorrectionsByAggregationKey).toHaveBeenCalledWith(aggregationKey, bookId);
+      expect(result.corrections).toHaveLength(1);
+      expect(result.corrections[0].bookTitle).toBe('Test Book');
+    });
+
+    it('should return empty array when no corrections found', async () => {
+      const aggregationKey = 'nonexistent|key';
+      textCorrectionRepository.findCorrectionsByAggregationKey.mockResolvedValue([]);
+
+      const result = await controller.getCorrectionHistory(aggregationKey);
+
+      expect(result).toEqual({
+        aggregationKey: 'nonexistent|key',
+        originalWord: 'nonexistent',
+        correctedWord: 'key',
+        corrections: [],
+        total: 0,
+        timestamp: expect.any(String),
+      });
+    });
+
+    it('should handle Hebrew vowelization in aggregation key correctly', async () => {
+      const aggregationKey = 'בית|בַּיִת';
+      const mockCorrections = [
+        {
+          id: '1',
+          originalWord: 'בית',
+          correctedWord: 'בַּיִת',
+          aggregationKey: 'בית|בַּיִת',
+          sentenceContext: 'בית גדול',
+          fixType: FixType.vowelization,
+          createdAt: new Date('2025-01-01T10:00:00Z'),
+          ttsModel: 'test-model',
+          ttsVoice: 'test-voice',
+          book: { id: 'book-1', title: 'Test Book', author: 'Test Author' },
+          location: {
+            pageId: 'page-1',
+            pageNumber: 1,
+            paragraphId: 'para-1',
+            paragraphIndex: 1,
+          },
+        },
+      ];
+
+      textCorrectionRepository.findCorrectionsByAggregationKey.mockResolvedValue(mockCorrections);
+
+      const result = await controller.getCorrectionHistory(aggregationKey);
+
+      expect(result.originalWord).toBe('בית');
+      expect(result.correctedWord).toBe('בַּיִת');
+      expect(result.corrections[0].sentenceContext).toBe('בית גדול');
+    });
+
+    it('should handle missing book info gracefully', async () => {
+      const aggregationKey = 'שלום|שָׁלוֹם';
+      const mockCorrections = [
+        {
+          id: '1',
+          originalWord: 'שלום',
+          correctedWord: 'שָׁלוֹם',
+          aggregationKey: 'שלום|שָׁלוֹם',
+          sentenceContext: 'שלום לכם',
+          fixType: FixType.vowelization,
+          createdAt: new Date('2025-01-01T10:00:00Z'),
+          ttsModel: 'test-model',
+          ttsVoice: 'test-voice',
+          book: null, // Missing book info
+          location: {
+            pageId: 'page-1',
+            pageNumber: 0, // Missing page info
+            paragraphId: 'para-1',
+            paragraphIndex: 0, // Missing paragraph info
+          },
+        },
+      ];
+
+      textCorrectionRepository.findCorrectionsByAggregationKey.mockResolvedValue(mockCorrections);
+
+      const result = await controller.getCorrectionHistory(aggregationKey);
+
+      expect(result.corrections[0].bookTitle).toBe('Unknown');
+      expect(result.corrections[0].bookAuthor).toBe('Unknown');
+      expect(result.corrections[0].pageNumber).toBe(0);
+      expect(result.corrections[0].paragraphOrderIndex).toBe(0);
+    });
+
+    it('should handle repository errors gracefully', async () => {
+      const aggregationKey = 'שלום|שָׁלוֹם';
+      const error = new Error('Database connection failed');
+      textCorrectionRepository.findCorrectionsByAggregationKey.mockRejectedValue(error);
+
+      await expect(controller.getCorrectionHistory(aggregationKey)).rejects.toThrow('Failed to get correction history');
+
+      expect(textCorrectionRepository.findCorrectionsByAggregationKey).toHaveBeenCalledWith(aggregationKey, undefined);
     });
   });
 });

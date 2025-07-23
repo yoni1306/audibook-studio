@@ -174,11 +174,15 @@ export class TextFixesService {
           const classification = this.fixTypeRegistry.classifyCorrection(change.originalWord, change.correctedWord);
           const fixType = classification?.fixType as FixType || FixType.disambiguation;
           
+          // Generate aggregation key using pipe format
+          const aggregationKey = `${change.originalWord}|${change.correctedWord}`;
+          
           return {
             paragraphId,
             bookId: paragraph.bookId,
             originalWord: change.originalWord,
             correctedWord: change.correctedWord,
+            aggregationKey,
             sentenceContext: this.extractSentenceContext(originalText, change.originalWord),
             fixType,
             ttsModel,

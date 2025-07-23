@@ -258,8 +258,8 @@ export class BulkTextFixesService {
       correctedWord: string;
       paragraphIds: string[];
     }>,
-    _ttsModel?: string, // Reserved for future TTS metadata tracking
-    _ttsVoice?: string  // Reserved for future TTS metadata tracking
+    ttsModel?: string, // Reserved for future TTS metadata tracking
+    ttsVoice?: string  // Reserved for future TTS metadata tracking
   ): Promise<BulkFixResult> {
     this.logger.log(`🔧 Starting bulk fixes application for book: ${bookId}`);
     this.logger.log(
@@ -411,12 +411,12 @@ export class BulkTextFixesService {
                     bookId,
                     paragraphId,
                     originalWord: fix.originalWord,
-                    currentWord: fix.originalWord, // For bulk fixes, current word is same as original
                     correctedWord: fix.correctedWord,
-                    fixSequence: 1, // Bulk fixes start at sequence 1
-                    isLatestFix: true, // Bulk fixes are always the latest
+                    aggregationKey: `${fix.originalWord}|${fix.correctedWord}`,
                     sentenceContext: this.extractSentenceContext(paragraph.content, fix.originalWord, matchPosition),
                     fixType: fixType,
+                    ttsModel: ttsModel || 'bulk-fix', // Use provided or default
+                    ttsVoice: ttsVoice || 'bulk-fix',
                   });
                   
                   this.logger.log(

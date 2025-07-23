@@ -5,11 +5,9 @@ import { TextCorrection, Prisma, FixType } from '@prisma/client';
 export interface CreateTextCorrectionData {
   bookId: string;
   paragraphId: string;
-  originalWord: string; // The very first word before any corrections (immutable)
-  currentWord: string; // The word being fixed FROM in this step
-  correctedWord: string; // What the word was changed TO in this fix
-  fixSequence?: number; // Sequential number (defaults to 1)
-  isLatestFix?: boolean; // Flag to identify current active fix (defaults to true)
+  originalWord: string; // The original word that was corrected
+  correctedWord: string; // What the word was changed to
+  aggregationKey: string; // Format: "originalWord|correctedWord" for grouping
   sentenceContext: string;
   fixType: FixType; // Required - uses FixType enum from schema
   ttsModel?: string;
@@ -20,10 +18,8 @@ export interface TextCorrectionFilters {
   bookId?: string;
   paragraphId?: string;
   originalWord?: string;
-  currentWord?: string;
   correctedWord?: string;
-  fixSequence?: number;
-  isLatestFix?: boolean;
+  aggregationKey?: string;
   fixType?: FixType;
   ttsModel?: string;
   ttsVoice?: string;
@@ -43,13 +39,56 @@ export interface CorrectionStats {
   }>;
 }
 
+export interface CorrectionInstance {
+  id: string;
+  originalWord: string;
+  correctedWord: string;
+  sentenceContext: string;
+  fixType: FixType;
+  createdAt: Date;
+  ttsModel: string | null;
+  ttsVoice: string | null;
+  book: {
+    id: string;
+    title: string;
+    author: string | null;
+  };
+  location: {
+    pageId: string;
+    pageNumber: number;
+    paragraphId: string;
+    paragraphIndex: number;
+  };
+}
+
+export interface AggregatedCorrection {
+  aggregationKey: string;
+  originalWord: string;
+  correctedWord: string;
+  fixType: FixType;
+  fixCount: number;
+  latestCorrection: Date;
+  book: {
+    id: string;
+    title: string;
+    author: string | null;
+  };
+  location: {
+    pageId: string;
+    pageNumber: number;
+    paragraphId: string;
+    paragraphIndex: number;
+  };
+  ttsModel: string | null;
+  ttsVoice: string | null;
+  corrections: CorrectionInstance[];
+}
+
 export interface CorrectionWithBookInfo {
   id: string;
   originalWord: string;
-  currentWord: string;
   correctedWord: string;
-  fixSequence: number;
-  isLatestFix: boolean;
+  aggregationKey: string;
   sentenceContext: string;
   fixType: FixType;
   createdAt: Date;
@@ -87,10 +126,8 @@ export class TextCorrectionRepository {
           bookId: data.bookId,
           paragraphId: data.paragraphId,
           originalWord: data.originalWord,
-          currentWord: data.currentWord,
           correctedWord: data.correctedWord,
-          fixSequence: data.fixSequence ?? 1,
-          isLatestFix: data.isLatestFix ?? true,
+          aggregationKey: data.aggregationKey,
           sentenceContext: data.sentenceContext,
           fixType: data.fixType,
           ttsModel: data.ttsModel,
@@ -118,10 +155,8 @@ export class TextCorrectionRepository {
           bookId: correction.bookId,
           paragraphId: correction.paragraphId,
           originalWord: correction.originalWord,
-          currentWord: correction.currentWord,
           correctedWord: correction.correctedWord,
-          fixSequence: correction.fixSequence ?? 1,
-          isLatestFix: correction.isLatestFix ?? true,
+          aggregationKey: correction.aggregationKey,
           sentenceContext: correction.sentenceContext,
           fixType: correction.fixType,
           ttsModel: correction.ttsModel,
@@ -138,69 +173,241 @@ export class TextCorrectionRepository {
   }
 
   /**
-   * Create or replace a text correction with history tracking
-   * This method implements the fix evolution logic:
-   * - For first fix: creates new record with originalWord = currentWord
-   * - For subsequent fixes: marks previous fixes as not latest, creates new record preserving originalWord
+   * Find aggregated corrections grouped by aggregationKey
+   * Returns corrections with book info for display in aggregated view
    */
-  async createOrReplaceWithHistory(data: CreateTextCorrectionData): Promise<TextCorrection> {
-    this.logger.log(`Creating/replacing text correction with history: "${data.currentWord}" → "${data.correctedWord}"`);
+  async findAggregatedCorrections(filters: TextCorrectionFilters = {}): Promise<AggregatedCorrection[]> {
+    this.logger.log(`Finding aggregated corrections with filters:`, filters);
     
     try {
-      return await this.prisma.$transaction(async (tx) => {
-        // Find existing corrections for this word in this paragraph
-        const existingCorrections = await tx.textCorrection.findMany({
-          where: {
-            paragraphId: data.paragraphId,
-            originalWord: data.originalWord || data.currentWord, // Use originalWord if provided, otherwise currentWord
-          },
-          orderBy: { fixSequence: 'desc' },
-        });
-
-        let originalWord: string;
-        let fixSequence: number;
-        
-        if (existingCorrections.length === 0) {
-          // First fix for this word
-          originalWord = data.currentWord;
-          fixSequence = 1;
-        } else {
-          // Subsequent fix - preserve original word from first correction
-          originalWord = existingCorrections[0].originalWord;
-          fixSequence = Math.max(...existingCorrections.map(c => c.fixSequence)) + 1;
-          
-          // Mark all existing corrections as not latest
-          await tx.textCorrection.updateMany({
-            where: {
-              paragraphId: data.paragraphId,
-              originalWord: originalWord,
+      // Build where clause
+      const where: Prisma.TextCorrectionWhereInput = {};
+      if (filters.bookId) where.bookId = filters.bookId;
+      if (filters.originalWord) where.originalWord = { contains: filters.originalWord, mode: 'insensitive' };
+      if (filters.correctedWord) where.correctedWord = { contains: filters.correctedWord, mode: 'insensitive' };
+      if (filters.aggregationKey) where.aggregationKey = filters.aggregationKey;
+      if (filters.fixType) where.fixType = filters.fixType;
+      if (filters.ttsModel) where.ttsModel = filters.ttsModel;
+      if (filters.ttsVoice) where.ttsVoice = filters.ttsVoice;
+      if (filters.createdAfter || filters.createdBefore) {
+        where.createdAt = {
+          ...(filters.createdAfter && { gte: filters.createdAfter }),
+          ...(filters.createdBefore && { lte: filters.createdBefore }),
+        };
+      }
+      
+      // Fetch all corrections with book info
+      const corrections = await this.prisma.textCorrection.findMany({
+        where,
+        include: {
+          book: {
+            select: {
+              id: true,
+              title: true,
+              author: true,
             },
-            data: { isLatestFix: false },
+          },
+          paragraph: {
+            include: {
+              page: {
+                select: {
+                  id: true,
+                  pageNumber: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: filters.orderBy === 'asc' ? 'asc' : 'desc' },
+      });
+      
+      // Group by aggregationKey in memory
+      const grouped = new Map<string, CorrectionInstance[]>();
+      
+      for (const correction of corrections) {
+        const key = correction.aggregationKey;
+        if (!grouped.has(key)) {
+          grouped.set(key, []);
+        }
+        const instances = grouped.get(key);
+        if (instances) {
+          instances.push({
+          id: correction.id,
+          originalWord: correction.originalWord,
+          correctedWord: correction.correctedWord,
+          sentenceContext: correction.sentenceContext,
+          fixType: correction.fixType,
+          createdAt: correction.createdAt,
+          ttsModel: correction.ttsModel,
+          ttsVoice: correction.ttsVoice,
+          book: correction.book,
+          location: {
+            pageId: correction.paragraph.page.id,
+            pageNumber: correction.paragraph.page.pageNumber,
+            paragraphId: correction.paragraphId,
+            paragraphIndex: correction.paragraph.orderIndex,
+          },
           });
         }
-
-        // Create new correction record
-        const correction = await tx.textCorrection.create({
-          data: {
-            bookId: data.bookId,
-            paragraphId: data.paragraphId,
-            originalWord: originalWord,
-            currentWord: data.currentWord,
-            correctedWord: data.correctedWord,
-            fixSequence: fixSequence,
-            isLatestFix: true,
-            sentenceContext: data.sentenceContext,
-            fixType: data.fixType,
-            ttsModel: data.ttsModel,
-            ttsVoice: data.ttsVoice,
-          },
-        });
-
-        this.logger.log(`Created text correction with history: ID ${correction.id}, sequence ${fixSequence}`);
-        return correction;
+      }
+      
+      // Convert to array and apply filters
+      let result = Array.from(grouped.entries()).map(([aggregationKey, corrections]) => {
+        const latest = corrections.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+        return {
+          aggregationKey,
+          originalWord: latest.originalWord,
+          correctedWord: latest.correctedWord,
+          fixType: latest.fixType,
+          fixCount: corrections.length,
+          latestCorrection: latest.createdAt,
+          book: latest.book,
+          location: latest.location,
+          ttsModel: latest.ttsModel,
+          ttsVoice: latest.ttsVoice,
+          corrections, // All correction instances
+        };
       });
+      
+      // Apply minOccurrences filter
+      if (filters.minOccurrences) {
+        result = result.filter(item => item.fixCount >= filters.minOccurrences);
+      }
+      
+      // Apply limit
+      if (filters.limit) {
+        result = result.slice(0, filters.limit);
+      }
+      
+      this.logger.log(`Found ${result.length} aggregated corrections`);
+      return result;
     } catch (error) {
-      this.logger.error(`Failed to create/replace text correction with history:`, error);
+      this.logger.error(`Failed to find aggregated corrections:`, error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Find correction history by aggregation key
+   * Returns all corrections for the given aggregation key (originalWord|correctedWord)
+   */
+  async findCorrectionsByAggregationKey(aggregationKey: string, bookId?: string) {
+    this.logger.log(`Finding corrections for aggregation key "${aggregationKey}"${bookId ? ` in book ${bookId}` : ''}`);
+    
+    try {
+      const where: Prisma.TextCorrectionWhereInput = { aggregationKey };
+      if (bookId) where.bookId = bookId;
+      
+      const corrections = await this.prisma.textCorrection.findMany({
+        where,
+        include: {
+          book: {
+            select: {
+              id: true,
+              title: true,
+              author: true,
+            },
+          },
+          paragraph: {
+            include: {
+              page: {
+                select: {
+                  id: true,
+                  pageNumber: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      
+      const result = corrections.map(correction => ({
+        id: correction.id,
+        originalWord: correction.originalWord,
+        correctedWord: correction.correctedWord,
+        aggregationKey: correction.aggregationKey,
+        sentenceContext: correction.sentenceContext,
+        fixType: correction.fixType,
+        createdAt: correction.createdAt,
+        ttsModel: correction.ttsModel,
+        ttsVoice: correction.ttsVoice,
+        book: correction.book,
+        location: {
+          pageId: correction.paragraph.page.id,
+          pageNumber: correction.paragraph.page.pageNumber,
+          paragraphId: correction.paragraphId,
+          paragraphIndex: correction.paragraph.orderIndex,
+        },
+      }));
+      
+      this.logger.log(`Found ${result.length} corrections for aggregation key "${aggregationKey}"`);
+      return result;
+    } catch (error) {
+      this.logger.error(`Failed to find corrections for aggregation key:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Find correction history for a specific original word
+   * Returns all corrections for the given original word across all contexts
+   * @deprecated Use findCorrectionsByAggregationKey instead for Hebrew text safety
+   */
+  async findWordCorrectionHistory(originalWord: string, bookId?: string) {
+    this.logger.log(`Finding correction history for word "${originalWord}"${bookId ? ` in book ${bookId}` : ''}`);
+    
+    try {
+      const where: Prisma.TextCorrectionWhereInput = { originalWord };
+      if (bookId) where.bookId = bookId;
+      
+      const corrections = await this.prisma.textCorrection.findMany({
+        where,
+        include: {
+          book: {
+            select: {
+              id: true,
+              title: true,
+              author: true,
+            },
+          },
+          paragraph: {
+            include: {
+              page: {
+                select: {
+                  id: true,
+                  pageNumber: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      
+      const result = corrections.map(correction => ({
+        id: correction.id,
+        originalWord: correction.originalWord,
+        correctedWord: correction.correctedWord,
+        aggregationKey: correction.aggregationKey,
+        sentenceContext: correction.sentenceContext,
+        fixType: correction.fixType,
+        createdAt: correction.createdAt,
+        ttsModel: correction.ttsModel,
+        ttsVoice: correction.ttsVoice,
+        book: correction.book,
+        location: {
+          pageId: correction.paragraph.page.id,
+          pageNumber: correction.paragraph.page.pageNumber,
+          paragraphId: correction.paragraphId,
+          paragraphIndex: correction.paragraph.orderIndex,
+        },
+      }));
+      
+      this.logger.log(`Found ${result.length} corrections for word "${originalWord}"`);
+      return result;
+    } catch (error) {
+      this.logger.error(`Failed to find correction history for word:`, error);
       throw error;
     }
   }
@@ -292,10 +499,8 @@ export class TextCorrectionRepository {
       const transformedCorrections = corrections.map(correction => ({
         id: correction.id,
         originalWord: correction.originalWord,
-        currentWord: correction.currentWord,
         correctedWord: correction.correctedWord,
-        fixSequence: correction.fixSequence,
-        isLatestFix: correction.isLatestFix,
+        aggregationKey: correction.aggregationKey,
         sentenceContext: correction.sentenceContext,
         fixType: correction.fixType,
         createdAt: correction.createdAt,
@@ -558,112 +763,5 @@ export class TextCorrectionRepository {
     }
   }
 
-  /**
-   * Find the latest fix for a specific word in a paragraph
-   */
-  async findLatestFixForWord(paragraphId: string, originalWord: string): Promise<TextCorrection | null> {
-    this.logger.log(`Finding latest fix for word "${originalWord}" in paragraph ${paragraphId}`);
-    
-    try {
-      const latestFix = await this.prisma.textCorrection.findFirst({
-        where: {
-          paragraphId,
-          originalWord,
-          isLatestFix: true,
-        },
-        orderBy: { fixSequence: 'desc' },
-      });
-      
-      if (latestFix) {
-        this.logger.log(`Found latest fix: sequence ${latestFix.fixSequence}, "${latestFix.currentWord}" → "${latestFix.correctedWord}"`);
-      } else {
-        this.logger.log(`No fixes found for word "${originalWord}"`);
-      }
-      
-      return latestFix;
-    } catch (error) {
-      this.logger.error(`Failed to find latest fix for word:`, error);
-      throw error;
-    }
-  }
 
-  /**
-   * Get complete fix history for a specific word in a paragraph
-   */
-  async getFixHistoryForWord(paragraphId: string, originalWord: string): Promise<TextCorrection[]> {
-    this.logger.log(`Getting fix history for word "${originalWord}" in paragraph ${paragraphId}`);
-    
-    try {
-      const history = await this.prisma.textCorrection.findMany({
-        where: {
-          paragraphId,
-          originalWord,
-        },
-        orderBy: { fixSequence: 'asc' },
-      });
-      
-      this.logger.log(`Found ${history.length} fixes in history for word "${originalWord}"`);
-      return history;
-    } catch (error) {
-      this.logger.error(`Failed to get fix history for word:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Find words that have multiple fixes (for analytics)
-   */
-  async findWordsWithMultipleFixes(bookId?: string): Promise<Array<{ originalWord: string; fixCount: number; latestCorrection: string }>> {
-    this.logger.log(`Finding words with multiple fixes${bookId ? ` for book ${bookId}` : ''}`);
-    
-    try {
-      // First, get all latest corrections and count total fixes per word
-      const latestCorrections = await this.prisma.textCorrection.findMany({
-        where: {
-          isLatestFix: true,
-          ...(bookId ? { bookId } : {}),
-        },
-        select: {
-          originalWord: true,
-          correctedWord: true,
-        },
-      });
-
-      // Get fix counts for each word that has latest corrections
-      const originalWords = latestCorrections?.map(c => c.originalWord) || [];
-      const fixCounts = await this.prisma.textCorrection.groupBy({
-        by: ['originalWord'],
-        where: {
-          originalWord: { in: originalWords },
-          ...(bookId ? { bookId } : {}),
-        },
-        _count: {
-          id: true,
-        },
-        having: {
-          id: {
-            _count: {
-              gt: 1,
-            },
-          },
-        },
-      });
-
-      // Combine the data
-      const result = fixCounts.map(wordCount => {
-        const latestCorrection = latestCorrections.find(c => c.originalWord === wordCount.originalWord);
-        return {
-          originalWord: wordCount.originalWord,
-          fixCount: wordCount._count.id,
-          latestCorrection: latestCorrection?.correctedWord || '',
-        };
-      }).sort((a, b) => b.fixCount - a.fixCount); // Sort by fix count descending
-      
-      this.logger.log(`Found ${result.length} words with multiple fixes`);
-      return result;
-    } catch (error) {
-      this.logger.error(`Failed to find words with multiple fixes:`, error);
-      throw error;
-    }
-  }
 }
