@@ -27,8 +27,8 @@ export interface GetAllCorrectionsWithFiltersRequest {
 export type GetCorrectionSuggestionsRequest = components['schemas']['GetCorrectionSuggestionsDto'];
 export type GetWordCorrectionsRequest = components['schemas']['GetWordCorrectionsDto'];
 // Use generated types for aggregated corrections API
-export type GetAggregatedCorrectionsRequest = paths['/books/corrections/aggregated']['post']['requestBody']['content']['application/json'];
-export type GetWordCorrectionHistoryRequest = paths['/books/corrections/word-history']['post']['requestBody']['content']['application/json'];
+export type GetAggregatedCorrectionsRequest = paths['/books/aggregated-corrections']['post']['requestBody']['content']['application/json'];
+export type GetWordCorrectionHistoryParams = paths['/books/word-history/{originalWord}']['get']['parameters'];
 
 // Re-export response types
 export type CorrectionSuggestionDto = components['schemas']['CorrectionSuggestionDto'];
@@ -68,10 +68,10 @@ export interface GetAllCorrectionsResponse {
 // Aggregated corrections interfaces
 export type AggregatedCorrection = components['schemas']['AggregatedCorrectionDto'];
 
-export type CorrectionHistoryItem = components['schemas']['CorrectionHistoryItemDto'];
+export type CorrectionHistoryItem = components['schemas']['CorrectionInstanceDto'];
 
-export type GetAggregatedCorrectionsResponse = paths['/books/corrections/aggregated']['post']['responses']['200']['content']['application/json'];
-export type GetWordCorrectionHistoryResponse = paths['/books/corrections/word-history']['post']['responses']['200']['content']['application/json'];
+export type GetAggregatedCorrectionsResponse = paths['/books/aggregated-corrections']['post']['responses']['200']['content']['application/json'];
+export type GetWordCorrectionHistoryResponse = paths['/books/word-history/{originalWord}']['get']['responses']['200']['content']['application/json'];
 
 export interface Paragraph {
   id: string;
@@ -268,7 +268,7 @@ export function createApiClient(baseUrl: string) {
             bookTitle: data.filters.bookTitle,
           } : undefined,
         };
-        return client.POST('/books/corrections/get-all', { body: apiData });
+        return client.POST('/books/all-corrections', { body: apiData });
       },
       getCorrectionSuggestions: (data: GetCorrectionSuggestionsRequest): Promise<{ data?: CorrectionSuggestionsResponseDto; error?: unknown }> =>
         client.POST('/books/correction-suggestions', { body: data }),
@@ -279,9 +279,14 @@ export function createApiClient(baseUrl: string) {
         client.POST('/books/word-corrections', { body: data }),
       // New Aggregated Corrections API
       getAggregatedCorrections: (data: GetAggregatedCorrectionsRequest): Promise<{ data?: GetAggregatedCorrectionsResponse; error?: unknown }> =>
-        client.POST('/books/corrections/aggregated', { body: data }),
-      getWordCorrectionHistory: (data: GetWordCorrectionHistoryRequest): Promise<{ data?: GetWordCorrectionHistoryResponse; error?: unknown }> =>
-        client.POST('/books/corrections/word-history', { body: data }),
+        client.POST('/books/aggregated-corrections', { body: data }),
+      getWordCorrectionHistory: (originalWord: string, bookId?: string): Promise<{ data?: GetWordCorrectionHistoryResponse; error?: unknown }> =>
+        client.GET('/books/word-history/{originalWord}', { 
+          params: { 
+            path: { originalWord },
+            query: bookId ? { bookId } : undefined
+          }
+        }),
       getFixTypes: () => client.GET('/books/fix-types', {}),
       deleteBook: (bookId: string) => client.DELETE('/books/{id}', {
         params: { path: { id: bookId } },

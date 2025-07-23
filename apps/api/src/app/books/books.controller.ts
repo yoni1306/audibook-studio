@@ -1,5 +1,5 @@
-import { Controller, Post, Get, Patch, Delete, Param, Body, NotFoundException, BadRequestException, Redirect, Logger, InternalServerErrorException } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody } from '@nestjs/swagger';
+import { Controller, Post, Get, Patch, Delete, Param, Body, Query, NotFoundException, BadRequestException, Redirect, Logger, InternalServerErrorException } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { BooksService } from './books.service';
 import { BulkTextFixesService } from './bulk-text-fixes.service';
 import { CorrectionLearningService } from './correction-learning.service';
@@ -14,6 +14,11 @@ import {
   CorrectionSuggestionsResponseDto,
   LearningStatsResponseDto
 } from './dto/correction-learning.dto';
+import {
+  AggregatedCorrectionsRequestDto,
+  AggregatedCorrectionsResponseDto,
+  WordCorrectionHistoryResponseDto
+} from './dto/aggregation.dto';
 import { BulkFixSuggestion as ServiceBulkFixSuggestion } from './bulk-text-fixes.service';
 import { WordChange } from './text-fixes.service';
 import { FixType } from '@prisma/client';
@@ -577,6 +582,116 @@ export class BooksController {
         statusCode: 500,
         timestamp: new Date().toISOString(),
       });
+    }
+  }
+
+  /**
+   * Get aggregated text corrections grouped by fix type
+   */
+  @Post('aggregated-corrections')
+  @ApiOperation({ 
+    summary: 'Get aggregated text corrections', 
+    description: 'Get text corrections grouped by aggregation key (originalWord|correctedWord) with all contexts' 
+  })
+  @ApiResponse({ status: 200, description: 'Successfully retrieved aggregated corrections', type: AggregatedCorrectionsResponseDto })
+  @ApiBody({ type: AggregatedCorrectionsRequestDto, description: 'Aggregation filters' })
+  async getAggregatedCorrections(
+    @Body() filters?: AggregatedCorrectionsRequestDto
+  ): Promise<AggregatedCorrectionsResponseDto> {
+    this.logger.log('📊 [API] Getting aggregated corrections with filters:', filters);
+    
+    try {
+      const aggregatedCorrections = await this.textCorrectionRepository.findAggregatedCorrections(filters);
+      
+      this.logger.log(`📊 [API] Found ${aggregatedCorrections.length} aggregated corrections`);
+      
+      // Transform to match DTO structure
+      const transformedCorrections = aggregatedCorrections.map(correction => ({
+        aggregationKey: correction.aggregationKey,
+        originalWord: correction.originalWord,
+        correctedWord: correction.correctedWord,
+        fixCount: correction.fixCount,
+        fixType: correction.corrections[0]?.fixType || FixType.vowelization,
+        lastCorrectionAt: correction.corrections.reduce((latest, curr) => 
+          curr.createdAt > latest ? curr.createdAt : latest, 
+          correction.corrections[0]?.createdAt || new Date()
+        ),
+        corrections: correction.corrections.map(instance => ({
+          id: instance.id,
+          originalWord: instance.originalWord,
+          correctedWord: instance.correctedWord,
+          sentenceContext: instance.sentenceContext,
+          fixType: instance.fixType,
+          ttsModel: instance.ttsModel,
+          ttsVoice: instance.ttsVoice,
+          createdAt: instance.createdAt,
+          bookTitle: instance.book?.title || 'Unknown',
+          bookAuthor: instance.book?.author || 'Unknown',
+          pageNumber: instance.location?.pageNumber || 0,
+          paragraphOrderIndex: instance.location?.paragraphIndex || 0,
+        }))
+      }));
+      
+      return {
+        aggregatedCorrections: transformedCorrections,
+        total: transformedCorrections.length,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      this.logger.error('❌ [API] Error getting aggregated corrections:', error);
+      throw new InternalServerErrorException('Failed to get aggregated corrections');
+    }
+  }
+
+  /**
+   * Get correction history for a specific word
+   */
+  @Get('correction-history/:aggregationKey')
+  @ApiOperation({ 
+    summary: 'Get correction history by aggregation key', 
+    description: 'Get all correction instances for a specific aggregation key (originalWord|correctedWord) with full context' 
+  })
+  @ApiParam({ name: 'aggregationKey', description: 'Aggregation key (originalWord|correctedWord) to get history for' })
+  @ApiQuery({ name: 'bookId', required: false, description: 'Filter by book ID' })
+  @ApiResponse({ status: 200, description: 'Successfully retrieved correction history', type: WordCorrectionHistoryResponseDto })
+  async getCorrectionHistory(
+    @Param('aggregationKey') aggregationKey: string,
+    @Query('bookId') bookId?: string
+  ): Promise<WordCorrectionHistoryResponseDto> {
+    this.logger.log(`📜 [API] Getting correction history for aggregation key: ${aggregationKey}`);
+    
+    try {
+      const corrections = await this.textCorrectionRepository.findCorrectionsByAggregationKey(aggregationKey, bookId);
+      
+      // Parse aggregation key to get original and corrected words
+      const [originalWord, correctedWord] = aggregationKey.split('|');
+      
+      this.logger.log(`📜 [API] Found ${corrections.length} corrections for aggregation key: ${aggregationKey}`);
+      
+      return {
+        aggregationKey,
+        originalWord,
+        correctedWord,
+        corrections: corrections.map(correction => ({
+          id: correction.id,
+          originalWord: correction.originalWord,
+          correctedWord: correction.correctedWord,
+          sentenceContext: correction.sentenceContext,
+          fixType: correction.fixType,
+          ttsModel: correction.ttsModel,
+          ttsVoice: correction.ttsVoice,
+          createdAt: correction.createdAt,
+          bookTitle: correction.book?.title || 'Unknown',
+          bookAuthor: correction.book?.author || 'Unknown',
+          pageNumber: correction.location?.pageNumber || 0,
+          paragraphOrderIndex: correction.location?.paragraphIndex || 0,
+        })),
+        total: corrections.length,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      this.logger.error(`📜 [API] Failed to get correction history for aggregation key: ${aggregationKey}`, error);
+      throw new InternalServerErrorException('Failed to get correction history');
     }
   }
 

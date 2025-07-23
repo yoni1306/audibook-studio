@@ -13,10 +13,8 @@ describe('CorrectionLearningService', () => {
     bookId: 'book-1',
     paragraphId: 'para-1',
     originalWord: 'שלום',
-    currentWord: 'שלום',
     correctedWord: 'שָׁלוֹם',
-    fixSequence: 1,
-    isLatestFix: true,
+    aggregationKey: 'שלום|שָׁלוֹם',
     sentenceContext: 'שלום עליכם',
     fixType: FixType.vowelization,
     ttsModel: 'test-model',
@@ -29,8 +27,8 @@ describe('CorrectionLearningService', () => {
     bookId: 'book-1',
     paragraphId: 'para-1',
     originalWord: 'שלום',
-    currentWord: 'שלום',
     correctedWord: 'שָׁלוֹם',
+    aggregationKey: 'שלום|שָׁלוֹם',
     sentenceContext: 'שלום עליכם',
     fixType: FixType.vowelization,
     ttsModel: 'test-model',
@@ -121,6 +119,7 @@ describe('CorrectionLearningService', () => {
         originalWord: 'עליכם',
         minOccurrences: 2,
       });
+
       expect(result).toHaveLength(1);
       expect(result[0]).toEqual({
         originalWord: 'שלום',
@@ -140,7 +139,12 @@ describe('CorrectionLearningService', () => {
       expect(result).toEqual([]);
     });
 
+    it('should handle errors when getting correction suggestions', async () => {
+      const error = new Error('Database error');
+      mockTextCorrectionRepository.findGroupedCorrections.mockRejectedValue(error);
 
+      await expect(service.getCorrectionSuggestions('שלום', 2)).rejects.toThrow('Database error');
+    });
   });
 
   describe('getLearningStats', () => {
@@ -150,7 +154,7 @@ describe('CorrectionLearningService', () => {
         uniqueWords: 50,
         fixTypeBreakdown: [
           { fixType: 'vowelization', count: 60 },
-          { fixType: 'disambiguation', count: 40 },
+          { fixType: 'punctuation', count: 40 },
         ],
       };
 
@@ -158,8 +162,8 @@ describe('CorrectionLearningService', () => {
         {
           originalWord: 'שלום',
           correctedWord: 'שָׁלוֹם',
-          fixType: FixType.vowelization,
           occurrenceCount: 10,
+          fixType: FixType.vowelization,
           lastUsed: new Date('2023-01-01'),
         },
       ];
@@ -187,14 +191,14 @@ describe('CorrectionLearningService', () => {
             originalWord: 'שלום',
             correctedWord: 'שָׁלוֹם',
             occurrenceCount: 10,
-            fixType: 'vowelization',
+            fixType: FixType.vowelization,
           },
         ],
         recentCorrections: [
           {
             originalWord: 'שלום',
             correctedWord: 'שָׁלוֹם',
-            fixType: 'vowelization',
+            fixType: FixType.vowelization,
             createdAt: new Date('2023-01-01'),
           },
         ],
@@ -281,6 +285,41 @@ describe('CorrectionLearningService', () => {
       mockTextCorrectionRepository.findGroupedCorrections.mockRejectedValue(error);
 
       await expect(service.getWordCorrections('שלום')).rejects.toThrow('Database error');
+    });
+  });
+
+  describe('extractWords', () => {
+    it('should extract Hebrew words from text', () => {
+      // Access the private method through bracket notation for testing
+      const extractWords = (service as unknown as { extractWords: (text: string) => string[] }).extractWords.bind(service);
+      
+      const result = extractWords('שלום עליכם, איך שלומך?');
+      
+      expect(result).toEqual(['שלום', 'עליכם', 'איך', 'שלומך']);
+    });
+
+    it('should handle text with niqqud', () => {
+      const extractWords = (service as unknown as { extractWords: (text: string) => string[] }).extractWords.bind(service);
+      
+      const result = extractWords('שָׁלוֹם עֲלֵיכֶם');
+      
+      expect(result).toEqual(['שָׁלוֹם', 'עֲלֵיכֶם']);
+    });
+
+    it('should filter out single character words', () => {
+      const extractWords = (service as unknown as { extractWords: (text: string) => string[] }).extractWords.bind(service);
+      
+      const result = extractWords('א בב גגג');
+      
+      expect(result).toEqual(['בב', 'גגג']);
+    });
+
+    it('should remove duplicates', () => {
+      const extractWords = (service as unknown as { extractWords: (text: string) => string[] }).extractWords.bind(service);
+      
+      const result = extractWords('שלום שלום עליכם');
+      
+      expect(result).toEqual(['שלום', 'עליכם']);
     });
   });
 });
