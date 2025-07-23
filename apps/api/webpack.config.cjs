@@ -1,12 +1,7 @@
-import { NxAppWebpackPlugin } from '@nx/webpack/app-plugin.js';
-import { join } from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+const { NxAppWebpackPlugin } = require('@nx/webpack/app-plugin');
+const { join } = require('path');
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-export default {
+module.exports = {
   output: {
     path: join(__dirname, '../../dist/apps/api'),
   },

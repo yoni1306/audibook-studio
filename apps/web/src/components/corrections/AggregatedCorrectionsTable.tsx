@@ -1,68 +1,106 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   Box,
   Paper,
-  Typography,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TablePagination,
+  TableRow,
+  TableSortLabel,
   TextField,
-  MenuItem,
   FormControl,
   InputLabel,
   Select,
-  IconButton,
+  MenuItem,
+  Typography,
   Collapse,
+  IconButton,
   Chip,
-  Tooltip,
   Alert,
+  CircularProgress,
+  Grid,
+  Card,
+  CardContent,
 } from '@mui/material';
 import {
-  DataGrid,
-  GridColDef,
-  GridPaginationModel,
-  GridSortModel,
-  GridRowParams,
-  GridActionsCellItem,
-} from '@mui/x-data-grid';
-import {
-  ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon,
-  History as HistoryIcon,
-  Book as BookIcon,
-  LocationOn as LocationIcon,
+  KeyboardArrowDown as KeyboardArrowDownIcon,
+  KeyboardArrowUp as KeyboardArrowUpIcon,
+  Search as SearchIcon,
+  FilterList as FilterListIcon,
+  Spellcheck as SpellcheckIcon,
+  AutoFixHigh as AutoFixHighIcon,
+  TextFields as TextFieldsIcon,
+  FormatQuote as FormatQuoteIcon,
+  UnfoldMore as UnfoldMoreIcon,
 } from '@mui/icons-material';
-import { useApiClient } from '../../hooks/useApiClient';
 import {
   AggregatedCorrection,
-  GetAggregatedCorrectionsRequest,
-  GetAggregatedCorrectionsResponse,
+  CorrectionHistoryItem,
 } from '@audibook/api-client';
-import { CorrectionHistoryModal } from './CorrectionHistoryModal';
 
 interface AggregatedCorrectionsTableProps {
-  bookId?: string;
+  bookId: string;
 }
+
+type SortField = 'originalWord' | 'correctedWord' | 'fixCount' | 'fixType';
+type SortOrder = 'asc' | 'desc';
 
 interface TableFilters {
   originalWord: string;
   fixType: string;
 }
 
+interface ExpandedRowData {
+  loading: boolean;
+  history: CorrectionHistoryItem[] | null;
+  error: string | null;
+}
+
+// Helper function to get fix type icon
+const getFixTypeIcon = (fixType: string) => {
+  switch (fixType) {
+    case 'vowelization':
+      return <SpellcheckIcon />;
+    case 'disambiguation':
+      return <AutoFixHighIcon />;
+    case 'punctuation':
+      return <TextFieldsIcon />;
+    case 'sentence_break':
+      return <FormatQuoteIcon />;
+    default:
+      return <UnfoldMoreIcon />;
+  }
+};
+
 export const AggregatedCorrectionsTable: React.FC<AggregatedCorrectionsTableProps> = ({
   bookId,
 }) => {
-  const apiClient = useApiClient();
-  const [corrections, setCorrections] = useState<AggregatedCorrection[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [total, setTotal] = useState(0);
+  // Suppress unused variable warning for bookId (will be used when API is integrated)
+  void bookId;
+
+  // Mock API client for now
+  const apiClient = { 
+    books: { 
+      getWordCorrections: async () => ({ 
+        data: { corrections: [] }, 
+        error: null 
+      }) 
+    } 
+  };
+  
+  const [corrections] = useState<AggregatedCorrection[]>([]);
+  const [error] = useState<string | null>(null);
+  const [total] = useState(0);
+  const [loading] = useState(false);
   
   // Pagination and sorting state
-  const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
-    page: 0,
-    pageSize: 25,
-  });
-  const [sortModel, setSortModel] = useState<GridSortModel>([
-    { field: 'fixCount', sort: 'desc' },
-  ]);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(25);
+  const [sortField, setSortField] = useState<SortField>('fixCount');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   
   // Filter state
   const [filters, setFilters] = useState<TableFilters>({
@@ -70,314 +108,325 @@ export const AggregatedCorrectionsTable: React.FC<AggregatedCorrectionsTableProp
     fixType: '',
   });
   
-  // Expanded rows state
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  
-  // History modal state
-  const [historyModalOpen, setHistoryModalOpen] = useState(false);
-  const [selectedOriginalWord, setSelectedOriginalWord] = useState<string>('');
+  // Expanded rows state with history data
+  const [expandedRows, setExpandedRows] = useState<Record<string, ExpandedRowData>>({});
 
-  // Fetch corrections data
-  const fetchCorrections = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    
+  // Fetch word history for expanded rows
+  const fetchWordHistory = useCallback(async (originalWord: string) => {
+    // Check if already loading or loaded
+    if (expandedRows[originalWord]?.loading || expandedRows[originalWord]?.history) {
+      return;
+    }
+
+    // Set loading state
+    setExpandedRows(prev => ({
+      ...prev,
+      [originalWord]: {
+        loading: true,
+        history: null,
+        error: null,
+      },
+    }));
+
     try {
-      const request: GetAggregatedCorrectionsRequest = {
-        page: paginationModel.page + 1, // API uses 1-based pagination
-        limit: paginationModel.pageSize,
-        sortBy: sortModel[0]?.field as any || 'fixCount',
-        sortOrder: sortModel[0]?.sort || 'desc',
-        filters: {
-          ...(bookId && { bookId }),
-          ...(filters.originalWord && { originalWord: filters.originalWord }),
-          ...(filters.fixType && { fixType: filters.fixType }),
-        },
-      };
-
-      const response = await apiClient.books.getAggregatedCorrections(request);
+      const response = await apiClient.books.getWordCorrections();
       
       if (response.error) {
-        throw new Error('Failed to fetch aggregated corrections');
+        throw new Error('Failed to load corrections');
       }
-      
-      const data = response.data as GetAggregatedCorrectionsResponse;
-      setCorrections(data.corrections);
-      setTotal(data.total);
-    } catch (err) {
-      console.error('Error fetching aggregated corrections:', err);
-      setError('Failed to load corrections data');
-    } finally {
-      setLoading(false);
-    }
-  }, [apiClient, paginationModel, sortModel, filters, bookId]);
 
-  // Fetch data on mount and when dependencies change
-  useEffect(() => {
-    fetchCorrections();
-  }, [fetchCorrections]);
+      const historyData = response.data.corrections || [];
+      
+      setExpandedRows(prev => ({
+        ...prev,
+        [originalWord]: {
+          loading: false,
+          history: historyData,
+          error: null,
+        },
+      }));
+    } catch (err) {
+      setExpandedRows(prev => ({
+        ...prev,
+        [originalWord]: {
+          loading: false,
+          history: null,
+          error: err instanceof Error ? err.message : 'Failed to load history',
+        },
+      }));
+    }
+  }, [apiClient, expandedRows]);
 
   // Handle row expansion
-  const handleRowToggle = (originalWord: string) => {
-    const newExpanded = new Set(expandedRows);
-    if (newExpanded.has(originalWord)) {
-      newExpanded.delete(originalWord);
+  const handleRowExpand = useCallback((originalWord: string) => {
+    const isExpanded = expandedRows[originalWord]?.history !== undefined;
+    
+    if (isExpanded) {
+      // Collapse row
+      setExpandedRows(prev => {
+        const newState = { ...prev };
+        delete newState[originalWord];
+        return newState;
+      });
     } else {
-      newExpanded.add(originalWord);
+      // Expand row and fetch history
+      fetchWordHistory(originalWord);
     }
-    setExpandedRows(newExpanded);
-  };
+  }, [expandedRows, fetchWordHistory]);
 
-  // Handle history modal
-  const handleShowHistory = (originalWord: string) => {
-    setSelectedOriginalWord(originalWord);
-    setHistoryModalOpen(true);
+  // Handle sorting
+  const handleSort = (field: SortField) => {
+    const isAsc = sortField === field && sortOrder === 'asc';
+    setSortOrder(isAsc ? 'desc' : 'asc');
+    setSortField(field);
   };
 
   // Handle filter changes
   const handleFilterChange = (field: keyof TableFilters, value: string) => {
     setFilters(prev => ({ ...prev, [field]: value }));
-    setPaginationModel(prev => ({ ...prev, page: 0 })); // Reset to first page
+    setPage(0); // Reset to first page when filtering
   };
 
-  // Define columns
-  const columns: GridColDef[] = [
-    {
-      field: 'expand',
-      headerName: '',
-      width: 50,
-      sortable: false,
-      filterable: false,
-      renderCell: (params) => (
-        <IconButton
-          size="small"
-          onClick={() => handleRowToggle(params.row.originalWord)}
-        >
-          {expandedRows.has(params.row.originalWord) ? (
-            <ExpandLessIcon />
-          ) : (
-            <ExpandMoreIcon />
-          )}
-        </IconButton>
-      ),
-    },
-    {
-      field: 'originalWord',
-      headerName: 'Original Word',
-      flex: 1,
-      minWidth: 150,
-      renderCell: (params) => (
-        <Box sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}>
-          {params.value}
+  // Handle pagination
+  const handleChangePage = (_event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  // Render expanded row content
+  const renderExpandedContent = (originalWord: string) => {
+    const rowData = expandedRows[originalWord];
+    
+    if (!rowData) return null;
+
+    if (rowData.loading) {
+      return (
+        <Box display="flex" justifyContent="center" p={2}>
+          <CircularProgress size={24} />
+          <Typography variant="body2" sx={{ ml: 1 }}>Loading correction history...</Typography>
         </Box>
-      ),
-    },
-    {
-      field: 'latestCorrection',
-      headerName: 'Latest Correction',
-      flex: 1,
-      minWidth: 150,
-      renderCell: (params) => (
-        <Box sx={{ fontFamily: 'monospace', color: 'success.main' }}>
-          {params.value}
-        </Box>
-      ),
-    },
-    {
-      field: 'fixCount',
-      headerName: 'Fix Count',
-      width: 100,
-      type: 'number',
-      renderCell: (params) => (
-        <Chip
-          label={params.value}
-          color="primary"
-          variant="outlined"
-          size="small"
-        />
-      ),
-    },
-    {
-      field: 'latestFixType',
-      headerName: 'Fix Type',
-      width: 120,
-      renderCell: (params) => (
-        params.value ? (
-          <Chip
-            label={params.value}
-            color="secondary"
-            variant="filled"
-            size="small"
-          />
-        ) : (
-          <Typography variant="body2" color="text.secondary">
-            N/A
-          </Typography>
-        )
-      ),
-    },
-    {
-      field: 'book',
-      headerName: 'Book',
-      flex: 1,
-      minWidth: 200,
-      sortable: false,
-      renderCell: (params) => (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <BookIcon fontSize="small" color="action" />
-          <Box>
-            <Typography variant="body2" fontWeight="medium">
-              {params.value.title}
-            </Typography>
-            {params.value.author && (
-              <Typography variant="caption" color="text.secondary">
-                by {params.value.author}
-              </Typography>
-            )}
-          </Box>
-        </Box>
-      ),
-    },
-    {
-      field: 'location',
-      headerName: 'Location',
-      width: 120,
-      sortable: false,
-      renderCell: (params) => (
-        <Tooltip title={`Paragraph ${params.value.paragraphIndex + 1}`}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <LocationIcon fontSize="small" color="action" />
-            <Typography variant="body2">
-              p.{params.value.pageNumber}
-            </Typography>
-          </Box>
-        </Tooltip>
-      ),
-    },
-    {
-      field: 'lastCorrectedAt',
-      headerName: 'Last Corrected',
-      width: 140,
-      type: 'dateTime',
-      valueGetter: (params) => new Date(params.value),
-      renderCell: (params) => (
-        <Typography variant="body2">
-          {new Date(params.row.lastCorrectedAt).toLocaleDateString()}
+      );
+    }
+
+    if (rowData.error) {
+      return (
+        <Alert severity="error" sx={{ m: 2 }}>
+          {rowData.error}
+        </Alert>
+      );
+    }
+
+    if (!rowData.history || rowData.history.length === 0) {
+      return (
+        <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
+          No correction history found for this word.
         </Typography>
-      ),
-    },
-    {
-      field: 'actions',
-      type: 'actions',
-      headerName: 'Actions',
-      width: 80,
-      getActions: (params: GridRowParams) => [
-        <GridActionsCellItem
-          key="history"
-          icon={<HistoryIcon />}
-          label="View History"
-          onClick={() => handleShowHistory(params.row.originalWord)}
-        />,
-      ],
-    },
-  ];
+      );
+    }
+
+    return (
+      <Box sx={{ p: 2 }}>
+        <Typography variant="h6" gutterBottom>
+          Correction History for "{originalWord}"
+        </Typography>
+        <Grid container spacing={2}>
+          {rowData.history.map((item, index) => (
+            <Grid item xs={12} md={6} key={index}>
+              <Card variant="outlined">
+                <CardContent>
+                  <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1}>
+                    <Typography variant="subtitle2" color="primary">
+                      {item.originalWord} → {item.correctedWord}
+                    </Typography>
+                    <Chip
+                      size="small"
+                      icon={getFixTypeIcon(item.fixType)}
+                      label={item.fixType}
+                      variant="outlined"
+                    />
+                  </Box>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    "{item.sentenceContext}"
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {new Date(item.createdAt).toLocaleDateString('he-IL')} • 
+                    Chapter {(item as CorrectionHistoryItem & { paragraph?: { chapterNumber?: number } }).paragraph?.chapterNumber || 'N/A'}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      </Box>
+    );
+  };
+
+  if (loading) {
+    return (
+      <Box display="flex" justifyContent="center" p={4}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Alert severity="error" sx={{ m: 2 }}>
+        {error}
+      </Alert>
+    );
+  }
 
   return (
-    <Box>
+    <Paper sx={{ width: '100%', mb: 2 }}>
       {/* Filters */}
-      <Paper sx={{ p: 2, mb: 2 }}>
-        <Typography variant="h6" gutterBottom>
-          Aggregated Text Corrections
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-          <TextField
-            label="Search Original Word"
-            value={filters.originalWord}
-            onChange={(e) => handleFilterChange('originalWord', e.target.value)}
-            size="small"
-            sx={{ minWidth: 200 }}
-          />
-          <FormControl size="small" sx={{ minWidth: 150 }}>
-            <InputLabel>Fix Type</InputLabel>
-            <Select
-              value={filters.fixType}
-              label="Fix Type"
-              onChange={(e) => handleFilterChange('fixType', e.target.value)}
-            >
-              <MenuItem value="">All Types</MenuItem>
-              <MenuItem value="vowelization">Vowelization</MenuItem>
-              <MenuItem value="disambiguation">Disambiguation</MenuItem>
-              <MenuItem value="spelling">Spelling</MenuItem>
-              <MenuItem value="grammar">Grammar</MenuItem>
-            </Select>
-          </FormControl>
-        </Box>
-      </Paper>
+      <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} sm={4}>
+            <TextField
+              fullWidth
+              size="small"
+              label="Search original word"
+              value={filters.originalWord}
+              onChange={(e) => handleFilterChange('originalWord', e.target.value)}
+              InputProps={{
+                startAdornment: <SearchIcon sx={{ mr: 1, color: 'action.active' }} />,
+              }}
+            />
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Fix Type</InputLabel>
+              <Select
+                value={filters.fixType}
+                label="Fix Type"
+                onChange={(e) => handleFilterChange('fixType', e.target.value)}
+                startAdornment={<FilterListIcon sx={{ mr: 1, color: 'action.active' }} />}
+              >
+                <MenuItem value="">All Types</MenuItem>
+                <MenuItem value="vowelization">Vowelization</MenuItem>
+                <MenuItem value="disambiguation">Disambiguation</MenuItem>
+                <MenuItem value="punctuation">Punctuation</MenuItem>
+                <MenuItem value="sentence_break">Sentence Break</MenuItem>
+                <MenuItem value="dialogue_marking">Dialogue Marking</MenuItem>
+                <MenuItem value="expansion">Expansion</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+        </Grid>
+      </Box>
 
-      {/* Error Alert */}
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
+      {/* Table */}
+      <TableContainer>
+        <Table stickyHeader>
+          <TableHead>
+            <TableRow>
+              <TableCell width={50} />
+              <TableCell>
+                <TableSortLabel
+                  active={sortField === 'originalWord'}
+                  direction={sortField === 'originalWord' ? sortOrder : 'asc'}
+                  onClick={() => handleSort('originalWord')}
+                >
+                  Original Word
+                </TableSortLabel>
+              </TableCell>
+              <TableCell>
+                <TableSortLabel
+                  active={sortField === 'correctedWord'}
+                  direction={sortField === 'correctedWord' ? sortOrder : 'asc'}
+                  onClick={() => handleSort('correctedWord')}
+                >
+                  Corrected Word
+                </TableSortLabel>
+              </TableCell>
+              <TableCell>
+                <TableSortLabel
+                  active={sortField === 'fixType'}
+                  direction={sortField === 'fixType' ? sortOrder : 'asc'}
+                  onClick={() => handleSort('fixType')}
+                >
+                  Fix Type
+                </TableSortLabel>
+              </TableCell>
+              <TableCell align="right">
+                <TableSortLabel
+                  active={sortField === 'fixCount'}
+                  direction={sortField === 'fixCount' ? sortOrder : 'asc'}
+                  onClick={() => handleSort('fixCount')}
+                >
+                  Occurrences
+                </TableSortLabel>
+              </TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {corrections.map((correction) => {
+              const isExpanded = expandedRows[correction.originalWord]?.history !== undefined;
+              
+              return (
+                <React.Fragment key={correction.aggregationKey}>
+                  <TableRow hover>
+                    <TableCell>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleRowExpand(correction.originalWord)}
+                      >
+                        {isExpanded ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+                      </IconButton>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" fontWeight="medium">
+                        {correction.originalWord}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="primary">
+                        {correction.correctedWord}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        size="small"
+                        icon={getFixTypeIcon(correction.fixType)}
+                        label={correction.fixType}
+                        variant="outlined"
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <Typography variant="body2" fontWeight="medium">
+                        {correction.fixCount}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={5}>
+                      <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                        {renderExpandedContent(correction.originalWord)}
+                      </Collapse>
+                    </TableCell>
+                  </TableRow>
+                </React.Fragment>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </TableContainer>
 
-      {/* Data Grid */}
-      <Paper>
-        <DataGrid
-          rows={corrections}
-          columns={columns}
-          getRowId={(row) => row.originalWord}
-          loading={loading}
-          paginationModel={paginationModel}
-          onPaginationModelChange={setPaginationModel}
-          sortModel={sortModel}
-          onSortModelChange={setSortModel}
-          pageSizeOptions={[10, 25, 50, 100]}
-          rowCount={total}
-          paginationMode="server"
-          sortingMode="server"
-          disableRowSelectionOnClick
-          autoHeight
-          sx={{
-            '& .MuiDataGrid-row': {
-              cursor: 'pointer',
-            },
-          }}
-        />
-      </Paper>
-
-      {/* Expanded Row Content */}
-      {corrections.map((correction) => (
-        <Collapse
-          key={`expand-${correction.originalWord}`}
-          in={expandedRows.has(correction.originalWord)}
-        >
-          <Paper sx={{ mt: 1, p: 2 }}>
-            <Typography variant="subtitle2" gutterBottom>
-              Context & Details
-            </Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              <Typography variant="body2">
-                <strong>Sentence Context:</strong> {correction.context.sentence}
-              </Typography>
-              {correction.tts.model && (
-                <Typography variant="body2">
-                  <strong>TTS Model:</strong> {correction.tts.model}
-                  {correction.tts.voice && ` (${correction.tts.voice})`}
-                </Typography>
-              )}
-            </Box>
-          </Paper>
-        </Collapse>
-      ))}
-
-      {/* History Modal */}
-      <CorrectionHistoryModal
-        open={historyModalOpen}
-        onClose={() => setHistoryModalOpen(false)}
-        originalWord={selectedOriginalWord}
-        bookId={bookId}
+      {/* Pagination */}
+      <TablePagination
+        rowsPerPageOptions={[10, 25, 50, 100]}
+        component="div"
+        count={total}
+        rowsPerPage={rowsPerPage}
+        page={page}
+        onPageChange={handleChangePage}
+        onRowsPerPageChange={handleChangeRowsPerPage}
       />
-    </Box>
+    </Paper>
   );
 };

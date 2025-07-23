@@ -45,6 +45,24 @@ export class BulkTextFixesService {
     private textCorrectionRepository: TextCorrectionRepository
   ) {}
 
+  // Common sentence terminators including multilingual punctuation
+  private static readonly SENTENCE_TERMINATORS = /[.!?;\u05C3\u05C6\u061F\u06D4]/;
+  private static readonly SENTENCE_TERMINATORS_REGEX = /[^.!?;]+[.!?;]+/g;
+
+  /**
+   * Helper method to get sentence terminator regex for consistent sentence boundary detection
+   */
+  private getSentenceTerminators(): RegExp {
+    return BulkTextFixesService.SENTENCE_TERMINATORS;
+  }
+
+  /**
+   * Helper method to get sentence splitting regex for consistent sentence extraction
+   */
+  private getSentenceSplittingRegex(): RegExp {
+    return new RegExp(BulkTextFixesService.SENTENCE_TERMINATORS_REGEX.source, 'g');
+  }
+
   /**
    * Finds paragraphs in the same book that contain the same words that were just fixed
    * 
@@ -144,34 +162,36 @@ export class BulkTextFixesService {
         bookParagraphs
       );
 
+      // Sanity check: re-classify the correction to ensure fix type consistency
+      const reClassification = this.fixTypeHandlerRegistry.classifyCorrection(
+        change.originalWord,
+        change.correctedWord
+      );
+      
+      if (reClassification && reClassification.fixType !== change.fixType) {
+        this.logger.warn(
+          `⚠️ Fix type classification changed for "${change.originalWord}" → "${change.correctedWord}": ` +
+          `Original: ${change.fixType}, Re-classified: ${reClassification.fixType} ` +
+          `(confidence: ${reClassification.confidence})`
+        );
+      }
+      
+      // Always include the word change, even if no matching paragraphs found
+      // This allows the UI to show which fixes have no bulk suggestions
+      suggestions.push({
+        originalWord: change.originalWord,
+        correctedWord: change.correctedWord,
+        fixType: change.fixType,
+        paragraphs: matchingParagraphs, // Will be empty array if no matches
+      });
+      
       if (matchingParagraphs.length > 0) {
         this.logger.debug(
           `Found ${matchingParagraphs.length} paragraphs containing '${change.originalWord}'`
         );
-        
-        // Sanity check: re-classify the correction to ensure fix type consistency
-        const reClassification = this.fixTypeHandlerRegistry.classifyCorrection(
-          change.originalWord,
-          change.correctedWord
-        );
-        
-        if (reClassification && reClassification.fixType !== change.fixType) {
-          this.logger.warn(
-            `⚠️ Fix type classification changed for "${change.originalWord}" → "${change.correctedWord}": ` +
-            `Original: ${change.fixType}, Re-classified: ${reClassification.fixType} ` +
-            `(confidence: ${reClassification.confidence})`
-          );
-        }
-        
-        suggestions.push({
-          originalWord: change.originalWord,
-          correctedWord: change.correctedWord,
-          fixType: change.fixType,
-          paragraphs: matchingParagraphs,
-        });
       } else {
         this.logger.debug(
-          `No paragraphs found containing '${change.originalWord}'`
+          `No paragraphs found containing '${change.originalWord}' - will show as fix with no bulk suggestions`
         );
       }
     }
@@ -551,8 +571,8 @@ export class BulkTextFixesService {
    * Extracts sentences from content that contain the specified word
    */
   private extractSentencesContainingWord(content: string, word: string): string[] {
-    // Split content by sentence endings (., !, ?)
-    const sentenceRegex = /[^.!?]+[.!?]+/g;
+    // Split content by sentence endings using common sentence terminators
+    const sentenceRegex = this.getSentenceSplittingRegex();
     const sentences = [];
     let sentenceMatch;
 
@@ -985,8 +1005,8 @@ private replaceWordMatches(
     word: string,
     position: number
   ): string {
-    // Multilingual sentence terminators including Hebrew and Arabic punctuation
-    const sentenceTerminators = /[.!?\u05C3\u05C6\u061F\u06D4]/;
+    // Use common sentence terminators for consistent boundary detection
+    const sentenceTerminators = this.getSentenceTerminators();
     
     // Find sentence boundaries around the position
     let sentenceStart = 0;

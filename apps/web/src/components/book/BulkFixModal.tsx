@@ -121,9 +121,7 @@ export default function BulkFixModal({
     return Object.values(selectedFixes).reduce((total, paragraphIds) => total + paragraphIds.length, 0);
   };
 
-  if (suggestions.length === 0) {
-    return null;
-  }
+  const hasNoSuggestions = suggestions.length === 0;
 
   return (
     <div className="modal-backdrop" style={{
@@ -192,12 +190,41 @@ export default function BulkFixModal({
           overflowY: 'auto',
           flex: 1
         }}>
-          <div style={{
-            fontSize: 'var(--font-size-sm)',
-            color: 'var(--color-gray-600)',
-            marginBottom: 'var(--spacing-3)',
-            fontWeight: '500'
-          }}>📄 Found in {suggestions.reduce((total, s) => total + (s.paragraphIds?.length || 0), 0)} paragraphs:</div>
+          {hasNoSuggestions ? (
+            <div style={{
+              textAlign: 'center',
+              padding: 'var(--spacing-8) var(--spacing-4)',
+              color: 'var(--color-gray-600)'
+            }}>
+              <div style={{
+                fontSize: '48px',
+                marginBottom: 'var(--spacing-4)'
+              }}>🔍</div>
+              <h3 style={{
+                fontSize: 'var(--font-size-lg)',
+                fontWeight: '600',
+                color: 'var(--color-gray-900)',
+                marginBottom: 'var(--spacing-2)'
+              }}>No Bulk Suggestions Found</h3>
+              <p style={{
+                fontSize: 'var(--font-size-sm)',
+                color: 'var(--color-gray-600)',
+                maxWidth: '400px',
+                margin: '0 auto',
+                lineHeight: '1.5'
+              }}>
+                The corrections you made don't appear elsewhere in this book, 
+                or they may be too context-specific for bulk application.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div style={{
+                fontSize: 'var(--font-size-sm)',
+                color: 'var(--color-gray-600)',
+                marginBottom: 'var(--spacing-3)',
+                fontWeight: '500'
+              }}>📄 Found in {suggestions.reduce((total, s) => total + (s.paragraphIds?.length || 0), 0)} paragraphs:</div>
           
           <div style={{
             display: 'flex',
@@ -236,14 +263,16 @@ export default function BulkFixModal({
                         display: 'flex',
                         alignItems: 'center',
                         gap: 'var(--spacing-2)',
-                        cursor: 'pointer',
+                        cursor: allParagraphIds.length > 0 ? 'pointer' : 'default',
                         fontSize: 'var(--font-size-sm)',
-                        fontWeight: '500'
+                        fontWeight: '500',
+                        opacity: allParagraphIds.length > 0 ? 1 : 0.6
                       }}>
                         <input
                           type="checkbox"
                           checked={selectedCount === allParagraphIds.length && selectedCount > 0}
                           onChange={() => handleToggleAll(wordKey, allParagraphIds)}
+                          disabled={allParagraphIds.length === 0}
                           style={{
                             transform: 'scale(1.1)'
                           }}
@@ -268,12 +297,15 @@ export default function BulkFixModal({
                       </label>
                       <div style={{
                         fontSize: 'var(--font-size-xs)',
-                        color: 'var(--color-gray-500)',
-                        backgroundColor: 'var(--color-gray-100)',
+                        color: allParagraphIds.length === 0 ? 'var(--color-orange-600)' : 'var(--color-gray-500)',
+                        backgroundColor: allParagraphIds.length === 0 ? 'var(--color-orange-100)' : 'var(--color-gray-100)',
                         padding: '2px 6px',
                         borderRadius: 'var(--radius-sm)'
                       }}>
-                        {selectedCount}/{allParagraphIds.length} selected
+                        {allParagraphIds.length === 0 
+                          ? 'No bulk suggestions' 
+                          : `${selectedCount}/${allParagraphIds.length} selected`
+                        }
                       </div>
                     </div>
                     <button
@@ -298,12 +330,25 @@ export default function BulkFixModal({
                       paddingTop: 'var(--spacing-3)',
                       borderTop: '1px solid var(--color-blue-200)'
                     }}>
-                      <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 'var(--spacing-2)'
-                      }}>
-                        {suggestion.paragraphs?.map((paragraph, pIdx) => (
+                      {allParagraphIds.length === 0 ? (
+                        <div style={{
+                          textAlign: 'center',
+                          padding: 'var(--spacing-4)',
+                          color: 'var(--color-gray-500)',
+                          fontSize: 'var(--font-size-sm)',
+                          fontStyle: 'italic'
+                        }}>
+                          <div style={{ marginBottom: 'var(--spacing-2)' }}>🔍</div>
+                          <div>This fix appears to be unique to the original paragraph.</div>
+                          <div>No similar instances were found elsewhere in the book.</div>
+                        </div>
+                      ) : (
+                        <div style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 'var(--spacing-2)'
+                        }}>
+                          {suggestion.paragraphs?.map((paragraph, pIdx) => (
                           <div key={pIdx} className="card" style={{
                             padding: 'var(--spacing-3)',
                             backgroundColor: (selectedFixes[wordKey] || []).includes(paragraph.id) 
@@ -419,14 +464,17 @@ export default function BulkFixModal({
                               </div>
                             </label>
                           </div>
-                        ))}
-                      </div>
+                         ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               );
             })}
           </div>
+            </>
+          )}
         </div>
 
         <div className="modal-footer" style={{
@@ -444,8 +492,14 @@ export default function BulkFixModal({
             fontSize: 'var(--font-size-sm)',
             color: 'var(--color-gray-600)'
           }}>
-            <span>📊</span>
-            <span>{getTotalSelected()} paragraphs selected for fixing</span>
+            {hasNoSuggestions ? (
+              <span>No suggestions to apply</span>
+            ) : (
+              <>
+                <span>📊</span>
+                <span>{getTotalSelected()} paragraphs selected for fixing</span>
+              </>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 'var(--spacing-3)' }}>
             <button

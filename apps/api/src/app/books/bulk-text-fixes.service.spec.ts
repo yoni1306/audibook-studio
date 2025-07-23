@@ -327,7 +327,7 @@ describe('BulkTextFixesService', () => {
       expect(result[0].paragraphs[0].id).toBe('paragraph-special');
     });
 
-    it('should return empty array when no paragraphs match', async () => {
+    it('should return word with empty paragraphs array when no paragraphs match', async () => {
       const nonMatchingChanges = [
         {
           originalWord: 'nonexistent',
@@ -343,7 +343,12 @@ describe('BulkTextFixesService', () => {
         nonMatchingChanges
       );
 
-      expect(result.length).toBe(0);
+      // Should return the word with empty paragraphs array
+      expect(result.length).toBe(1);
+      expect(result[0].originalWord).toBe('nonexistent');
+      expect(result[0].correctedWord).toBe('word');
+      expect(result[0].fixType).toBe(FixType.default);
+      expect(result[0].paragraphs).toEqual([]);
     });
 
     // Add a test to specifically debug niqqud handling
@@ -1064,7 +1069,10 @@ describe('BulkTextFixesService', () => {
 
       // After our Hebrew hyphen fix: "2" in "ב־2" should NOT be matched
       // because "ב־2" is a compound expression meaning "on the 2nd"
-      expect(result.length).toBe(0); // No matches should be found
+      expect(result.length).toBe(1); // Word is returned but with no matching paragraphs
+      expect(result[0].originalWord).toBe('2');
+      expect(result[0].correctedWord).toBe('שתי');
+      expect(result[0].paragraphs).toEqual([]); // No matches should be found
 
       // Test that replaceWordMatches also respects the boundary
       const updatedContent = service['replaceWordMatches'](
@@ -1543,10 +1551,14 @@ describe('BulkTextFixesService', () => {
         JSON.stringify(result, null, 2)
       );
 
-      // Should NOT find any results because changes without fix type are now filtered out
-      expect(result).toHaveLength(0);
+      // Should return the word with empty paragraphs array when no matches are found
+      expect(result).toHaveLength(1);
+      expect(result[0].originalWord).toBe('test');
+      expect(result[0].correctedWord).toBe('corrected');
+      expect(result[0].fixType).toBe(FixType.default);
+      expect(result[0].paragraphs).toEqual([]);
       console.log(
-        '✅ Word changes without fix type are correctly filtered out'
+        '✅ Word changes are returned with empty paragraphs when no matches found'
       );
     });
 
@@ -1998,6 +2010,20 @@ describe('BulkTextFixesService', () => {
       
       // Should be a reasonable length (not the full paragraph)
       expect(context.length).toBeLessThan(fullParagraph.length * 0.8);
+    });
+
+    it('should treat semicolons as sentence terminators', () => {
+      const content = 'This is the first sentence. This sentence has a semicolon; it also contains the word hello after the semicolon. This is the third sentence.';
+      const word = 'hello';
+      const position = content.indexOf(word);
+      
+      const context = (service as any).extractSentenceContext(content, word, position);
+      
+      // Should extract only the part after the semicolon (semicolon acts as sentence terminator)
+      expect(context).toBe('it also contains the word hello after the semicolon.');
+      expect(context).not.toContain('This sentence has a semicolon;');
+      expect(context).not.toContain('first sentence');
+      expect(context).not.toContain('third sentence');
     });
   });
 });
