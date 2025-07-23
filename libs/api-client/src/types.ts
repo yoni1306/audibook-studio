@@ -345,7 +345,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/books/word-history/{originalWord}': {
+  '/books/correction-history/{aggregationKey}': {
     parameters: {
       query?: never;
       header?: never;
@@ -353,10 +353,10 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * Get word correction history
-     * @description Get all correction instances for a specific original word with full context
+     * Get correction history by aggregation key
+     * @description Get all correction instances for a specific aggregation key (originalWord|correctedWord) with full context
      */
-    get: operations['BooksController_getWordCorrectionHistory'];
+    get: operations['BooksController_getCorrectionHistory'];
     put?: never;
     post?: never;
     delete?: never;
@@ -922,9 +922,13 @@ export interface components {
       timestamp: string;
     };
     WordCorrectionHistoryResponseDto: {
+      /** @description Aggregation key (originalWord|correctedWord) */
+      aggregationKey: string;
       /** @description Original word that was corrected */
       originalWord: string;
-      /** @description All correction instances for this word */
+      /** @description Corrected word */
+      correctedWord: string;
+      /** @description All correction instances for this aggregation key */
       corrections: components['schemas']['CorrectionInstanceDto'][];
       /** @description Total number of correction instances */
       total: number;
@@ -1454,7 +1458,7 @@ export interface operations {
       };
     };
   };
-  BooksController_getWordCorrectionHistory: {
+  BooksController_getCorrectionHistory: {
     parameters: {
       query?: {
         /** @description Filter by book ID */
@@ -1462,14 +1466,14 @@ export interface operations {
       };
       header?: never;
       path: {
-        /** @description Original word to get history for */
-        originalWord: string;
+        /** @description Aggregation key (originalWord|correctedWord) to get history for */
+        aggregationKey: string;
       };
       cookie?: never;
     };
     requestBody?: never;
     responses: {
-      /** @description Successfully retrieved word correction history */
+      /** @description Successfully retrieved correction history */
       200: {
         headers: {
           [name: string]: unknown;

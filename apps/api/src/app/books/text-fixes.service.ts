@@ -113,8 +113,8 @@ export class TextFixesService {
     const wordIndex = text.toLowerCase().indexOf(word.toLowerCase());
     if (wordIndex === -1) return '';
     
-    // Find sentence boundaries (periods, exclamation marks, question marks)
-    const sentenceEnders = /[.!?]/g;
+    // Find sentence boundaries
+    const sentenceEnders = /[.!?;]/g;
     let start = 0;
     let end = text.length;
     
