@@ -14,11 +14,19 @@ import {
   Paper,
   Grid,
   Chip,
+  Tabs,
+  Tab,
 } from '@mui/material';
-import { DataGrid, GridColDef, GridSortModel, GridToolbar } from '@mui/x-data-grid';
+import {
+  DataGrid,
+  GridColDef,
+  GridSortModel,
+  GridToolbar,
+} from '@mui/x-data-grid';
 import { Link } from 'react-router-dom';
 import { useApiClient } from '../../hooks/useApiClient';
 import { createLogger } from '../utils/logger';
+import ExpandableCorrectionsView from '../components/corrections/ExpandableCorrectionsView';
 
 const logger = createLogger('CorrectionsPage');
 
@@ -72,6 +80,9 @@ export default function CorrectionsPage() {
     field: 'createdAt',
     sort: 'desc',
   }]);
+
+  // Tab state
+  const [currentTab, setCurrentTab] = useState(0);
 
   const fetchCorrections = useCallback(async () => {
     setLoading(true);
@@ -500,7 +511,17 @@ export default function CorrectionsPage() {
       ) : (
         <Card>
           <CardContent sx={{ p: 0 }}>
-            <Box sx={{ height: 'auto', minHeight: 600, width: '100%', overflow: 'auto' }}>
+            {/* Tabs */}
+            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+              <Tabs value={currentTab} onChange={(_, newValue) => setCurrentTab(newValue)}>
+                <Tab label="All Corrections" />
+                <Tab label="Aggregated View" />
+              </Tabs>
+            </Box>
+            
+            {/* Tab Content */}
+            {currentTab === 0 ? (
+              <Box sx={{ height: 'auto', minHeight: 600, width: '100%', overflow: 'auto' }}>
               <DataGrid
                 rows={transformedCorrections}
                 columns={columns}
@@ -567,7 +588,12 @@ export default function CorrectionsPage() {
                   },
                 }}
               />
-            </Box>
+              </Box>
+            ) : (
+              <Box sx={{ p: 2 }}>
+                <ExpandableCorrectionsView />
+              </Box>
+            )}
           </CardContent>
         </Card>
       )}

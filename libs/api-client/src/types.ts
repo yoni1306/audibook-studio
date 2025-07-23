@@ -289,7 +289,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/books/all-corrections': {
+  '/books/corrections/get-all': {
     parameters: {
       query?: never;
       header?: never;
@@ -299,10 +299,50 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * Get all corrections
-     * @description Get all text corrections with optional filtering and pagination
+     * Get all corrections with filters
+     * @description Retrieve all text corrections with optional filtering and pagination
      */
     post: operations['BooksController_getAllCorrections'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/books/corrections/aggregated': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Get aggregated corrections view
+     * @description Retrieve aggregated corrections showing latest correction and fix count for each original word, with book and location info
+     */
+    post: operations['BooksController_getAggregatedCorrections'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/books/corrections/word-history': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Get correction history for a word
+     * @description Retrieve complete correction history for a specific original word, ordered by fix sequence
+     */
+    post: operations['BooksController_getWordCorrectionHistory'];
     delete?: never;
     options?: never;
     head?: never;
@@ -770,6 +810,116 @@ export interface components {
       sortOrder: 'asc' | 'desc';
     };
     GetAllCorrectionsResponseDto: Record<string, never>;
+    GetAggregatedCorrectionsDto: {
+      /** @description Filters for corrections */
+      filters?: components['schemas']['FiltersDto'];
+      /**
+       * @description Page number
+       * @default 1
+       */
+      page: number;
+      /**
+       * @description Number of items per page
+       * @default 50
+       */
+      limit: number;
+      /**
+       * @description Sort field
+       * @default fixCount
+       * @enum {string}
+       */
+      sortBy:
+        | 'originalWord'
+        | 'latestCorrection'
+        | 'fixCount'
+        | 'lastCorrectedAt';
+      /**
+       * @description Sort order
+       * @default desc
+       * @enum {string}
+       */
+      sortOrder: 'asc' | 'desc';
+    };
+    CorrectionHistoryItemDto: {
+      /** @description Correction ID */
+      id: string;
+      /** @description Corrected word at this step */
+      correctedWord: string;
+      /** @description Fix sequence number */
+      fixSequence: number;
+      /** @description Type of fix applied */
+      fixType?: string;
+      /** @description TTS model used */
+      ttsModel?: string;
+      /** @description TTS voice used */
+      ttsVoice?: string;
+      /**
+       * Format: date-time
+       * @description Date when this correction was made
+       */
+      createdAt: string;
+      /** @description Context sentence where correction was made */
+      sentenceContext: string;
+      /** @description Book information */
+      bookInfo: Record<string, never>;
+      /** @description Location information */
+      location: Record<string, never>;
+    };
+    AggregatedCorrectionDto: {
+      /** @description Original word */
+      originalWord: string;
+      /** @description Latest corrected word */
+      latestCorrection: string;
+      /** @description Total number of fixes for this word */
+      fixCount: number;
+      /**
+       * Format: date-time
+       * @description Date of the latest correction
+       */
+      lastCorrectedAt: string;
+      /** @description Type of the latest fix */
+      latestFixType?: string;
+      /** @description TTS model used in latest correction */
+      ttsModel?: string;
+      /** @description TTS voice used in latest correction */
+      ttsVoice?: string;
+      /** @description Book information from latest correction */
+      bookInfo: Record<string, never>;
+      /** @description Location information from latest correction */
+      location: Record<string, never>;
+      /** @description Context sentence from latest correction */
+      latestSentenceContext: string;
+      /** @description Detailed correction history (only included when expanded) */
+      history?: components['schemas']['CorrectionHistoryItemDto'][];
+    };
+    GetAggregatedCorrectionsResponseDto: {
+      /** @description List of aggregated corrections */
+      corrections: components['schemas']['AggregatedCorrectionDto'][];
+      /** @description Total number of unique words with corrections */
+      total: number;
+      /** @description Current page number */
+      page: number;
+      /** @description Total number of pages */
+      totalPages: number;
+      /** @description Response timestamp */
+      timestamp?: string;
+    };
+    GetWordCorrectionHistoryDto: {
+      /** @description Original word to get correction history for */
+      originalWord: string;
+      /** @description Filter by book ID */
+      bookId?: string;
+    };
+    GetWordCorrectionHistoryResponseDto: {
+      /** @description Original word */
+      originalWord: string;
+      /** @description Complete correction history ordered by sequence */
+      history: components['schemas']['CorrectionHistoryItemDto'][];
+      /** @description Total number of corrections for this word */
+      totalCorrections: number;
+      /** @description Response timestamp */
+      timestamp?: string;
+    };
     GetWordCorrectionsDto: {
       /** @description Original word to get corrections for */
       originalWord: string;
@@ -1240,13 +1390,61 @@ export interface operations {
       };
     };
     responses: {
-      /** @description All corrections retrieved successfully */
+      /** @description Successfully retrieved corrections */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
           'application/json': components['schemas']['GetAllCorrectionsResponseDto'];
+        };
+      };
+    };
+  };
+  BooksController_getAggregatedCorrections: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GetAggregatedCorrectionsDto'];
+      };
+    };
+    responses: {
+      /** @description Successfully retrieved aggregated corrections */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GetAggregatedCorrectionsResponseDto'];
+        };
+      };
+    };
+  };
+  BooksController_getWordCorrectionHistory: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GetWordCorrectionHistoryDto'];
+      };
+    };
+    responses: {
+      /** @description Successfully retrieved word correction history */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GetWordCorrectionHistoryResponseDto'];
         };
       };
     };

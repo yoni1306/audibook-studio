@@ -26,6 +26,9 @@ export interface GetAllCorrectionsWithFiltersRequest {
 }
 export type GetCorrectionSuggestionsRequest = components['schemas']['GetCorrectionSuggestionsDto'];
 export type GetWordCorrectionsRequest = components['schemas']['GetWordCorrectionsDto'];
+// Use generated types for aggregated corrections API
+export type GetAggregatedCorrectionsRequest = paths['/books/corrections/aggregated']['post']['requestBody']['content']['application/json'];
+export type GetWordCorrectionHistoryRequest = paths['/books/corrections/word-history']['post']['requestBody']['content']['application/json'];
 
 // Re-export response types
 export type CorrectionSuggestionDto = components['schemas']['CorrectionSuggestionDto'];
@@ -61,6 +64,14 @@ export interface GetAllCorrectionsResponse {
   totalPages: number;
   timestamp?: string;
 }
+
+// Aggregated corrections interfaces
+export type AggregatedCorrection = components['schemas']['AggregatedCorrectionDto'];
+
+export type CorrectionHistoryItem = components['schemas']['CorrectionHistoryItemDto'];
+
+export type GetAggregatedCorrectionsResponse = paths['/books/corrections/aggregated']['post']['responses']['200']['content']['application/json'];
+export type GetWordCorrectionHistoryResponse = paths['/books/corrections/word-history']['post']['responses']['200']['content']['application/json'];
 
 export interface Paragraph {
   id: string;
@@ -257,7 +268,7 @@ export function createApiClient(baseUrl: string) {
             bookTitle: data.filters.bookTitle,
           } : undefined,
         };
-        return client.POST('/books/all-corrections', { body: apiData });
+        return client.POST('/books/corrections/get-all', { body: apiData });
       },
       getCorrectionSuggestions: (data: GetCorrectionSuggestionsRequest): Promise<{ data?: CorrectionSuggestionsResponseDto; error?: unknown }> =>
         client.POST('/books/correction-suggestions', { body: data }),
@@ -266,6 +277,11 @@ export function createApiClient(baseUrl: string) {
       getLearningStats: () => client.GET('/books/correction-learning/stats', {}),
       getWordCorrections: (data: GetWordCorrectionsRequest) =>
         client.POST('/books/word-corrections', { body: data }),
+      // New Aggregated Corrections API
+      getAggregatedCorrections: (data: GetAggregatedCorrectionsRequest): Promise<{ data?: GetAggregatedCorrectionsResponse; error?: unknown }> =>
+        client.POST('/books/corrections/aggregated', { body: data }),
+      getWordCorrectionHistory: (data: GetWordCorrectionHistoryRequest): Promise<{ data?: GetWordCorrectionHistoryResponse; error?: unknown }> =>
+        client.POST('/books/corrections/word-history', { body: data }),
       getFixTypes: () => client.GET('/books/fix-types', {}),
       deleteBook: (bookId: string) => client.DELETE('/books/{id}', {
         params: { path: { id: bookId } },
@@ -314,7 +330,7 @@ export function createApiClient(baseUrl: string) {
         client.POST('/s3/presigned-upload', { body: data }),
       uploadFile: (formData: FormData) =>
         client.POST('/s3/upload', { 
-          body: formData as any,
+          body: formData as any, // FormData doesn't match openapi-fetch body type
           bodySerializer: () => formData // Pass FormData directly
         }),
     },
