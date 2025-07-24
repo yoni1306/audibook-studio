@@ -1272,8 +1272,8 @@ describe('BulkTextFixesService', () => {
 
         const result = service['createPreview'](content, word, 20);
 
-        // When word is not found, should return beginning of content with ellipsis
-        expect(result).toBe('זה טקסט ללא המילה הר...');
+        // When word is not found, should return beginning of content without ellipsis
+        expect(result).toBe('זה טקסט ללא המילה הר');
       });
 
       it('should handle multiple sentences containing the word', () => {
@@ -1885,18 +1885,19 @@ describe('BulkTextFixesService', () => {
       expect(context).not.toContain('השלישי');
     });
 
-    it('should fall back to contextual extraction for very long sentences', () => {
-      // Create a very long "sentence" (over 200 characters) that would be treated as a paragraph
+    it('should preserve full sentence context even for very long sentences', () => {
+      // Create a very long "sentence" (over 200 characters) without sentence terminators
       const longSentence = 'זוהי פסקה ארוכה מאוד שלא מסתיימת בנקודה או בסימן פיסוק אחר והיא ממשיכה והולכת עם הרבה מילים ועוד מילים ועוד מילים כדי להגיע לאורך של יותר מ200 תווים כדי לבדוק את המנגנון של חילוץ הקשר כאשר המשפט ארוך מדי ואז המילה שלום מופיעה כאן ואחרי זה עוד הרבה מילים ועוד מילים ועוד מילים כדי להמשיך את הפסקה הארוכה הזו';
       const word = 'שלום';
       const position = longSentence.indexOf(word);
       
       const context = (service as any).extractSentenceContext(longSentence, word, position);
       
-      // Should fall back to contextual extraction (around 80 chars + word + 80 chars)
-      expect(context.length).toBeLessThan(longSentence.length);
+      // Should return the full sentence context without truncation
+      expect(context.length).toBe(longSentence.length);
       expect(context).toContain(word);
-      expect(context).toContain('...');
+      expect(context).toBe(longSentence);
+      expect(context).not.toContain('...');
     });
 
     it('should handle word at the beginning of content', () => {
@@ -1959,23 +1960,22 @@ describe('BulkTextFixesService', () => {
       expect(context).not.toContain('English');
     });
 
-    it('should break at word boundaries when using contextual extraction', () => {
-      // Create content where contextual extraction will be used
+    it('should return full content when no sentence terminators are present', () => {
+      // Create content without sentence terminators
       const content = 'זוהי פסקה ארוכה מאוד ללא סימני פיסוק והיא ממשיכה והולכת עם הרבה מילים ועוד מילים ועוד מילים כדי להגיע לאורך של יותר מ200 תווים כדי לבדוק את המנגנון של חילוץ הקשר כאשר המשפט ארוך מדי ואז המילה שלום מופיעה כאן ואחרי זה עוד הרבה מילים ועוד מילים ועוד מילים כדי להמשיך את הפסקה הארוכה הזו';
       const word = 'שלום';
       const position = content.indexOf(word);
       
       const context = (service as any).extractSentenceContext(content, word, position);
       
-      // Should break at word boundaries (not in the middle of words)
+      // Should return the full content without truncation
       expect(context).toContain(word);
-      expect(context).toContain('...');
+      expect(context).toBe(content);
+      expect(context).not.toContain('...');
       
-      // The context should not end or start in the middle of a word
-      const contextWithoutEllipsis = context.replace(/\.\.\./g, '').trim();
-      const words = contextWithoutEllipsis.split(/\s+/);
-      
-      // First and last words should be complete (no partial words)
+      // Should preserve all words completely
+      const words = context.split(/\s+/);
+      expect(words.length).toBeGreaterThan(10); // Should have many words
       expect(words[0].length).toBeGreaterThan(0);
       expect(words[words.length - 1].length).toBeGreaterThan(0);
     });
@@ -2024,6 +2024,46 @@ describe('BulkTextFixesService', () => {
       expect(context).not.toContain('This sentence has a semicolon;');
       expect(context).not.toContain('first sentence');
       expect(context).not.toContain('third sentence');
+    });
+
+    it('should correctly handle Hebrew text with semicolon as sentence terminator', () => {
+      // User's specific example where semicolon should split sentences
+      const content = 'אין צורך לבחון ביריעה רחבה את כל ההיסטוריה לשם כך; דַּי לבחון חלק מן האירועים המשמעותיים.';
+      
+      // Test sentence splitting with the actual service method
+      const word = 'די'; // Looking for the word "די" (enough)
+      const position = content.indexOf('דַּי'); // Find the vocalized version
+      
+      const context = (service as any).extractSentenceContext(content, word, position);
+      
+      // Should extract only the second sentence after the semicolon
+      expect(context).toBe('דַּי לבחון חלק מן האירועים המשמעותיים.');
+      
+      // Should not contain content from before the semicolon
+      expect(context).not.toContain('אין צורך');
+      expect(context).not.toContain('ההיסטוריה');
+      expect(context).not.toContain(';');
+      
+      // Should not be the full content
+      expect(context).not.toBe(content);
+      expect(context.length).toBeLessThan(content.length);
+    });
+
+    it('should handle Hebrew semicolon in extractSentencesContainingWord for bulk suggestions', () => {
+      // User's specific example where semicolon should split sentences in bulk suggestions
+      const content = 'אין צורך לבחון ביריעה רחבה את כל ההיסטוריה לשם כך; דַּי לבחון חלק מן האירועים המשמעותיים.';
+      const word = 'דַּי'; // Use the exact vocalized form that appears in the text
+      
+      const sentences = (service as any).extractSentencesContainingWord(content, word);
+      
+      // Should find exactly one sentence containing the word (the second sentence after semicolon)
+      expect(sentences).toHaveLength(1);
+      expect(sentences[0]).toBe('דַּי לבחון חלק מן האירועים המשמעותיים.');
+      
+      // Should not contain the first sentence before the semicolon
+      expect(sentences[0]).not.toContain('אין צורך');
+      expect(sentences[0]).not.toContain('ההיסטוריה');
+      expect(sentences[0]).not.toContain(';');
     });
   });
 });

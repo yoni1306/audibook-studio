@@ -147,9 +147,7 @@ export class TextFixesService {
     paragraphId: string,
     originalText: string,
     correctedText: string,
-    changes: WordChange[],
-    ttsModel?: string,
-    ttsVoice?: string
+    changes: WordChange[]
   ): Promise<void> {
     if (changes.length === 0) {
       this.logger.log(`No text changes detected for paragraph ${paragraphId}`);
@@ -185,8 +183,8 @@ export class TextFixesService {
             aggregationKey,
             sentenceContext: this.extractSentenceContext(originalText, change.originalWord),
             fixType,
-            ttsModel,
-            ttsVoice,
+            ttsModel: null, // Always create as null
+            ttsVoice: null, // Always create as null
           };
         });
 

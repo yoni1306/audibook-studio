@@ -277,9 +277,7 @@ export class BulkTextFixesService {
       originalWord: string;
       correctedWord: string;
       paragraphIds: string[];
-    }>,
-    ttsModel?: string, // Reserved for future TTS metadata tracking
-    ttsVoice?: string  // Reserved for future TTS metadata tracking
+    }>
   ): Promise<BulkFixResult> {
     this.logger.log(`🔧 Starting bulk fixes application for book: ${bookId}`);
     this.logger.log(
@@ -435,8 +433,8 @@ export class BulkTextFixesService {
                     aggregationKey: `${fix.originalWord}|${fix.correctedWord}`,
                     sentenceContext: this.extractSentenceContext(paragraph.content, fix.originalWord, matchPosition),
                     fixType: fixType,
-                    ttsModel: ttsModel || 'bulk-fix', // Use provided or default
-                    ttsVoice: ttsVoice || 'bulk-fix',
+                    ttsModel: null, // Always create as null
+                    ttsVoice: null, // Always create as null
                   });
                   
                   this.logger.log(
@@ -540,7 +538,7 @@ export class BulkTextFixesService {
 
     if (matches.length === 0) {
       // Fallback to the original behavior
-      return content.substring(0, contextLength) + '...';
+      return content.substring(0, contextLength);
     }
 
     // Find all sentences containing the matched word
@@ -555,12 +553,7 @@ export class BulkTextFixesService {
         index + matches[0].length + contextLength
       );
 
-      let preview = content.substring(start, end);
-
-      if (start > 0) preview = '...' + preview;
-      if (end < content.length) preview = preview + '...';
-
-      return preview;
+      return content.substring(start, end);
     }
 
     // Join the sentences with a space
@@ -1030,22 +1023,6 @@ private replaceWordMatches(
     
     // Extract the sentence and trim whitespace
     const sentence = content.substring(sentenceStart, sentenceEnd).trim();
-    
-    // If sentence is too long (more than 200 chars), use fallback context
-    if (sentence.length > 200) {
-      const contextLength = 80;
-      const start = Math.max(0, position - contextLength);
-      const end = Math.min(
-        content.length,
-        position + word.length + contextLength
-      );
-      
-      let context = content.substring(start, end).trim();
-      if (start > 0) context = '...' + context;
-      if (end < content.length) context = context + '...';
-      
-      return context;
-    }
     
     return sentence;
   }
