@@ -31,11 +31,27 @@ export default function BookDetailPage() {
     suggestions: BulkFixSuggestion[];
     audioRequested: boolean;
   } | null>(null);
+  const [completedFilter, setCompletedFilter] = useState<'all' | 'completed' | 'incomplete'>('all');
 
   const isInitialLoad = useRef(true);
 
   // Create a logger instance for this component
   const logger = useMemo(() => createLogger('BookDetailPage'), []);
+
+  // Filter paragraphs based on completion status
+  const filteredParagraphs = useMemo(() => {
+    if (!book) return [];
+    
+    switch (completedFilter) {
+      case 'completed':
+        return book.paragraphs.filter(p => p.completed);
+      case 'incomplete':
+        return book.paragraphs.filter(p => !p.completed);
+      case 'all':
+      default:
+        return book.paragraphs;
+    }
+  }, [book, completedFilter]);
 
   // Add correlation ID generator for frontend
   function generateCorrelationId() {
@@ -309,6 +325,44 @@ export default function BookDetailPage() {
     }
   };
 
+  const toggleParagraphCompleted = async (paragraphId: string, completed: boolean) => {
+    try {
+      logger.info(`Toggling paragraph ${paragraphId} completed status to ${completed}`);
+      
+      const response = await fetch(`/api/books/${bookId}/paragraphs/${paragraphId}/completed`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ completed }),
+    });
+      
+      if (response.ok) {
+        // Update the local state immediately
+        if (book) {
+          const updatedBook = {
+            ...book,
+            paragraphs: book.paragraphs.map(p => 
+              p.id === paragraphId 
+                ? { ...p, completed }
+                : p
+            )
+          };
+          setBook(updatedBook);
+        }
+        
+        logger.info(`Successfully updated paragraph ${paragraphId} completed status to ${completed}`);
+      } else {
+        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+        logger.error('Error updating paragraph completed status:', errorData);
+        alert('Failed to update paragraph status');
+      }
+    } catch (error) {
+      logger.error('Error updating paragraph completed status:', error);
+      alert('Error updating paragraph status');
+    }
+  };
+
   const handleBulkFixComplete = () => {
     logger.info('Bulk fix completed');
 
@@ -459,6 +513,49 @@ export default function BookDetailPage() {
             color: 'var(--color-gray-900)'
           }}>Content</h2>
         </div>
+
+        {/* Filter Controls */}
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 'var(--spacing-3)', 
+          marginBottom: 'var(--spacing-4)',
+          padding: 'var(--spacing-3)',
+          backgroundColor: 'var(--color-surface-secondary)',
+          borderRadius: 'var(--border-radius-md)',
+          border: '1px solid var(--color-border-subtle)'
+        }}>
+          <label style={{ 
+            fontSize: 'var(--font-size-sm)', 
+            fontWeight: 'var(--font-weight-medium)',
+            color: 'var(--color-text-secondary)'
+          }}>
+            Filter paragraphs:
+          </label>
+          <select 
+            value={completedFilter} 
+            onChange={(e) => setCompletedFilter(e.target.value as 'all' | 'completed' | 'incomplete')}
+            style={{
+              padding: 'var(--spacing-2) var(--spacing-3)',
+              borderRadius: 'var(--border-radius-sm)',
+              border: '1px solid var(--color-border-subtle)',
+              backgroundColor: 'var(--color-surface-primary)',
+              color: 'var(--color-text-primary)',
+              fontSize: 'var(--font-size-sm)',
+              cursor: 'pointer'
+            }}
+          >
+            <option value="all">All paragraphs ({book.paragraphs.length})</option>
+            <option value="completed">Completed ({book.paragraphs.filter(p => p.completed).length})</option>
+            <option value="incomplete">Incomplete ({book.paragraphs.filter(p => !p.completed).length})</option>
+          </select>
+          <span style={{ 
+            fontSize: 'var(--font-size-xs)', 
+            color: 'var(--color-text-tertiary)'
+          }}>
+            Showing {filteredParagraphs.length} paragraph{filteredParagraphs.length !== 1 ? 's' : ''}
+          </span>
+        </div>
         
         <div className="card" style={{
           padding: 'var(--spacing-4)',
@@ -482,7 +579,7 @@ export default function BookDetailPage() {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)' }}>
-          {book.paragraphs.map((paragraph) => (
+          {filteredParagraphs.map((paragraph) => (
             <ParagraphComponent
               key={paragraph.id}
               paragraph={paragraph}
@@ -495,6 +592,7 @@ export default function BookDetailPage() {
               onContentChange={setEditContent}
               onGenerateAudio={() => generateAudioForParagraph(paragraph.id, paragraph.content)}
               onSaveAndGenerateAudio={() => saveAndGenerateAudio(paragraph.id)}
+              onToggleCompleted={toggleParagraphCompleted}
             />
           ))}
         </div>

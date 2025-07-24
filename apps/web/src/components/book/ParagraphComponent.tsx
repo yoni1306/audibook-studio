@@ -14,6 +14,7 @@ interface ParagraphComponentProps {
   onContentChange: (content: string) => void;
   onGenerateAudio: () => void;
   onSaveAndGenerateAudio: () => void;
+  onToggleCompleted: (paragraphId: string, completed: boolean) => void;
 }
 
 export default function ParagraphComponent({
@@ -27,6 +28,7 @@ export default function ParagraphComponent({
   onContentChange,
   onGenerateAudio,
   onSaveAndGenerateAudio,
+  onToggleCompleted,
 }: ParagraphComponentProps) {
   const getAudioStatusIcon = (status: string) => {
     switch (status) {
@@ -50,12 +52,15 @@ export default function ParagraphComponent({
         marginBottom: 'var(--spacing-5)',
         padding: 'var(--spacing-4)',
         position: 'relative',
-        cursor: !isEditing ? 'pointer' : 'default',
+        cursor: !isEditing && !paragraph.completed ? 'pointer' : 'default',
         transition: 'all 0.2s ease',
-        border: isEditing ? '2px solid var(--color-primary-300)' : '1px solid var(--color-gray-200)',
-        backgroundColor: isEditing ? 'var(--color-primary-50)' : 'white'
+        border: isEditing ? '2px solid var(--color-primary-300)' : 
+                paragraph.completed ? '1px solid var(--color-success-200)' : '1px solid var(--color-gray-200)',
+        backgroundColor: isEditing ? 'var(--color-primary-50)' : 
+                        paragraph.completed ? 'var(--color-gray-50)' : 'white',
+        opacity: paragraph.completed ? 0.85 : 1
       }}
-      onClick={() => !isEditing && onStartEdit()}
+      onClick={() => !isEditing && !paragraph.completed && onStartEdit()}
     >
       <div
         style={{
@@ -81,6 +86,64 @@ export default function ParagraphComponent({
         <span style={{ color: 'var(--color-gray-500)', fontSize: 'var(--font-size-xs)' }}>
           {countWords(paragraph.content)} words | {countCharacters(paragraph.content)} chars
         </span>
+      </div>
+
+      {/* Completed Status Toggle */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 'var(--spacing-3)',
+          left: 'var(--spacing-4)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--spacing-2)'
+        }}
+      >
+        {(() => {
+          const hasAudio = paragraph.audioStatus === 'READY' && paragraph.audioS3Key;
+          const isDisabled = !hasAudio && !paragraph.completed;
+          
+          return (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isDisabled) {
+                  onToggleCompleted(paragraph.id, !paragraph.completed);
+                }
+              }}
+              disabled={isDisabled}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--spacing-1)',
+                padding: 'var(--spacing-1) var(--spacing-2)',
+                fontSize: 'var(--font-size-xs)',
+                fontWeight: '500',
+                border: '1px solid',
+                borderRadius: 'var(--radius-sm)',
+                cursor: isDisabled ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s ease',
+                backgroundColor: isDisabled ? 'var(--color-gray-50)' : 
+                                paragraph.completed ? 'var(--color-success-100)' : 'var(--color-gray-100)',
+                borderColor: isDisabled ? 'var(--color-gray-200)' : 
+                            paragraph.completed ? 'var(--color-success-300)' : 'var(--color-gray-300)',
+                color: isDisabled ? 'var(--color-gray-400)' : 
+                      paragraph.completed ? 'var(--color-success-700)' : 'var(--color-gray-600)',
+                opacity: isDisabled ? 0.6 : 1
+              }}
+              title={isDisabled ? 'Audio must be generated before marking as completed' : 
+                    paragraph.completed ? 'Mark as incomplete' : 'Mark as completed'}
+            >
+              <span style={{ fontSize: 'var(--font-size-sm)' }}>
+                {paragraph.completed ? '✅' : '⭕'}
+              </span>
+              <span>
+                {paragraph.completed ? 'Completed' : 'Mark Complete'}
+              </span>
+            </button>
+          );
+        })()
+        }
       </div>
 
       {isEditing ? (

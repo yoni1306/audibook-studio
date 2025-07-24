@@ -116,7 +116,7 @@ export class BulkTextFixesService {
   }
 
   /**
-   * Fetches all paragraphs in a book except the excluded one
+   * Fetches all paragraphs in a book except the excluded one and completed paragraphs
    */
   private async fetchBookParagraphs(
     bookId: string,
@@ -126,7 +126,8 @@ export class BulkTextFixesService {
       where: {
         bookId,
         id: { not: excludeParagraphId },
-      },
+        completed: false, // exclude completed paragraphs
+      } as any, // Type assertion needed until Prisma client is fully regenerated
       include: {
         page: {
           select: {

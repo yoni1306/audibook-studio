@@ -116,8 +116,8 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * Get book by ID
-     * @description Retrieve a specific book by its ID
+     * Get a book by ID
+     * @description Retrieve a specific book with all its pages and paragraphs
      */
     get: operations['BooksController_getBook'];
     put?: never;
@@ -363,6 +363,26 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
+    trace?: never;
+  };
+  '/books/paragraphs/{paragraphId}/completed': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Set paragraph completed status
+     * @description Mark a paragraph as completed or not completed
+     */
+    patch: operations['BooksController_setParagraphCompleted'];
     trace?: never;
   };
   '/books/test-endpoint': {
@@ -1127,7 +1147,10 @@ export interface operations {
   };
   BooksController_getBook: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description Filter paragraphs by completion status: all (default), completed, or incomplete */
+        completedFilter?: string;
+      };
       header?: never;
       path: {
         /** @description Book ID */
@@ -1137,8 +1160,15 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Successfully retrieved book */
+      /** @description Book retrieved successfully */
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Book not found */
+      404: {
         headers: {
           [name: string]: unknown;
         };
@@ -1481,6 +1511,35 @@ export interface operations {
         content: {
           'application/json': components['schemas']['WordCorrectionHistoryResponseDto'];
         };
+      };
+    };
+  };
+  BooksController_setParagraphCompleted: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description ID of the paragraph to update */
+        paragraphId: string;
+      };
+      cookie?: never;
+    };
+    /** @description Completed status */
+    requestBody: {
+      content: {
+        'application/json': {
+          /** @description Whether the paragraph is completed */
+          completed: boolean;
+        };
+      };
+    };
+    responses: {
+      /** @description Paragraph completed status updated successfully */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

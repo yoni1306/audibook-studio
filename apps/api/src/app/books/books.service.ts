@@ -146,7 +146,7 @@ export class BooksService {
     } as UpdateParagraphResponseDto;
   }
 
-  async getBook(id: string) {
+  async getBook(id: string, completedFilter?: 'all' | 'completed' | 'incomplete') {
     const book = await this.prisma.book.findUnique({
       where: { id },
       include: {
@@ -172,13 +172,19 @@ export class BooksService {
     }
 
     // Flatten paragraphs from all pages for frontend compatibility
-    const paragraphs = book.pages.flatMap(page => 
+    let paragraphs = book.pages.flatMap(page => 
       page.paragraphs.map(paragraph => ({
         ...paragraph,
         pageNumber: page.pageNumber,
         pageId: page.id,
       }))
     );
+
+    // Apply completion status filter if specified
+    if (completedFilter && completedFilter !== 'all') {
+      const filterCompleted = completedFilter === 'completed';
+      paragraphs = paragraphs.filter(paragraph => paragraph.completed === filterCompleted);
+    }
 
     return {
       ...book,
@@ -214,6 +220,33 @@ export class BooksService {
         },
       },
     });
+  }
+
+  async setParagraphCompleted(paragraphId: string, completed: boolean) {
+    this.logger.log(`Setting paragraph ${paragraphId} completed status to: ${completed}`);
+    
+    // First check if paragraph exists
+    const existingParagraph = await this.prisma.paragraph.findUnique({
+      where: { id: paragraphId },
+    });
+
+    if (!existingParagraph) {
+      this.logger.error(`Paragraph not found with ID: ${paragraphId}`);
+      throw new Error(`Paragraph not found with ID: ${paragraphId}`);
+    }
+
+    // Update the completed status
+    const updatedParagraph = await this.prisma.paragraph.update({
+      where: { id: paragraphId },
+      data: {
+        completed,
+        updatedAt: new Date(),
+      },
+    });
+
+    this.logger.log(`Successfully updated paragraph ${paragraphId} completed status to: ${completed}`);
+    
+    return updatedParagraph;
   }
 
   // New methods for text fixes functionality
