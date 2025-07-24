@@ -404,36 +404,6 @@ export default function BulkFixModal({
                                           marginBottom: 'var(--spacing-1)',
                                           fontSize: 'var(--font-size-xs)',
                                           fontWeight: '500'
-                                        }}>Before:</div>
-                                        <div style={{
-                                          backgroundColor: 'var(--color-error-50)',
-                                          border: '1px solid var(--color-error-200)',
-                                          borderRadius: 'var(--radius-md)',
-                                          padding: 'var(--spacing-3)',
-                                          color: 'var(--color-gray-700)',
-                                          maxHeight: '150px',
-                                          overflowY: 'auto',
-                                          whiteSpace: 'pre-wrap',
-                                          fontSize: 'var(--font-size-sm)',
-                                          lineHeight: '1.5'
-                                        }}>
-                                          {paragraph.previewBefore.split('.').map((sentence: string, idx: number) => (
-                                            <div key={idx} style={{
-                                              padding: '2px 0',
-                                              direction: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'rtl' : 'ltr',
-                                              textAlign: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'right' : 'left'
-                                            }}>
-                                              {sentence.trim() + (idx < paragraph.previewBefore.split('.').length - 1 ? '.' : '')}
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                      <div>
-                                        <div style={{
-                                          color: 'var(--color-gray-600)',
-                                          marginBottom: 'var(--spacing-1)',
-                                          fontSize: 'var(--font-size-xs)',
-                                          fontWeight: '500'
                                         }}>After:</div>
                                         <div style={{
                                           backgroundColor: 'var(--color-green-50)',
@@ -454,6 +424,36 @@ export default function BulkFixModal({
                                               textAlign: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'right' : 'left'
                                             }}>
                                               {sentence.trim() + (idx < paragraph.previewAfter.split('.').length - 1 ? '.' : '')}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <div style={{
+                                          color: 'var(--color-gray-600)',
+                                          marginBottom: 'var(--spacing-1)',
+                                          fontSize: 'var(--font-size-xs)',
+                                          fontWeight: '500'
+                                        }}>Before:</div>
+                                        <div style={{
+                                          backgroundColor: 'var(--color-error-50)',
+                                          border: '1px solid var(--color-error-200)',
+                                          borderRadius: 'var(--radius-md)',
+                                          padding: 'var(--spacing-3)',
+                                          color: 'var(--color-gray-700)',
+                                          maxHeight: '150px',
+                                          overflowY: 'auto',
+                                          whiteSpace: 'pre-wrap',
+                                          fontSize: 'var(--font-size-sm)',
+                                          lineHeight: '1.5'
+                                        }}>
+                                          {paragraph.previewBefore.split('.').map((sentence: string, idx: number) => (
+                                            <div key={idx} style={{
+                                              padding: '2px 0',
+                                              direction: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'rtl' : 'ltr',
+                                              textAlign: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'right' : 'left'
+                                            }}>
+                                              {sentence.trim() + (idx < paragraph.previewBefore.split('.').length - 1 ? '.' : '')}
                                             </div>
                                           ))}
                                         </div>
