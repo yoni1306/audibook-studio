@@ -126,14 +126,19 @@ export class BooksController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get book by ID', description: 'Retrieve a specific book by its ID' })
+  @ApiOperation({ summary: 'Get a book by ID', description: 'Retrieve a specific book with all its pages and paragraphs' })
   @ApiParam({ name: 'id', description: 'Book ID' })
-  @ApiResponse({ status: 200, description: 'Successfully retrieved book' })
-  async getBook(@Param('id') id: string) {
+  @ApiQuery({ name: 'completedFilter', required: false, description: 'Filter paragraphs by completion status: all (default), completed, or incomplete' })
+  @ApiResponse({ status: 200, description: 'Book retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Book not found' })
+  async getBook(
+    @Param('id') id: string,
+    @Query('completedFilter') completedFilter?: 'all' | 'completed' | 'incomplete'
+  ) {
     try {
       this.logger.log(`🔍 [API] Getting book with ID: ${id}`);
       
-      const book = await this.booksService.getBook(id);
+      const book = await this.booksService.getBook(id, completedFilter);
       
       if (!book) {
         this.logger.log(`📚 [API] Book not found with ID: ${id} (valid request, no data)`);
@@ -692,6 +697,56 @@ export class BooksController {
     } catch (error) {
       this.logger.error(`📜 [API] Failed to get correction history for aggregation key: ${aggregationKey}`, error);
       throw new InternalServerErrorException('Failed to get correction history');
+    }
+  }
+
+  /**
+   * Set paragraph completed status
+   */
+  @Patch(':bookId/paragraphs/:paragraphId/completed')
+  @ApiOperation({ summary: 'Set paragraph completed status', description: 'Mark a paragraph as completed or not completed' })
+  @ApiParam({ name: 'bookId', description: 'ID of the book containing the paragraph' })
+  @ApiParam({ name: 'paragraphId', description: 'ID of the paragraph to update' })
+  @ApiBody({
+    description: 'Completed status',
+    schema: {
+      type: 'object',
+      properties: {
+        completed: { type: 'boolean', description: 'Whether the paragraph is completed' }
+      },
+      required: ['completed']
+    }
+  })
+  @ApiResponse({ status: 200, description: 'Paragraph completed status updated successfully' })
+  async setParagraphCompleted(
+    @Param('bookId') bookId: string,
+    @Param('paragraphId') paragraphId: string,
+    @Body() body: { completed: boolean }
+  ) {
+    this.logger.log(`📝 [API] Setting paragraph ${paragraphId} in book ${bookId} completed status to: ${body.completed}`);
+    
+    try {
+      const updatedParagraph = await this.booksService.setParagraphCompleted(paragraphId, body.completed);
+      
+      this.logger.log(`✅ [API] Successfully updated paragraph ${paragraphId} completed status`);
+      
+      return {
+        success: true,
+        paragraph: {
+          id: updatedParagraph.id,
+          completed: updatedParagraph.completed,
+          updatedAt: updatedParagraph.updatedAt
+        },
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      this.logger.error(`❌ [API] Failed to update paragraph ${paragraphId} completed status:`, error);
+      
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      
+      throw new InternalServerErrorException('Failed to update paragraph completed status');
     }
   }
 

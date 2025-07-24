@@ -81,6 +81,7 @@ export interface Paragraph {
   audioStatus: string;
   audioS3Key: string | null;
   audioDuration: number | null;
+  completed: boolean;
 }
 
 // Base book interface
