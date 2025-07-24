@@ -349,7 +349,7 @@ export default function ExpandableCorrectionsTable({
         >
           {params.row.bookInfo?.title || 'Unknown'}
           {params.row.bookInfo?.author && (
-            <Typography variant="caption" display="block" color="text.secondary">
+            <Typography variant="caption" color="text.secondary">
               by {params.row.bookInfo.author}
             </Typography>
           )}
@@ -462,7 +462,7 @@ export default function ExpandableCorrectionsTable({
                   )}
                 </TableCell>
                 <TableCell>
-                  <Typography variant="body2">
+                  <Typography variant="body2" color="text.secondary">
                     Page {item.location?.pageNumber || 'N/A'}
                     <br />
                     Para {item.location?.paragraphIndex || 'N/A'}

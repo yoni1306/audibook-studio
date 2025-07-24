@@ -1,6 +1,7 @@
 import type { Paragraph } from '@audibook/api-client';
 import { getApiUrl } from '../../utils/api';
 import { countWords, countCharacters, getTextDirection, getTextAlign } from '../../utils/text';
+import { formatParagraphNumber } from '../../utils/paragraphUtils';
 
 interface ParagraphComponentProps {
   paragraph: Paragraph;
@@ -74,7 +75,7 @@ export default function ParagraphComponent({
       >
         <span style={{ fontSize: 'var(--font-size-sm)' }}>{getAudioStatusIcon(paragraph.audioStatus)}</span>
         <span style={{ fontWeight: '500' }}>
-          📖 Page {paragraph.pageNumber} | Paragraph {paragraph.orderIndex + 1}
+          📖 Page {paragraph.pageNumber} | Paragraph {formatParagraphNumber(paragraph.orderIndex, true)}
         </span>
         <span style={{ color: 'var(--color-gray-400)', fontSize: 'var(--font-size-xs)' }}>•</span>
         <span style={{ color: 'var(--color-gray-500)', fontSize: 'var(--font-size-xs)' }}>

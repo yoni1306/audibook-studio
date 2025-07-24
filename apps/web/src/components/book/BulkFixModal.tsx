@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useApiClient } from '../../../hooks/useApiClient';
+import { formatParagraphNumber } from '../../utils/paragraphUtils';
 import { BulkFixSuggestion } from '@audibook/api-client';
 import { createLogger } from '../../utils/logger';
 
@@ -385,9 +386,9 @@ export default function BulkFixModal({
                                   alignItems: 'center',
                                   gap: 'var(--spacing-2)'
                                 }}>
-                                  <span>📖 Page {paragraph.pageNumber ?? 'N/A'}</span>
+                                  <span>📖 Page {paragraph.pageNumber ?? 1}</span>
                                   <span>•</span>
-                                  <span>Paragraph {paragraph.orderIndex + 1}</span>
+                                  <span>Paragraph {formatParagraphNumber(paragraph.orderIndex, true)}</span>
                                   <span>•</span>
                                   <span>{paragraph.occurrences || 1} occurrence{(paragraph.occurrences || 1) > 1 ? 's' : ''}</span>
                                 </div>

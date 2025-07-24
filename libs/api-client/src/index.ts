@@ -279,6 +279,15 @@ export function createApiClient(baseUrl: string) {
       // New Aggregated Corrections API
       getAggregatedCorrections: (data: GetAggregatedCorrectionsRequest): Promise<{ data?: GetAggregatedCorrectionsResponse; error?: unknown }> =>
         client.POST('/books/aggregated-corrections', { body: data }),
+      
+      // Get correction history for a specific aggregation key
+      getCorrectionHistory: (aggregationKey: string, options?: { query?: { bookId?: string } }) =>
+        client.GET('/books/correction-history/{aggregationKey}', {
+          params: {
+            path: { aggregationKey },
+            query: options?.query,
+          },
+        }),
 
       getFixTypes: () => client.GET('/books/fix-types', {}),
       deleteBook: (bookId: string) => client.DELETE('/books/{id}', {

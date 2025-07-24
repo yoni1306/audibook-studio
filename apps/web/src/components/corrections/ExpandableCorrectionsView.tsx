@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -22,6 +22,7 @@ import {
 import { ExpandMore, ChevronRight } from '@mui/icons-material';
 import { useApiClient } from '../../../hooks/useApiClient';
 import { createLogger } from '../../utils/logger';
+import { formatLocationInfo } from '../../utils/paragraphUtils';
 import type {
   AggregatedCorrection,
   CorrectionHistoryItem,
@@ -68,15 +69,11 @@ export default function ExpandableCorrectionsView({
 
     try {
       const { data, error: apiError } = await apiClient.books.getAggregatedCorrections({
-        page: page + 1,
+        bookId: bookIdFilter || undefined,
+        originalWord: originalWordFilter || undefined,
+        fixType: fixTypeFilter as 'vowelization' | 'disambiguation' | 'punctuation' | 'sentence_break' | 'dialogue_marking' | 'expansion' | 'default' || undefined,
         limit: rowsPerPage,
-        sortBy: sortField,
-        sortOrder: sortOrder,
-        filters: {
-          bookId: bookIdFilter || undefined,
-          originalWord: originalWordFilter || undefined,
-          fixType: fixTypeFilter || undefined,
-        },
+        orderBy: sortOrder,
       });
 
       if (apiError) {
@@ -84,8 +81,8 @@ export default function ExpandableCorrectionsView({
       }
 
       if (data && typeof data === 'object') {
-        const corrections = Array.isArray(data.corrections) ? data.corrections : [];
-        const totalCount = typeof data.totalCount === 'number' ? data.totalCount : corrections.length;
+        const corrections = Array.isArray(data.aggregatedCorrections) ? data.aggregatedCorrections : [];
+        const totalCount = typeof data.total === 'number' ? data.total : corrections.length;
         
         setCorrections(corrections);
         setTotalCount(totalCount);
@@ -112,39 +109,39 @@ export default function ExpandableCorrectionsView({
     sortOrder,
   ]);
 
-  const fetchWordHistory = useCallback(async (originalWord: string) => {
+  const fetchWordHistory = useCallback(async (aggregationKey: string) => {
     // Check if already loading or loaded
-    if (expandedRows[originalWord]?.loading || expandedRows[originalWord]?.history) {
-      return;
+    if (expandedRows[aggregationKey]?.history.length > 0) {
+      return; // Already loaded
     }
 
     // Set loading state
     setExpandedRows(prev => ({
       ...prev,
-      [originalWord]: { originalWord, history: [], loading: true }
+      [aggregationKey]: { originalWord: aggregationKey, history: [], loading: true }
     }));
 
     try {
-      const { data, error: apiError } = await apiClient.books.getWordCorrectionHistory({
-        originalWord,
-        bookId: bookIdFilter || undefined,
-      });
+      const { data, error: apiError } = await apiClient.books.getCorrectionHistory(
+        aggregationKey, // Use the full aggregationKey
+        { query: { bookId: bookIdFilter || undefined } }
+      );
 
       if (apiError) {
         throw new Error(`API Error: ${apiError}`);
       }
 
-      const history = data?.history || [];
+      const history = data?.corrections || [];
       
       setExpandedRows(prev => ({
         ...prev,
-        [originalWord]: { originalWord, history, loading: false }
+        [aggregationKey]: { originalWord: aggregationKey, history, loading: false }
       }));
     } catch (err) {
       logger.error('Error fetching word history:', err);
       setExpandedRows(prev => ({
         ...prev,
-        [originalWord]: { originalWord, history: [], loading: false }
+        [aggregationKey]: { originalWord: aggregationKey, history: [], loading: false }
       }));
     }
   }, [apiClient, bookIdFilter]);
@@ -153,15 +150,15 @@ export default function ExpandableCorrectionsView({
     fetchAggregatedCorrections();
   }, [fetchAggregatedCorrections]);
 
-  const handleRowClick = (originalWord: string) => {
-    if (expandedRows[originalWord]) {
+  const handleRowClick = (aggregationKey: string) => {
+    if (expandedRows[aggregationKey]) {
       // Collapse row
       const newExpandedRows = { ...expandedRows };
-      delete newExpandedRows[originalWord];
+      delete newExpandedRows[aggregationKey];
       setExpandedRows(newExpandedRows);
     } else {
       // Expand row and fetch history
-      fetchWordHistory(originalWord);
+      fetchWordHistory(aggregationKey);
     }
   };
 
@@ -207,8 +204,8 @@ export default function ExpandableCorrectionsView({
     return rtlChars.test(text) ? 'rtl' : 'ltr';
   };
 
-  const renderExpandedRow = (originalWord: string) => {
-    const expandedData = expandedRows[originalWord];
+  const renderExpandedRow = (aggregationKey: string) => {
+    const expandedData = expandedRows[aggregationKey];
     
     if (!expandedData) return null;
 
@@ -247,17 +244,14 @@ export default function ExpandableCorrectionsView({
           <Collapse in={true} timeout="auto" unmountOnExit>
             <Box sx={{ p: 2, bgcolor: 'grey.50' }}>
               <Typography variant="h6" gutterBottom>
-                Correction History for "{originalWord}"
+                Correction History for "{aggregationKey}"
               </Typography>
               <Divider sx={{ mb: 2 }} />
               
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Correction</TableCell>
-                    <TableCell>Context</TableCell>
-                    <TableCell>Fix Type</TableCell>
-                    <TableCell>Book</TableCell>
+                    <TableCell width={600}>Context</TableCell>
                     <TableCell>Location</TableCell>
                     <TableCell>Date</TableCell>
                   </TableRow>
@@ -268,55 +262,19 @@ export default function ExpandableCorrectionsView({
                       <TableCell>
                         <Box
                           sx={{
-                            direction: detectTextDirection(item.correctedWord),
-                            textAlign: detectTextDirection(item.correctedWord) === 'rtl' ? 'right' : 'left',
-                            color: 'success.main',
-                            fontWeight: 500,
-                          }}
-                        >
-                          {item.correctedWord}
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Box
-                          sx={{
                             direction: detectTextDirection(item.sentenceContext),
                             textAlign: detectTextDirection(item.sentenceContext) === 'rtl' ? 'right' : 'left',
-                            maxWidth: 300,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
+                            maxWidth: 600,
+                            wordWrap: 'break-word',
+                            whiteSpace: 'normal',
                           }}
-                          title={item.sentenceContext}
                         >
                           {item.sentenceContext}
                         </Box>
                       </TableCell>
                       <TableCell>
-                        {item.fixType ? (
-                          <Chip
-                            label={item.fixType}
-                            size="small"
-                            color={getChipColor(item.fixType)}
-                            variant="filled"
-                          />
-                        ) : (
-                          <Typography variant="body2" color="text.secondary">
-                            N/A
-                          </Typography>
-                        )}
-                      </TableCell>
-                      <TableCell>
                         <Typography variant="body2">
-                          {'Unknown'} {/* bookInfo is Record<string, never> in generated types */}
-                        </Typography>
-                        {/* Author info not available in current API response structure */}
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          Page {item.location?.pageNumber || 'N/A'}
-                          <br />
-                          Para {item.location?.paragraphIndex || 'N/A'}
+                          {formatLocationInfo(item.pageNumber, item.paragraphOrderIndex, true)}
                         </Typography>
                       </TableCell>
                       <TableCell>
@@ -406,13 +364,13 @@ export default function ExpandableCorrectionsView({
               </TableRow>
             ) : (
               corrections.flatMap((correction) => {
-                const isExpanded = !!expandedRows[correction.originalWord];
+                const isExpanded = !!expandedRows[correction.aggregationKey];
                 return [
                   <TableRow
-                    key={correction.originalWord}
+                    key={`main-${correction.aggregationKey}`}
                     hover
                     sx={{ cursor: 'pointer' }}
-                    onClick={() => handleRowClick(correction.originalWord)}
+                    onClick={() => handleRowClick(correction.aggregationKey)}
                   >
                     <TableCell>
                       <IconButton size="small">
@@ -434,13 +392,13 @@ export default function ExpandableCorrectionsView({
                     <TableCell>
                       <Box
                         sx={{
-                          direction: detectTextDirection(correction.latestCorrection),
-                          textAlign: detectTextDirection(correction.latestCorrection) === 'rtl' ? 'right' : 'left',
+                          direction: detectTextDirection(correction.correctedWord),
+                          textAlign: detectTextDirection(correction.correctedWord) === 'rtl' ? 'right' : 'left',
                           color: 'success.main',
                           fontWeight: 500,
                         }}
                       >
-                        {correction.latestCorrection}
+                        {correction.correctedWord}
                       </Box>
                     </TableCell>
                     <TableCell align="center">
@@ -452,55 +410,54 @@ export default function ExpandableCorrectionsView({
                       />
                     </TableCell>
                     <TableCell align="center">
-                      {correction.latestFixType ? (
+                      {correction.fixType ? (
                         <Chip
-                          label={correction.latestFixType}
+                          label={correction.fixType}
                           size="small"
-                          color={getChipColor(correction.latestFixType)}
+                          color={getChipColor(correction.fixType)}
                           variant="filled"
                         />
                       ) : (
                         <Typography variant="body2" color="text.secondary">
                           N/A
-                        </Typography>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Link
-                        component="button"
-                        variant="body2"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          // Navigate to book details if needed
-                        }}
-                        sx={{ textAlign: 'left', textDecoration: 'none' }}
-                      >
-                        {'Unknown'} {/* bookInfo is Record<string, never> in generated types */}
-                        {/* Author info not available in current API response structure */}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">
-                        {formatDate(correction.lastCorrectedAt)}
                       </Typography>
-                    </TableCell>
-                  </TableRow>,
-                  ...(isExpanded ? [renderExpandedRow(correction.originalWord)] : [])
-                ];
-              })
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
-      <TablePagination
-        rowsPerPageOptions={[10, 25, 50, 100]}
-        component="div"
-        count={totalCount}
-        rowsPerPage={rowsPerPage}
-        page={page}
-        onPageChange={handleChangePage}
-        onRowsPerPageChange={handleChangeRowsPerPage}
-      />
-    </Paper>
-  );
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Link
+                      href={`/books/${correction.corrections?.[0]?.id || '#'}`}
+                      variant="body2"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Navigate to book details if needed
+                      }}
+                      sx={{ textAlign: 'left', textDecoration: 'none' }}
+                    >
+                      {correction.corrections?.[0]?.bookTitle || 'Unknown'}
+                    </Link>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2">
+                      {formatDate(correction.lastCorrectionAt)}
+                    </Typography>
+                  </TableCell>
+                </TableRow>,
+                ...(isExpanded ? [<React.Fragment key={`expanded-${correction.aggregationKey}`}>{renderExpandedRow(correction.aggregationKey)}</React.Fragment>] : [])
+              ];
+            })
+          )}
+        </TableBody>
+      </Table>
+    </TableContainer>
+    <TablePagination
+      rowsPerPageOptions={[10, 25, 50, 100]}
+      component="div"
+      count={totalCount}
+      rowsPerPage={rowsPerPage}
+      page={page}
+      onPageChange={handleChangePage}
+      onRowsPerPageChange={handleChangeRowsPerPage}
+    />
+  </Paper>
+);
 }
