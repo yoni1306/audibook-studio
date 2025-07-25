@@ -141,6 +141,42 @@ export interface GetBookByIdResponse {
   timestamp: string;
 }
 
+// Export-related types
+export interface PageExportStatus {
+  id: string;
+  pageNumber: number;
+  completedParagraphsCount: number;
+  totalParagraphsCount: number;
+  audioStatus: string | null;
+  audioDuration: number | null;
+  audioS3Key: string | null;
+  willBeExported: boolean;
+}
+
+export interface BookExportStatus {
+  bookId: string;
+  bookTitle: string;
+  bookAuthor: string | null;
+  totalPages: number;
+  exportablePages: number;
+  pagesInProgress: number;
+  pagesReady: number;
+  pagesWithErrors: number;
+  exportStatus: 'not_started' | 'in_progress' | 'completed' | 'partial_errors' | 'failed';
+  pages: PageExportStatus[];
+  totalDuration?: number;
+  lastUpdated: string;
+}
+
+export interface StartBookExportResponse {
+  success: boolean;
+  message: string;
+  pagesQueued: number;
+  pagesSkipped: number;
+  jobIds: string[];
+  timestamp: string;
+}
+
 export interface TextChange {
   type: 'insertion' | 'deletion' | 'substitution';
   position: number;
@@ -294,6 +330,24 @@ export function createApiClient(baseUrl: string) {
       deleteBook: (bookId: string) => client.DELETE('/books/{id}', {
         params: { path: { id: bookId } },
       }),
+      
+      // Export API (using type assertions until OpenAPI spec is updated)
+      getExportStatus: (bookId: string): Promise<{ data?: BookExportStatus; error?: unknown }> =>
+        client.GET('/books/{id}/export/status' as any, {
+          params: { path: { id: bookId } },
+        }),
+      startExport: (bookId: string): Promise<{ data?: StartBookExportResponse; error?: unknown }> =>
+        client.POST('/books/{id}/export/start' as any, {
+          params: { path: { id: bookId } },
+        }),
+      startPageExport: (bookId: string, pageId: string): Promise<{ data?: StartBookExportResponse; error?: unknown }> =>
+        client.POST('/books/{id}/pages/{pageId}/export' as any, {
+          params: { path: { id: bookId, pageId } },
+        }),
+      deletePageAudio: (bookId: string, pageId: string): Promise<{ data?: { success: boolean; message: string }; error?: unknown }> =>
+        client.DELETE('/books/{id}/pages/{pageId}/audio' as any, {
+          params: { path: { id: bookId, pageId } },
+        }),
     },
 
     // Queue API

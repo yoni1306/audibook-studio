@@ -2,6 +2,7 @@ import { forwardRef, Module } from '@nestjs/common';
 import { BooksService } from './books.service';
 import { BooksController } from './books.controller';
 import { TextFixesService } from './text-fixes.service';
+import { BooksExportService } from './books-export.service';
 import { BulkTextFixesService } from './bulk-text-fixes.service';
 import { CorrectionLearningService } from './correction-learning.service';
 import { TextCorrectionRepository } from './text-correction.repository';
@@ -21,6 +22,7 @@ import { ExpansionHandler } from './fix-type-handlers/expansion-handler';
   controllers: [BooksController, TextFixesController],
   providers: [
     BooksService,
+    BooksExportService,
     TextFixesService,
     BulkTextFixesService,
     CorrectionLearningService,
