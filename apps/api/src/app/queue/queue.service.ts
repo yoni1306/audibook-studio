@@ -44,4 +44,23 @@ export class QueueService {
     );
     return { jobId: job.id };
   }
+
+  async addPageAudioCombinationJob(data: {
+    pageId: string;
+    bookId: string;
+  }) {
+    const correlationId = getCurrentCorrelationId();
+    const job = await this.audioQueue.add('combine-page-audio', {
+      ...data,
+      correlationId,
+    });
+    this.logger.log(
+      `Added page audio combination job ${job.id} for page ${data.pageId}`,
+      {
+        jobId: job.id,
+        correlationId,
+      }
+    );
+    return { jobId: job.id };
+  }
 }

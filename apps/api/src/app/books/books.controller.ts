@@ -1,10 +1,12 @@
 import { Controller, Post, Get, Patch, Delete, Param, Body, Query, NotFoundException, BadRequestException, Redirect, Logger, InternalServerErrorException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { BooksService } from './books.service';
+import { BooksExportService } from './books-export.service';
 import { BulkTextFixesService } from './bulk-text-fixes.service';
 import { CorrectionLearningService } from './correction-learning.service';
 import { TextCorrectionRepository } from './text-correction.repository';
 import { UpdateParagraphRequestDto, UpdateParagraphResponseDto, BulkFixSuggestion as DtoBulkFixSuggestion, SuggestedFixesResponseDto } from './dto/paragraph-update.dto';
+import { BookExportStatusDto, StartBookExportResponseDto } from './dto/book-export.dto';
 import { 
   GetAllCorrectionsDto,
   GetAllCorrectionsResponseDto,
@@ -31,6 +33,7 @@ export class BooksController {
   
   constructor(
     private booksService: BooksService,
+    private booksExportService: BooksExportService,
     private bulkTextFixesService: BulkTextFixesService,
     private correctionLearningService: CorrectionLearningService,
     private textCorrectionRepository: TextCorrectionRepository,
@@ -747,6 +750,122 @@ export class BooksController {
       }
       
       throw new InternalServerErrorException('Failed to update paragraph completed status');
+    }
+  }
+
+  /**
+   * Get book export status
+   */
+  @Get(':id/export/status')
+  @ApiOperation({ summary: 'Get book export status', description: 'Get the current export status for a book, including page-level details' })
+  @ApiParam({ name: 'id', description: 'ID of the book to get export status for' })
+  @ApiResponse({ status: 200, description: 'Book export status retrieved successfully', type: BookExportStatusDto })
+  async getBookExportStatus(@Param('id') bookId: string): Promise<BookExportStatusDto> {
+    this.logger.log(`📊 [API] Getting export status for book: ${bookId}`);
+    
+    try {
+      const exportStatus = await this.booksExportService.getBookExportStatus(bookId);
+      
+      this.logger.log(`✅ [API] Successfully retrieved export status for book ${bookId}`);
+      
+      return exportStatus;
+    } catch (error) {
+      this.logger.error(`❌ [API] Failed to get export status for book ${bookId}:`, error);
+      
+      if (error.message.includes('Book not found')) {
+        throw new NotFoundException(`Book not found: ${bookId}`);
+      }
+      
+      throw new InternalServerErrorException('Failed to get book export status');
+    }
+  }
+
+  /**
+   * Start book export process
+   */
+  @Post(':id/export/start')
+  @ApiOperation({ summary: 'Start book export', description: 'Start the audio export process for a book. Combines completed paragraphs audio into page-level audio files.' })
+  @ApiParam({ name: 'id', description: 'ID of the book to export' })
+  @ApiResponse({ status: 200, description: 'Book export started successfully', type: StartBookExportResponseDto })
+  async startBookExport(@Param('id') bookId: string): Promise<StartBookExportResponseDto> {
+    this.logger.log(`🚀 [API] Starting export for book: ${bookId}`);
+    
+    try {
+      const exportResult = await this.booksExportService.startBookExport(bookId);
+      
+      this.logger.log(`✅ [API] Successfully started export for book ${bookId}: ${exportResult.pagesQueued} pages queued`);
+      
+      return exportResult;
+    } catch (error) {
+      this.logger.error(`❌ [API] Failed to start export for book ${bookId}:`, error);
+      
+      if (error.message.includes('Book not found')) {
+        throw new NotFoundException(`Book not found: ${bookId}`);
+      }
+      
+      throw new InternalServerErrorException('Failed to start book export');
+    }
+  }
+
+  /**
+   * Start export for a specific page
+   */
+  @Post(':id/pages/:pageId/export')
+  @ApiOperation({ summary: 'Start page export', description: 'Start the audio export process for a specific page.' })
+  @ApiParam({ name: 'id', description: 'ID of the book' })
+  @ApiParam({ name: 'pageId', description: 'ID of the page to export' })
+  @ApiResponse({ status: 200, description: 'Page export started successfully', type: StartBookExportResponseDto })
+  async startPageExport(
+    @Param('id') bookId: string,
+    @Param('pageId') pageId: string
+  ): Promise<StartBookExportResponseDto> {
+    this.logger.log(`🚀 [API] Starting export for page: ${pageId} in book: ${bookId}`);
+    
+    try {
+      const exportResult = await this.booksExportService.startPageExport(bookId, pageId);
+      
+      this.logger.log(`✅ [API] Successfully started export for page ${pageId} in book ${bookId}`);
+      
+      return exportResult;
+    } catch (error) {
+      this.logger.error(`❌ [API] Failed to start export for page ${pageId} in book ${bookId}:`, error);
+      
+      if (error.message.includes('Page not found')) {
+        throw new NotFoundException(`Page not found: ${pageId}`);
+      }
+      
+      throw new InternalServerErrorException('Failed to start page export');
+    }
+  }
+
+  /**
+   * Delete exported audio for a specific page
+   */
+  @Delete(':id/pages/:pageId/audio')
+  @ApiOperation({ summary: 'Delete page audio', description: 'Delete the exported audio file for a specific page.' })
+  @ApiParam({ name: 'id', description: 'ID of the book' })
+  @ApiParam({ name: 'pageId', description: 'ID of the page' })
+  @ApiResponse({ status: 200, description: 'Page audio deleted successfully' })
+  async deletePageAudio(
+    @Param('id') bookId: string,
+    @Param('pageId') pageId: string
+  ) {
+    this.logger.log(`🗑️ [API] Deleting audio for page: ${pageId} in book: ${bookId}`);
+    
+    try {
+      const result = await this.booksExportService.deletePageAudio(bookId, pageId);
+      
+      this.logger.log(`✅ [API] Successfully processed delete request for page ${pageId} in book ${bookId}`);
+      
+      return result;
+    } catch (error) {
+      this.logger.error(`❌ [API] Failed to delete audio for page ${pageId} in book ${bookId}:`, error);
+      
+      if (error.message.includes('Page not found')) {
+        throw new NotFoundException(`Page not found: ${pageId}`);
+      }
+      
+      throw new InternalServerErrorException('Failed to delete page audio');
     }
   }
 
