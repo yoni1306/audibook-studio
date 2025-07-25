@@ -96,7 +96,8 @@ export default function ParagraphComponent({
           left: 'var(--spacing-4)',
           display: 'flex',
           alignItems: 'center',
-          gap: 'var(--spacing-2)'
+          gap: 'var(--spacing-2)',
+          zIndex: 10 // Ensure it stays above other content
         }}
       >
         {(() => {
@@ -147,9 +148,10 @@ export default function ParagraphComponent({
       </div>
 
       {isEditing ? (
-        <div style={{ marginTop: 'var(--spacing-5)' }}>
+        <div style={{ marginTop: 'var(--spacing-6)' }}>
           <div style={{
-            marginBottom: 'var(--spacing-3)',
+            marginBottom: 'var(--spacing-4)',
+            paddingTop: 'var(--spacing-2)', // Better vertical padding
             fontSize: 'var(--font-size-sm)',
             color: 'var(--color-gray-600)',
             fontWeight: '500'
