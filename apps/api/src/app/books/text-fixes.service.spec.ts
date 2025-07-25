@@ -166,8 +166,8 @@ describe('TextFixesService', () => {
           aggregationKey: 'שגיאה|תיקון',
           sentenceContext: 'זה טקסט עם שגיאה בעברית',
           fixType: FixType.disambiguation,
-          ttsModel: undefined,
-          ttsVoice: undefined,
+          ttsModel: null,
+          ttsVoice: null,
         },
       ];
 
@@ -205,8 +205,8 @@ describe('TextFixesService', () => {
             aggregationKey: 'שגיאה|תיקון',
             sentenceContext: 'זה טקסט עם שגיאה בעברית',
             fixType: FixType.disambiguation,
-            ttsModel: undefined,
-            ttsVoice: undefined,
+            ttsModel: null,
+            ttsVoice: null,
           }),
           expect.objectContaining({
             paragraphId: mockParagraphId,
@@ -216,8 +216,8 @@ describe('TextFixesService', () => {
             aggregationKey: 'עם|עם',
             sentenceContext: 'זה טקסט עם שגיאה בעברית',
             fixType: FixType.disambiguation,
-            ttsModel: undefined,
-            ttsVoice: undefined,
+            ttsModel: null,
+            ttsVoice: null,
           }),
         ]),
       });
@@ -242,8 +242,8 @@ describe('TextFixesService', () => {
             aggregationKey: 'שגיאה|תיקון',
             sentenceContext: 'זה טקסט עם שגיאה בעברית',
             fixType: FixType.disambiguation,
-            ttsModel: undefined,
-            ttsVoice: undefined,
+            ttsModel: null,
+            ttsVoice: null,
           },
         ],
       });
@@ -290,8 +290,8 @@ describe('TextFixesService', () => {
             aggregationKey: 'לא_קיים|תיקון',
             sentenceContext: '',
             fixType: FixType.disambiguation,
-            ttsModel: undefined,
-            ttsVoice: undefined,
+            ttsModel: null,
+            ttsVoice: null,
           },
         ],
       });

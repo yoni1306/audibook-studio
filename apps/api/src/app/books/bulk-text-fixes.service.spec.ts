@@ -47,6 +47,7 @@ describe('BulkTextFixesService', () => {
       pageId: 'page-1',
       orderIndex: 0,
       content: 'זוהי פסקה עם המילה וגם בתוכה.',
+      completed: false,
       audioS3Key: null,
       audioStatus: AudioStatus.PENDING,
       audioDuration: null,
@@ -62,6 +63,7 @@ describe('BulkTextFixesService', () => {
       pageId: 'page-1',
       orderIndex: 1,
       content: 'המילה אותיות היא חלק ממילה אחרת ולא אמורה להיות מוחלפת.',
+      completed: false,
       audioS3Key: null,
       audioStatus: AudioStatus.PENDING,
       audioDuration: null,
@@ -77,6 +79,7 @@ describe('BulkTextFixesService', () => {
       pageId: 'page-1',
       orderIndex: 2,
       content: 'המילה אות-יד מחוברת עם מקף ולא אמורה להיות מוחלפת.',
+      completed: false,
       audioS3Key: null,
       audioStatus: AudioStatus.PENDING,
       audioDuration: null,
@@ -92,6 +95,7 @@ describe('BulkTextFixesService', () => {
       pageId: 'page-2',
       orderIndex: 0,
       content: 'הנשיא של ארה״ב אמר כי כל אות וגם כל מילה חשובים.',
+      completed: false,
       audioS3Key: null,
       audioStatus: AudioStatus.PENDING,
       audioDuration: null,
@@ -107,6 +111,7 @@ describe('BulkTextFixesService', () => {
       pageId: 'page-2',
       orderIndex: 1,
       content: 'כל אות במילה הזו חשובה מאוד.',
+      completed: false,
       audioS3Key: null,
       audioStatus: AudioStatus.PENDING,
       audioDuration: null,
@@ -122,6 +127,7 @@ describe('BulkTextFixesService', () => {
       pageId: 'page-3',
       orderIndex: 0,
       content: 'נשיא ארה״ב ביקר בישראל החודש.',
+      completed: false,
       audioS3Key: null,
       audioStatus: AudioStatus.PENDING,
       audioDuration: null,
@@ -225,6 +231,7 @@ describe('BulkTextFixesService', () => {
         where: {
           bookId: mockBookId,
           id: { not: mockParagraphId },
+          completed: false,
         },
         include: {
           page: {
@@ -302,6 +309,7 @@ describe('BulkTextFixesService', () => {
           pageId: 'page-1',
           orderIndex: 0,
           content: 'זוהי פסקה עם המילה שלום! עם סימן קריאה.',
+          completed: false,
           audioS3Key: null,
           audioStatus: AudioStatus.PENDING,
           audioDuration: null,
@@ -371,6 +379,7 @@ describe('BulkTextFixesService', () => {
           pageId: 'page-1',
           orderIndex: 0,
           content: 'זוהי אות מיוחדת.',
+          completed: false,
           audioS3Key: null,
           audioStatus: AudioStatus.PENDING,
           audioDuration: null,
@@ -425,6 +434,7 @@ describe('BulkTextFixesService', () => {
           pageId: 'page-1',
           orderIndex: 0,
           content: 'זהו ספר טוב מאוד.',
+          completed: false,
           audioS3Key: null,
           audioStatus: AudioStatus.PENDING,
           audioDuration: null,
@@ -438,6 +448,7 @@ describe('BulkTextFixesService', () => {
           pageId: 'page-1',
           orderIndex: 1,
           content: 'זהו ספריה גדולה מאוד.',
+          completed: false,
           audioS3Key: null,
           audioStatus: AudioStatus.PENDING,
           audioDuration: null,
@@ -621,8 +632,9 @@ describe('BulkTextFixesService', () => {
         id: 'p1',
         bookId: mockBookId,
         pageId: 'page-1',
-        orderIndex: 0,
+        orderIndex: 1,
         content: 'זהו ספר טוב מאוד.',
+        completed: false,
         audioS3Key: null,
         audioStatus: AudioStatus.PENDING,
         audioDuration: null,
@@ -636,6 +648,7 @@ describe('BulkTextFixesService', () => {
         pageId: 'page-1',
         orderIndex: 1,
         content: 'זהו ספריה גדולה מאוד.',
+        completed: false,
         audioS3Key: null,
         audioStatus: AudioStatus.PENDING,
         audioDuration: null,
@@ -690,6 +703,7 @@ describe('BulkTextFixesService', () => {
           orderIndex: 0,
           content:
             'יש גם יסוד לגיטימי לסברה שבמדינות הקרות הללו מעדיפים לשתות על פני לאכול, שמלחמת הקיום היא יותר נגד איתני הטבע והקור, ושטעמם של אנשים הוכתב בבית.',
+          completed: false,
           audioS3Key: null,
           audioStatus: AudioStatus.PENDING,
           audioDuration: null,
@@ -703,6 +717,7 @@ describe('BulkTextFixesService', () => {
           pageId: 'page-1',
           orderIndex: 1,
           content: 'הוא כתב מכתב ארוך לחברו.',
+          completed: false,
           audioS3Key: null,
           audioStatus: AudioStatus.PENDING,
           audioDuration: null,
@@ -746,6 +761,7 @@ describe('BulkTextFixesService', () => {
           pageId: 'page-1',
           orderIndex: 0,
           content: 'האורח הגיע לביקור באורח נפלא. אורך הדרך היה ארוך מאוד.',
+          completed: false,
           audioS3Key: null,
           audioStatus: AudioStatus.PENDING,
           audioDuration: null,
@@ -759,6 +775,7 @@ describe('BulkTextFixesService', () => {
           pageId: 'page-1',
           orderIndex: 1,
           content: 'באור הירח הם הלכו בדרך.',
+          completed: false,
           audioS3Key: null,
           audioStatus: AudioStatus.PENDING,
           audioDuration: null,
@@ -772,6 +789,7 @@ describe('BulkTextFixesService', () => {
           pageId: 'page-1',
           orderIndex: 2,
           content: 'הוא ראה אור בחושך.',
+          completed: false,
           audioS3Key: null,
           audioStatus: AudioStatus.PENDING,
           audioDuration: null,
@@ -822,6 +840,7 @@ describe('BulkTextFixesService', () => {
           pageId: 'page-1',
           orderIndex: 0,
           content: 'בית הספר-היסודי ובית-ספר תיכון.',
+          completed: false,
           audioS3Key: null,
           audioStatus: AudioStatus.PENDING,
           audioDuration: null,
@@ -835,6 +854,7 @@ describe('BulkTextFixesService', () => {
           pageId: 'page-1',
           orderIndex: 1,
           content: 'הספר טוב, ספר אחר.',
+          completed: false,
           audioS3Key: null,
           audioStatus: AudioStatus.PENDING,
           audioDuration: null,
@@ -879,6 +899,7 @@ describe('BulkTextFixesService', () => {
           pageId: 'page-1',
           orderIndex: 1,
           content: 'יש לי 15 ספרים ו-25 עטים, אבל רק 5 מחברות.',
+          completed: false,
           audioS3Key: null,
           audioStatus: AudioStatus.PENDING,
           audioDuration: null,
@@ -921,6 +942,7 @@ describe('BulkTextFixesService', () => {
           pageId: 'page-1',
           orderIndex: 1,
           content: 'יש 10 ספרים, 100 עמודים, ו-10 פרקים.',
+          completed: false,
           audioS3Key: null,
           audioStatus: AudioStatus.PENDING,
           audioDuration: null,
@@ -963,6 +985,7 @@ describe('BulkTextFixesService', () => {
           pageId: 'page-1',
           orderIndex: 1,
           content: 'יש לי 3 ספרים, 13 עמודים, וספר אחד נוסף.',
+          completed: false,
           audioS3Key: null,
           audioStatus: AudioStatus.PENDING,
           audioDuration: null,
@@ -1005,6 +1028,7 @@ describe('BulkTextFixesService', () => {
           pageId: 'page-1',
           orderIndex: 1,
           content: 'יש לי ספרים רבים, אבל ספר אחד טוב.',
+          completed: false,
           audioS3Key: null,
           audioStatus: AudioStatus.PENDING,
           audioDuration: null,
@@ -1048,6 +1072,7 @@ describe('BulkTextFixesService', () => {
           orderIndex: 1,
           content:
             'ב־2 ביוני 1930, והוא בן 45 בלבד, תלה את עצמו בסטודיו שלו אחרי שחתך את ורידיו.',
+          completed: false,
           audioS3Key: null,
           audioStatus: AudioStatus.PENDING,
           audioDuration: null,
@@ -2064,6 +2089,190 @@ describe('BulkTextFixesService', () => {
       expect(sentences[0]).not.toContain('אין צורך');
       expect(sentences[0]).not.toContain('ההיסטוריה');
       expect(sentences[0]).not.toContain(';');
+    });
+  });
+
+  describe('Completed Paragraphs Exclusion', () => {
+    it('should exclude completed paragraphs from bulk suggestions', async () => {
+      // Test scenario:
+      // 1. 2 paragraphs with similar word X, both incomplete
+      // 2. Edit word in para A, observe bulk suggestion contains para B but don't apply
+      // 3. Change word back to X in para A, set para B as completed
+      // 4. Repeat step 2, observe no bulk suggestions because para B is completed
+      
+      const testWord = 'שלום';
+      const correctedWord = 'שָׁלוֹם';
+      const bookId = 'test-book-123';
+      
+      // Mock paragraphs: both initially incomplete with the same word
+      const mockParagraphA = {
+        id: 'paragraph-A',
+        bookId,
+        pageId: 'page-1',
+        orderIndex: 0,
+        content: `זוהי פסקה A עם המילה ${testWord} בתוכה.`,
+        completed: false, // Initially incomplete
+        audioS3Key: null,
+        audioStatus: AudioStatus.PENDING,
+        audioDuration: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        page: { pageNumber: 1 },
+      };
+      
+      const mockParagraphB = {
+        id: 'paragraph-B',
+        bookId,
+        pageId: 'page-1',
+        orderIndex: 1,
+        content: `זוהי פסקה B עם המילה ${testWord} בתוכה.`,
+        completed: false, // Initially incomplete
+        audioS3Key: null,
+        audioStatus: AudioStatus.PENDING,
+        audioDuration: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        page: { pageNumber: 1 },
+      };
+      
+      const wordChanges = [{
+        originalWord: testWord,
+        correctedWord,
+        position: mockParagraphA.content.indexOf(testWord),
+        fixType: FixType.vowelization,
+      }];
+      
+      // Step 1 & 2: Both paragraphs incomplete - should find bulk suggestions
+      // Mock should only return paragraph B since paragraph A is being edited (excluded by id: { not: mockParagraphA.id })
+      prismaService.paragraph.findMany = jest.fn().mockResolvedValue([
+        mockParagraphB, // Only paragraph B should be returned since A is excluded
+      ]);
+      
+      let result = await service.findSimilarFixesInBook(
+        bookId,
+        mockParagraphA.id,
+        wordChanges
+      );
+      
+      // Should find paragraph B in bulk suggestions (both are incomplete)
+      expect(result).toHaveLength(1);
+      expect(result[0].paragraphs).toHaveLength(1);
+      expect(result[0].paragraphs[0].id).toBe('paragraph-B');
+      expect(result[0].originalWord).toBe(testWord);
+      expect(result[0].correctedWord).toBe(correctedWord);
+      
+      // Step 3: Repeat the search with paragraph B completed
+      // Mock should return empty array since paragraph B is completed (excluded by completed: false)
+      // and paragraph A is being edited (excluded by id: { not: mockParagraphA.id })
+      prismaService.paragraph.findMany = jest.fn().mockResolvedValue([]);
+      
+      result = await service.findSimilarFixesInBook(
+        bookId,
+        mockParagraphA.id,
+        wordChanges
+      );
+      
+      // Should find NO bulk suggestions because paragraph B is completed
+      expect(result).toHaveLength(1);
+      expect(result[0].paragraphs).toHaveLength(0); // No paragraphs should be suggested
+      expect(result[0].originalWord).toBe(testWord);
+      expect(result[0].correctedWord).toBe(correctedWord);
+      
+      // Verify that the query excludes completed paragraphs
+      expect(prismaService.paragraph.findMany).toHaveBeenCalledWith({
+        where: {
+          bookId,
+          id: { not: mockParagraphA.id },
+          completed: false, // This is the key: should exclude completed paragraphs
+        },
+        include: {
+          page: {
+            select: {
+              pageNumber: true,
+            },
+          },
+        },
+        orderBy: [{ page: { pageNumber: 'asc' } }, { orderIndex: 'asc' }],
+      });
+    });
+    
+    it('should include incomplete paragraphs and exclude completed ones in mixed scenarios', async () => {
+      // Test with multiple paragraphs: some completed, some incomplete
+      const testWord = 'בדיקה';
+      const correctedWord = 'בְּדִיקָה';
+      const bookId = 'test-book-456';
+      
+      const mockParagraphs = [
+        {
+          id: 'paragraph-1',
+          bookId,
+          pageId: 'page-1',
+          orderIndex: 0,
+          content: `פסקה 1 עם ${testWord} - לא הושלמה`,
+          completed: false, // Incomplete - should be included
+          audioS3Key: null,
+          audioStatus: AudioStatus.PENDING,
+          audioDuration: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          page: { pageNumber: 1 },
+        },
+        {
+          id: 'paragraph-2',
+          bookId,
+          pageId: 'page-1',
+          orderIndex: 1,
+          content: `פסקה 2 עם ${testWord} - הושלמה`,
+          completed: true, // Completed - should be excluded
+          audioS3Key: 'audio-key-2',
+          audioStatus: AudioStatus.READY,
+          audioDuration: 5000,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          page: { pageNumber: 1 },
+        },
+        {
+          id: 'paragraph-3',
+          bookId,
+          pageId: 'page-2',
+          orderIndex: 0,
+          content: `פסקה 3 עם ${testWord} - לא הושלמה`,
+          completed: false, // Incomplete - should be included
+          audioS3Key: null,
+          audioStatus: AudioStatus.PENDING,
+          audioDuration: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          page: { pageNumber: 2 },
+        },
+      ];
+      
+      const wordChanges = [{
+        originalWord: testWord,
+        correctedWord,
+        position: 10,
+        fixType: FixType.vowelization,
+      }];
+      
+      // Mock to return only incomplete paragraphs (excluding completed ones)
+      const incompleteParagraphs = mockParagraphs.filter(p => !p.completed && p.id !== 'paragraph-1');
+      prismaService.paragraph.findMany = jest.fn().mockResolvedValue(incompleteParagraphs);
+      
+      const result = await service.findSimilarFixesInBook(
+        bookId,
+        'paragraph-1', // Editing paragraph 1
+        wordChanges
+      );
+      
+      // Should find only paragraph 3 (paragraph 2 is completed, so excluded)
+      expect(result).toHaveLength(1);
+      expect(result[0].paragraphs).toHaveLength(1);
+      expect(result[0].paragraphs[0].id).toBe('paragraph-3');
+      
+      // Verify completed paragraph 2 is not included
+      const paragraphIds = result[0].paragraphs.map(p => p.id);
+      expect(paragraphIds).not.toContain('paragraph-2');
+      expect(paragraphIds).toContain('paragraph-3');
     });
   });
 });
