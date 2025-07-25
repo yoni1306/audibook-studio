@@ -149,11 +149,18 @@ export default function BookDetailPage() {
       });
 
       if (!error && result) {
-
-
-        // Check if there are bulk fix suggestions
-        if (result.bulkSuggestions && result.bulkSuggestions.length > 0) {
-
+        // Check if there are bulk fix suggestions with actual counts > 0
+        const hasSuggestions = result.bulkSuggestions && 
+          Array.isArray(result.bulkSuggestions) && 
+          result.bulkSuggestions.length > 0 &&
+          result.bulkSuggestions.some(suggestion => suggestion.count > 0);
+        logger.info(`Bulk suggestions check: ${hasSuggestions ? 'has suggestions' : 'no suggestions'}`, {
+          bulkSuggestions: result.bulkSuggestions,
+          length: result.bulkSuggestions?.length || 0,
+          totalCount: result.bulkSuggestions?.reduce((sum, s) => sum + s.count, 0) || 0
+        });
+        
+        if (hasSuggestions && result.bulkSuggestions) {
           setPendingBulkFix({
             paragraphId,
             content: editContent,
@@ -161,12 +168,12 @@ export default function BookDetailPage() {
             audioRequested: false,
           });
           setShowBulkFixModal(true);
+        } else {
+          // No suggestions - proceed with normal cleanup
+          await fetchBook();
+          setEditingId(null);
+          setEditContent('');
         }
-        // No action needed for other cases
-
-        await fetchBook();
-        setEditingId(null);
-        setEditContent('');
       } else {
         alert('Failed to save changes');
       }
@@ -203,9 +210,13 @@ export default function BookDetailPage() {
 
       if (!error && result) {
         
-        // Check if there are bulk fix suggestions
-        if (result.bulkSuggestions && result.bulkSuggestions.length > 0) {
-
+        // Check if there are bulk fix suggestions with actual counts > 0
+        const hasSuggestions = result.bulkSuggestions && 
+          Array.isArray(result.bulkSuggestions) && 
+          result.bulkSuggestions.length > 0 &&
+          result.bulkSuggestions.some(suggestion => suggestion.count > 0);
+        
+        if (hasSuggestions && result.bulkSuggestions) {
           setPendingBulkFix({
             paragraphId,
             content,
@@ -213,10 +224,10 @@ export default function BookDetailPage() {
             audioRequested: true, // Audio was requested in this case
           });
           setShowBulkFixModal(true);
+        } else {
+          // No suggestions - proceed with normal refresh
+          setTimeout(fetchBook, 1000);
         }
-        
-        // Refresh to show updated status
-        setTimeout(fetchBook, 1000);
       } else {
         // If there was an error, revert the status back
         if (book) {
@@ -267,12 +278,17 @@ export default function BookDetailPage() {
 
       const { data: result, error } = await apiClient.books.updateParagraph(paragraphId, {
         content: editContent,
-        generateAudio: true, // Save content AND generate audio in one call
+        generateAudio: false, // Save content first, generate audio after bulk fix decision
       });
 
       if (!error && result) {
-        // Check if there are bulk fix suggestions
-        if (result.bulkSuggestions && result.bulkSuggestions.length > 0) {
+        // Check if there are bulk fix suggestions with actual counts > 0
+        const hasSuggestions = result.bulkSuggestions && 
+          Array.isArray(result.bulkSuggestions) && 
+          result.bulkSuggestions.length > 0 &&
+          result.bulkSuggestions.some(suggestion => suggestion.count > 0);
+        
+        if (hasSuggestions && result.bulkSuggestions) {
           setPendingBulkFix({
             paragraphId,
             content: editContent,
@@ -280,14 +296,26 @@ export default function BookDetailPage() {
             audioRequested: true, // Audio was requested in this case
           });
           setShowBulkFixModal(true);
+        } else {
+          // No suggestions - generate audio immediately since no bulk fix decision needed
+          logger.info('No bulk suggestions, generating audio immediately for paragraph', paragraphId);
+          
+          const { error: audioError } = await apiClient.books.updateParagraph(paragraphId, {
+            content: editContent,
+            generateAudio: true, // Generate audio since no bulk fixes to consider
+          });
+          
+          if (audioError) {
+            logger.error('Error generating audio:', audioError);
+          }
+          
+          // Proceed with normal cleanup
+          setEditingId(null);
+          setEditContent('');
+          
+          // Refresh to show updated status
+          setTimeout(fetchBook, 1000);
         }
-        
-        // Clear editing state
-        setEditingId(null);
-        setEditContent('');
-        
-        // Refresh to show updated status
-        setTimeout(fetchBook, 1000);
       } else {
         alert('Failed to save changes and generate audio');
         
@@ -363,8 +391,36 @@ export default function BookDetailPage() {
     }
   };
 
-  const handleBulkFixComplete = () => {
+  const handleBulkFixComplete = async () => {
     logger.info('Bulk fix completed');
+
+    // If audio was requested, generate it for the originally edited paragraph
+    if (pendingBulkFix?.audioRequested) {
+      logger.info('Generating audio for originally edited paragraph', pendingBulkFix.paragraphId);
+      
+      // Update audio status to GENERATING for visual feedback
+      if (book) {
+        const updatedBook = {
+          ...book,
+          paragraphs: book.paragraphs.map(p => 
+            p.id === pendingBulkFix.paragraphId 
+              ? { ...p, audioStatus: 'GENERATING' as const }
+              : p
+          )
+        };
+        setBook(updatedBook);
+      }
+      
+      // Generate audio for the originally edited paragraph
+      const { error: audioError } = await apiClient.books.updateParagraph(pendingBulkFix.paragraphId, {
+        content: pendingBulkFix.content,
+        generateAudio: true,
+      });
+      
+      if (audioError) {
+        logger.error('Error generating audio after bulk fix:', audioError);
+      }
+    }
 
     // Show success message based on whether audio was requested
     const message = pendingBulkFix?.audioRequested 
@@ -378,20 +434,131 @@ export default function BookDetailPage() {
     // Clear pending state and close modal
     setPendingBulkFix(null);
     setShowBulkFixModal(false);
+    setEditingId(null); // Hide save buttons bar so audio player is visible
+  };
+
+  // Track active polling instances to prevent duplicates
+  const activePollingRef = useRef<Set<string>>(new Set());
+
+  // Poll for audio generation completion
+  const startAudioPolling = (paragraphId: string) => {
+    // Prevent multiple polling instances for the same paragraph
+    if (activePollingRef.current.has(paragraphId)) {
+      console.log(`⚠️ Polling already active for paragraph ${paragraphId}, skipping`);
+      return;
+    }
+    
+    activePollingRef.current.add(paragraphId);
+    const pollInterval = 2000; // Poll every 2 seconds
+    const maxPolls = 30; // Max 1 minute of polling
+    let pollCount = 0;
+    
+    const poll = async () => {
+      try {
+        pollCount++;
+        console.log(`🔄 Polling attempt ${pollCount}/${maxPolls} for paragraph ${paragraphId}`);
+        
+        // Get fresh book data directly from API to avoid React state race condition
+        const { data: freshBookData, error } = await apiClient.books.getById(bookId || '');
+        
+        if (!error && freshBookData && freshBookData.book) {
+          const paragraph = freshBookData.book.paragraphs.find(p => p.id === paragraphId);
+          
+          if (paragraph) {
+            console.log(`📊 Paragraph ${paragraphId} audio status:`, paragraph.audioStatus);
+            
+            // Check if audio generation is complete
+            if (paragraph.audioStatus === 'READY') {
+              console.log('✅ Audio generation completed! Updating UI.');
+              // Update the React state with fresh data
+              setBook(freshBookData.book);
+              activePollingRef.current.delete(paragraphId);
+              return; // Stop polling
+            } else if (paragraph.audioStatus === 'ERROR') {
+              console.log('❌ Audio generation failed.');
+              // Update the React state with fresh data
+              setBook(freshBookData.book);
+              activePollingRef.current.delete(paragraphId);
+              return; // Stop polling
+            }
+          }
+        }
+        
+        // Continue polling if not complete and haven't exceeded max attempts
+        if (pollCount < maxPolls) {
+          setTimeout(poll, pollInterval);
+        } else {
+          console.log('⏰ Polling timeout reached.');
+          activePollingRef.current.delete(paragraphId);
+        }
+      } catch (error) {
+        console.error('Error during audio polling:', error);
+        // Continue polling on error unless max attempts reached
+        if (pollCount < maxPolls) {
+          setTimeout(poll, pollInterval);
+        } else {
+          activePollingRef.current.delete(paragraphId);
+        }
+      }
+    };
+    
+    // Start polling
+    setTimeout(poll, pollInterval);
   };
 
   const handleSkipBulkFix = () => {
+    logger.info('handleSkipBulkFix called', {
+      pendingBulkFix: pendingBulkFix ? {
+        paragraphId: pendingBulkFix.paragraphId,
+        audioRequested: pendingBulkFix.audioRequested,
+        content: pendingBulkFix.content.substring(0, 50) + '...'
+      } : null
+    });
+    
+    if (!pendingBulkFix) {
+      logger.warn('handleSkipBulkFix called but pendingBulkFix is null');
+      setShowBulkFixModal(false);
+      return;
+    }
+    
     // Apply the original edit when skipping bulk fixes
     if (pendingBulkFix) {
+      // If audio was requested, update the status to GENERATING for visual feedback
+      if (pendingBulkFix.audioRequested && book) {
+        logger.info('Setting audio status to GENERATING for paragraph', pendingBulkFix.paragraphId);
+        const updatedBook = {
+          ...book,
+          paragraphs: book.paragraphs.map(p => 
+            p.id === pendingBulkFix.paragraphId 
+              ? { ...p, audioStatus: 'GENERATING' as const }
+              : p
+          )
+        };
+        setBook(updatedBook);
+      }
+      
       // Make the API call to save the original content
-      apiClient.books.updateParagraph(pendingBulkFix.paragraphId, {
+      const apiParams = {
         content: pendingBulkFix.content,
         generateAudio: pendingBulkFix.audioRequested,
-      })
+      };
+      
+      logger.info('Making API call to updateParagraph', {
+        paragraphId: pendingBulkFix.paragraphId,
+        generateAudio: pendingBulkFix.audioRequested
+      });
+      
+      apiClient.books.updateParagraph(pendingBulkFix.paragraphId, apiParams)
       .then(({ error }: { error?: string }) => {
+        logger.info('API call completed', { error });
         if (!error) {
-          // Refresh the book data to show the updated content
-          fetchBook();
+          // If audio was requested, start polling for completion
+          if (pendingBulkFix.audioRequested) {
+            startAudioPolling(pendingBulkFix.paragraphId);
+          } else {
+            // No audio requested, just refresh immediately
+            fetchBook();
+          }
         }
       })
       .catch((error: Error) => {
@@ -401,6 +568,7 @@ export default function BookDetailPage() {
     
     setShowBulkFixModal(false);
     setPendingBulkFix(null);
+    setEditingId(null); // Hide save buttons bar so audio player is visible
   };
 
   if (loading) {
@@ -605,6 +773,7 @@ export default function BookDetailPage() {
           suggestions={pendingBulkFix.suggestions}
           bookId={bookId}
           onFixesApplied={handleBulkFixComplete}
+          onSkipAll={handleSkipBulkFix}
         />
       )}
     </div>

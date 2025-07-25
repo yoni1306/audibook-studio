@@ -2,6 +2,8 @@ import {
   S3Client,
   GetObjectCommand,
   PutObjectCommand,
+  DeleteObjectCommand,
+  ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 import { Logger } from '@nestjs/common';
 import * as fs from 'fs/promises';
@@ -69,5 +71,50 @@ export async function uploadToS3(
   } catch (error) {
     logger.error(`Failed to upload to S3: ${error}`);
     throw error;
+  }
+}
+
+export async function deleteFromS3(s3Key: string): Promise<void> {
+  try {
+    logger.log(`Deleting ${s3Key} from S3`);
+
+    const command = new DeleteObjectCommand({
+      Bucket: process.env['S3_BUCKET_NAME'] || 'audibook-storage',
+      Key: s3Key,
+    });
+
+    await s3Client.send(command);
+    logger.log(`Successfully deleted from S3: ${s3Key}`);
+  } catch (error) {
+    logger.error(`Failed to delete from S3: ${error}`);
+    throw error;
+  }
+}
+
+export async function deleteOldAudioFiles(bookId: string, paragraphId: string): Promise<void> {
+  try {
+    logger.log(`Cleaning up old audio files for paragraph ${paragraphId}`);
+
+    const prefix = `audio/${bookId}/${paragraphId}_`;
+    const listCommand = new ListObjectsV2Command({
+      Bucket: process.env['S3_BUCKET_NAME'] || 'audibook-storage',
+      Prefix: prefix,
+    });
+
+    const response = await s3Client.send(listCommand);
+    if (response.Contents && response.Contents.length > 0) {
+      logger.log(`Found ${response.Contents.length} old audio files to delete`);
+      
+      for (const object of response.Contents) {
+        if (object.Key) {
+          await deleteFromS3(object.Key);
+        }
+      }
+    } else {
+      logger.log('No old audio files found to delete');
+    }
+  } catch (error) {
+    logger.error(`Failed to cleanup old audio files: ${error}`);
+    // Don't throw error here - cleanup failure shouldn't stop audio generation
   }
 }

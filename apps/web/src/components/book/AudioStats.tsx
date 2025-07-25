@@ -14,9 +14,13 @@ export default function AudioStats({ paragraphs, book }: AudioStatsProps) {
   // Note: pages property may not exist on BookWithDetails type - using fallback
   const totalPages = book && 'pages' in book ? (book as { pages?: unknown[] }).pages?.length || 0 : 0;
 
-  // Calculate total listening time for all paragraphs
+  // Calculate total listening time for completed paragraphs only
   const totalListeningDurationSeconds = safeParagraphs.reduce((sum, p) => {
-    return sum + (p.audioDuration || 0);
+    // Only count paragraphs that are completed AND have ready audio
+    if (p.completed && p.audioStatus === 'READY' && p.audioDuration) {
+      return sum + p.audioDuration;
+    }
+    return sum;
   }, 0);
   const totalListeningMinutes = Math.floor(totalListeningDurationSeconds / 60);
   const totalListeningHours = Math.floor(totalListeningMinutes / 60);
