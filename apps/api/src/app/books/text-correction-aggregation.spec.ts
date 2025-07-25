@@ -228,6 +228,215 @@ describe('TextCorrectionRepository - Aggregation', () => {
 
       expect(result).toHaveLength(1);
     });
+
+    it('should deduplicate corrections from the same editing session (fixes count discrepancy bug)', async () => {
+      const baseTime = new Date('2024-01-01T10:00:00Z');
+      const manualFixTime = new Date(baseTime.getTime()); // Manual fix time
+      const bulkFixTime = new Date(baseTime.getTime() + 2 * 60 * 1000); // Bulk fix 2 minutes later
+
+      const mockPrismaCorrections = [
+        // Manual fix
+        {
+          id: '1',
+          originalWord: 'hello',
+          correctedWord: 'Hello',
+          aggregationKey: 'hello|Hello',
+          sentenceContext: 'hello world',
+          fixType: FixType.punctuation,
+          createdAt: manualFixTime,
+          ttsModel: null,
+          ttsVoice: null,
+          paragraphId: 'para1',
+          book: { id: 'book1', title: 'Test Book', author: 'Test Author' },
+          paragraph: {
+            orderIndex: 0,
+            page: { id: 'page1', pageNumber: 1 }
+          }
+        },
+        // Bulk fix with same aggregation key (should be deduplicated)
+        {
+          id: '2',
+          originalWord: 'hello',
+          correctedWord: 'Hello',
+          aggregationKey: 'hello|Hello',
+          sentenceContext: 'hello world',
+          fixType: FixType.punctuation,
+          createdAt: bulkFixTime,
+          ttsModel: null,
+          ttsVoice: null,
+          paragraphId: 'para1', // Same paragraph
+          book: { id: 'book1', title: 'Test Book', author: 'Test Author' },
+          paragraph: {
+            orderIndex: 0,
+            page: { id: 'page1', pageNumber: 1 }
+          }
+        }
+      ];
+
+      mockPrismaService.textCorrection.findMany.mockResolvedValue(mockPrismaCorrections);
+
+      const result = await repository.findAggregatedCorrections();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].fixCount).toBe(1); // Should be deduplicated to 1, not 2
+      expect(result[0].aggregationKey).toBe('hello|Hello');
+    });
+
+    it('should NOT deduplicate corrections from different paragraphs', async () => {
+      const baseTime = new Date('2024-01-01T10:00:00Z');
+      const time1 = new Date(baseTime.getTime());
+      const time2 = new Date(baseTime.getTime() + 2 * 60 * 1000); // 2 minutes later
+
+      const mockPrismaCorrections = [
+        {
+          id: '1',
+          originalWord: 'hello',
+          correctedWord: 'Hello',
+          aggregationKey: 'hello|Hello',
+          sentenceContext: 'hello world',
+          fixType: FixType.punctuation,
+          createdAt: time1,
+          ttsModel: null,
+          ttsVoice: null,
+          paragraphId: 'para1',
+          book: { id: 'book1', title: 'Test Book', author: 'Test Author' },
+          paragraph: {
+            orderIndex: 0,
+            page: { id: 'page1', pageNumber: 1 }
+          }
+        },
+        {
+          id: '2',
+          originalWord: 'hello',
+          correctedWord: 'Hello',
+          aggregationKey: 'hello|Hello',
+          sentenceContext: 'hello world',
+          fixType: FixType.punctuation,
+          createdAt: time2,
+          ttsModel: null,
+          ttsVoice: null,
+          paragraphId: 'para2', // Different paragraph
+          book: { id: 'book1', title: 'Test Book', author: 'Test Author' },
+          paragraph: {
+            orderIndex: 1,
+            page: { id: 'page1', pageNumber: 1 }
+          }
+        }
+      ];
+
+      mockPrismaService.textCorrection.findMany.mockResolvedValue(mockPrismaCorrections);
+
+      const result = await repository.findAggregatedCorrections();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].fixCount).toBe(2); // Should NOT be deduplicated (different paragraphs)
+      expect(result[0].aggregationKey).toBe('hello|Hello');
+    });
+
+    it('should NOT deduplicate corrections from different editing sessions (>5 minutes apart)', async () => {
+      const baseTime = new Date('2024-01-01T10:00:00Z');
+      const time1 = new Date(baseTime.getTime());
+      const time2 = new Date(baseTime.getTime() + 6 * 60 * 1000); // 6 minutes later
+
+      const mockPrismaCorrections = [
+        {
+          id: '1',
+          originalWord: 'hello',
+          correctedWord: 'Hello',
+          aggregationKey: 'hello|Hello',
+          sentenceContext: 'hello world',
+          fixType: FixType.punctuation,
+          createdAt: time1,
+          ttsModel: null,
+          ttsVoice: null,
+          paragraphId: 'para1',
+          book: { id: 'book1', title: 'Test Book', author: 'Test Author' },
+          paragraph: {
+            orderIndex: 0,
+            page: { id: 'page1', pageNumber: 1 }
+          }
+        },
+        {
+          id: '2',
+          originalWord: 'hello',
+          correctedWord: 'Hello',
+          aggregationKey: 'hello|Hello',
+          sentenceContext: 'hello world',
+          fixType: FixType.punctuation,
+          createdAt: time2,
+          ttsModel: null,
+          ttsVoice: null,
+          paragraphId: 'para1', // Same paragraph
+          book: { id: 'book1', title: 'Test Book', author: 'Test Author' },
+          paragraph: {
+            orderIndex: 0,
+            page: { id: 'page1', pageNumber: 1 }
+          }
+        }
+      ];
+
+      mockPrismaService.textCorrection.findMany.mockResolvedValue(mockPrismaCorrections);
+
+      const result = await repository.findAggregatedCorrections();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].fixCount).toBe(2); // Should NOT be deduplicated (different sessions)
+      expect(result[0].aggregationKey).toBe('hello|Hello');
+    });
+  });
+
+  describe('findCorrectionsByAggregationKey', () => {
+    it('should deduplicate corrections from the same editing session (consistent with aggregated view)', async () => {
+      const aggregationKey = 'hello|Hello';
+      const manualFixTime = new Date('2023-01-01T10:00:00Z');
+      const bulkFixTime = new Date('2023-01-01T10:02:00Z'); // 2 minutes later (same session)
+      
+      const mockCorrections = [
+        {
+          id: '1',
+          originalWord: 'hello',
+          correctedWord: 'Hello',
+          aggregationKey: 'hello|Hello',
+          sentenceContext: 'hello world',
+          fixType: FixType.punctuation,
+          createdAt: manualFixTime,
+          ttsModel: null,
+          ttsVoice: null,
+          paragraphId: 'para1',
+          book: { id: 'book1', title: 'Test Book', author: 'Test Author' },
+          paragraph: {
+            orderIndex: 0,
+            page: { id: 'page1', pageNumber: 1 }
+          }
+        },
+        {
+          id: '2',
+          originalWord: 'hello',
+          correctedWord: 'Hello',
+          aggregationKey: 'hello|Hello',
+          sentenceContext: 'hello world',
+          fixType: FixType.punctuation,
+          createdAt: bulkFixTime,
+          ttsModel: null,
+          ttsVoice: null,
+          paragraphId: 'para1', // Same paragraph
+          book: { id: 'book1', title: 'Test Book', author: 'Test Author' },
+          paragraph: {
+            orderIndex: 0,
+            page: { id: 'page1', pageNumber: 1 }
+          }
+        }
+      ];
+
+      mockPrismaService.textCorrection.findMany.mockResolvedValue(mockCorrections);
+
+      const result = await repository.findCorrectionsByAggregationKey(aggregationKey);
+
+      // Should return only 1 correction after deduplication (not 2)
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('1'); // Should keep the first (manual) correction
+      expect(result[0].aggregationKey).toBe(aggregationKey);
+    });
   });
 
   describe('findWordCorrectionHistory', () => {

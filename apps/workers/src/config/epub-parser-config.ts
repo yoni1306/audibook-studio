@@ -20,8 +20,8 @@ export interface EPUBParserConfig {
  * Update these values to change settings across all parsers
  */
 export const DEFAULT_EPUB_PARSER_CONFIG: EPUBParserConfig = {
-  paragraphTargetLengthChars: 800,
-  paragraphTargetLengthWords: 200,
+  paragraphTargetLengthChars: 600,
+  paragraphTargetLengthWords: 150,
   pageBreakDetection: {
     includeExplicit: true,
     includeStructural: true,

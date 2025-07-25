@@ -175,11 +175,37 @@ export default function BookDetailPage() {
           setEditContent('');
         }
       } else {
-        alert('Failed to save changes');
+        // Check if it's a "Paragraph not found" error
+        if (error && typeof error === 'object' && 'message' in error && 
+            typeof (error as any).message === 'string' && (error as any).message.includes('Paragraph not found')) {
+          logger.warn('Paragraph not found - likely due to database reset. Refreshing book data...');
+          alert('This paragraph no longer exists (possibly due to a database reset). Refreshing the page...');
+          await fetchBook(); // Refresh the book data
+          setEditingId(null);
+          setEditContent('');
+        } else {
+          alert('Failed to save changes');
+        }
       }
     } catch (error) {
       logger.error('Error saving paragraph:', error);
-      alert('Error saving changes');
+      
+      // Check if it's a "Paragraph not found" error in the catch block too
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('Paragraph not found')) {
+        logger.warn('Paragraph not found in catch block - likely due to database reset. Refreshing book data...');
+        alert('This paragraph no longer exists (possibly due to a database reset). Refreshing the page...');
+        try {
+          await fetchBook(); // Refresh the book data
+          setEditingId(null);
+          setEditContent('');
+        } catch (refreshError) {
+          logger.error('Error refreshing book data:', refreshError);
+          alert('Error refreshing book data. Please reload the page manually.');
+        }
+      } else {
+        alert('Error saving changes');
+      }
     } finally {
       setSaving(false);
     }
@@ -317,7 +343,49 @@ export default function BookDetailPage() {
           setTimeout(fetchBook, 1000);
         }
       } else {
-        alert('Failed to save changes and generate audio');
+        // Check if it's a "Paragraph not found" error
+        if (error && typeof error === 'object' && 'message' in error && 
+            typeof (error as any).message === 'string' && (error as any).message.includes('Paragraph not found')) {
+          logger.warn('Paragraph not found - likely due to database reset. Refreshing book data...');
+          alert('This paragraph no longer exists (possibly due to a database reset). Refreshing the page...');
+          await fetchBook(); // Refresh the book data
+          setEditingId(null);
+          setEditContent('');
+        } else {
+          alert('Failed to save changes and generate audio');
+          
+          // If there was an error, revert the status back
+          if (book) {
+            const revertedBook = {
+              ...book,
+              paragraphs: book.paragraphs.map(p => 
+                p.id === paragraphId 
+                  ? { ...p, audioStatus: 'ERROR' as const }
+                  : p
+              )
+            };
+            setBook(revertedBook);
+          }
+        }
+      }
+    } catch (error) {
+      logger.error('Error saving and generating audio:', error);
+      
+      // Check if it's a "Paragraph not found" error in the catch block too
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('Paragraph not found')) {
+        logger.warn('Paragraph not found in catch block - likely due to database reset. Refreshing book data...');
+        alert('This paragraph no longer exists (possibly due to a database reset). Refreshing the page...');
+        try {
+          await fetchBook(); // Refresh the book data
+          setEditingId(null);
+          setEditContent('');
+        } catch (refreshError) {
+          logger.error('Error refreshing book data:', refreshError);
+          alert('Error refreshing book data. Please reload the page manually.');
+        }
+      } else {
+        alert('Error saving changes and generating audio');
         
         // If there was an error, revert the status back
         if (book) {
@@ -327,26 +395,10 @@ export default function BookDetailPage() {
               p.id === paragraphId 
                 ? { ...p, audioStatus: 'ERROR' as const }
                 : p
-            )
+          )
           };
           setBook(revertedBook);
         }
-      }
-    } catch (error) {
-      logger.error('Error saving and generating audio:', error);
-      alert('Error saving changes and generating audio');
-      
-      // If there was an error, revert the status back
-      if (book) {
-        const revertedBook = {
-          ...book,
-          paragraphs: book.paragraphs.map(p => 
-            p.id === paragraphId 
-              ? { ...p, audioStatus: 'ERROR' as const }
-              : p
-        )
-        };
-        setBook(revertedBook);
       }
     } finally {
       setSaving(false);

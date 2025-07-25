@@ -253,19 +253,24 @@ export class TextCorrectionRepository {
       
       // Convert to array and apply filters
       let result = Array.from(grouped.entries()).map(([aggregationKey, corrections]) => {
-        const latest = corrections.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+        const sortedCorrections = corrections.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        const latest = sortedCorrections[0];
+        
+        // Apply deduplication logic to prevent double-counting
+        const deduplicatedCorrections = this.deduplicateCorrections(sortedCorrections);
+        
         return {
           aggregationKey,
           originalWord: latest.originalWord,
           correctedWord: latest.correctedWord,
           fixType: latest.fixType,
-          fixCount: corrections.length,
+          fixCount: deduplicatedCorrections.length,
           latestCorrection: latest.createdAt,
           book: latest.book,
           location: latest.location,
           ttsModel: latest.ttsModel,
           ttsVoice: latest.ttsVoice,
-          corrections, // All correction instances
+          corrections: deduplicatedCorrections, // Deduplicated correction instances
         };
       });
       
@@ -285,6 +290,29 @@ export class TextCorrectionRepository {
       this.logger.error(`Failed to find aggregated corrections:`, error);
       throw error;
     }
+  }
+  
+  /**
+   * Deduplicate corrections that occur within the same editing session (5 minutes)
+   * This prevents manual fixes and bulk fixes from being double-counted
+   */
+  private deduplicateCorrections<T extends { createdAt: Date; location: { paragraphId: string } }>(corrections: T[]): T[] {
+    const deduplicatedCorrections = [];
+    const sessionThresholdMs = 5 * 60 * 1000; // 5 minutes
+    
+    for (const correction of corrections) {
+      const isDuplicate = deduplicatedCorrections.some(existing => {
+        const timeDiff = Math.abs(existing.createdAt.getTime() - correction.createdAt.getTime());
+        return timeDiff <= sessionThresholdMs && 
+               existing.location.paragraphId === correction.location.paragraphId;
+      });
+      
+      if (!isDuplicate) {
+        deduplicatedCorrections.push(correction);
+      }
+    }
+    
+    return deduplicatedCorrections;
   }
   
   /**
@@ -322,7 +350,7 @@ export class TextCorrectionRepository {
         orderBy: { createdAt: 'desc' },
       });
       
-      const result = corrections.map(correction => ({
+      const mappedCorrections = corrections.map(correction => ({
         id: correction.id,
         originalWord: correction.originalWord,
         correctedWord: correction.correctedWord,
@@ -341,7 +369,10 @@ export class TextCorrectionRepository {
         },
       }));
       
-      this.logger.log(`Found ${result.length} corrections for aggregation key "${aggregationKey}"`);
+      // Apply deduplication to ensure consistency with aggregated view
+      const result = this.deduplicateCorrections(mappedCorrections);
+      
+      this.logger.log(`Found ${corrections.length} corrections, ${result.length} after deduplication for aggregation key "${aggregationKey}"`);
       return result;
     } catch (error) {
       this.logger.error(`Failed to find corrections for aggregation key:`, error);

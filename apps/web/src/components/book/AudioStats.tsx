@@ -14,13 +14,46 @@ export default function AudioStats({ paragraphs, book }: AudioStatsProps) {
   // Note: pages property may not exist on BookWithDetails type - using fallback
   const totalPages = book && 'pages' in book ? (book as { pages?: unknown[] }).pages?.length || 0 : 0;
 
-  // Calculate total listening time for completed paragraphs only
+  // Calculate estimated total listening time for all paragraphs in the book
   const totalListeningDurationSeconds = safeParagraphs.reduce((sum, p) => {
-    // Only count paragraphs that are completed AND have ready audio
-    if (p.completed && p.audioStatus === 'READY' && p.audioDuration) {
+    // Use actual audio duration if available, otherwise estimate based on text length
+    if (p.audioDuration && p.audioStatus === 'READY') {
       return sum + p.audioDuration;
+    } else {
+      // Professional audiobook estimation using industry standard rates
+      const text = p.content.trim();
+      if (!text) return sum;
+      
+      // Count words more accurately (excluding empty strings)
+      const wordCount = text.split(/\s+/).filter(word => word.length > 0).length;
+      
+      // Use 155 WPM as per Audible's standard (9,300 words per hour)
+      // This is the industry standard for professional audiobook narration
+      const baseWPM = 155;
+      
+      // Apply adjustments based on text characteristics
+      let adjustedWPM = baseWPM;
+      
+      // Slower for complex punctuation (dialogue, lists, technical content)
+      const complexPunctuationCount = (text.match(/[;:()[\]{}"'—–-]/g) || []).length;
+      const punctuationDensity = complexPunctuationCount / wordCount;
+      if (punctuationDensity > 0.1) {
+        adjustedWPM *= 0.95; // 5% slower for high punctuation density
+      }
+      
+      // Slower for very short paragraphs (more pauses between paragraphs)
+      if (wordCount < 20) {
+        adjustedWPM *= 0.9; // 10% slower for very short paragraphs
+      }
+      
+      // Slightly faster for very long paragraphs (fewer interruptions)
+      if (wordCount > 200) {
+        adjustedWPM *= 1.05; // 5% faster for long paragraphs
+      }
+      
+      const estimatedSeconds = (wordCount / adjustedWPM) * 60;
+      return sum + estimatedSeconds;
     }
-    return sum;
   }, 0);
   const totalListeningMinutes = Math.floor(totalListeningDurationSeconds / 60);
   const totalListeningHours = Math.floor(totalListeningMinutes / 60);
