@@ -8,7 +8,7 @@ dotenv.config({ path: path.resolve(process.cwd(), envFile) });
 
 import { Worker, Job } from 'bullmq';
 import { createLogger } from '@audibook/logger';
-import { downloadFromS3, uploadToS3 } from './s3-client';
+import { downloadFromS3, uploadToS3, deleteOldAudioFiles } from './s3-client';
 import { PageBasedEPUBParser } from './text-processing/page-based-epub-parser';
 import { XHTMLBasedEPUBParser } from './text-processing/xhtml-based-epub-parser';
 import { DEFAULT_EPUB_PARSER_CONFIG } from './config/epub-parser-config';
@@ -281,8 +281,12 @@ const worker = new Worker(
                 filePath: result.filePath,
               });
 
-              // Upload to S3
-              const s3Key = `audio/${job.data.bookId}/${job.data.paragraphId}.mp3`;
+              // Clean up old audio files before uploading new one
+              await deleteOldAudioFiles(job.data.bookId, job.data.paragraphId);
+              
+              // Upload to S3 with timestamp to avoid browser caching issues
+              const timestamp = Date.now();
+              const s3Key = `audio/${job.data.bookId}/${job.data.paragraphId}_${timestamp}.mp3`;
               logger.debug('Uploading audio to S3', {
                 s3Key,
                 localPath: outputPath,

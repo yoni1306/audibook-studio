@@ -11,13 +11,15 @@ interface BulkFixModalProps {
   suggestions: BulkFixSuggestion[];
   bookId: string;
   onFixesApplied: () => void;
+  onSkipAll?: () => void;
 }
 
 export default function BulkFixModal({ 
   onClose, 
   suggestions, 
   bookId, 
-  onFixesApplied 
+  onFixesApplied,
+  onSkipAll 
 }: BulkFixModalProps) {
   const apiClient = useApiClient();
   const [selectedFixes, setSelectedFixes] = useState<{[key: string]: string[]}>({});
@@ -504,7 +506,7 @@ export default function BulkFixModal({
           </div>
           <div style={{ display: 'flex', gap: 'var(--spacing-3)' }}>
             <button
-              onClick={onClose}
+              onClick={onSkipAll || onClose}
               disabled={applying}
               className="button button-secondary"
               style={{

@@ -336,7 +336,7 @@ export default function ParagraphComponent({
                   onClick={(e) => e.stopPropagation()}
                 >
                   <source
-                    src={`${getApiUrl()}/api/books/paragraphs/${paragraph.id}/audio`}
+                    src={`${getApiUrl()}/api/books/paragraphs/${paragraph.id}/audio?v=${paragraph.audioS3Key ? btoa(paragraph.audioS3Key).slice(-8) : 'none'}`}
                     type="audio/mpeg"
                   />
                   Your browser does not support the audio element.
