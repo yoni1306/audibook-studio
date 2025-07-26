@@ -365,7 +365,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/books/paragraphs/{paragraphId}/completed': {
+  '/books/{bookId}/paragraphs/{paragraphId}/completed': {
     parameters: {
       query?: never;
       header?: never;
@@ -1519,6 +1519,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
+        /** @description ID of the book containing the paragraph */
+        bookId: string;
         /** @description ID of the paragraph to update */
         paragraphId: string;
       };
