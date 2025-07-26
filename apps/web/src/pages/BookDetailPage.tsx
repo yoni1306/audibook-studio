@@ -251,8 +251,9 @@ export default function BookDetailPage() {
           });
           setShowBulkFixModal(true);
         } else {
-          // No suggestions - proceed with normal refresh
-          setTimeout(fetchBook, 1000);
+          // No suggestions - start audio polling to track generation progress
+          logger.info('No bulk suggestions, starting audio polling for paragraph:', paragraphId);
+          startAudioPolling(paragraphId);
         }
       } else {
         // If there was an error, revert the status back
