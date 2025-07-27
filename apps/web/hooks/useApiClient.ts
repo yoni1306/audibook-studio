@@ -11,7 +11,7 @@ export const useApiClient = () => {
 
   // Create API client instance with correct URL for browser context
   const apiClient = useMemo(() => {
-    const baseUrl = getApiUrl(false); // false = client-side context
+    const baseUrl = getApiUrl(); // Uses environment-aware API URL
     return createApiClient(baseUrl);
   }, []);
 
