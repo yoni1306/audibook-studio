@@ -253,6 +253,11 @@ export function createApiClient(baseUrl: string) {
         client.GET('/books/paragraphs/{paragraphId}/audio', {
           params: { path: { paragraphId } },
         }),
+      setParagraphCompleted: (bookId: string, paragraphId: string, data: { completed: boolean }) =>
+        client.PATCH('/books/{bookId}/paragraphs/{paragraphId}/completed', {
+          params: { path: { bookId, paragraphId } },
+          body: data,
+        }),
       // Correction Learning API
       getAllCorrections: (data: GetAllCorrectionsWithFiltersRequest) => {
         const apiData: GetAllCorrectionsRequest = {

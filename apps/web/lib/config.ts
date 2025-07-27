@@ -28,53 +28,49 @@ const buildApiUrl = (protocol = CONFIG_CONSTANTS.API.DEFAULT_PROTOCOL, host = CO
 // Default API URL using configuration constants
 const DEFAULT_API_URL = buildApiUrl();
 
-// Runtime API URL resolution - best practice for production deployments
-const getProductionApiUrl = (): string => {
-  // If we're in browser context, try to determine API URL from current domain
-  if (typeof window !== 'undefined') {
-    const currentHost = window.location.hostname;
-    
-    // Railway production pattern: if web is on railway.app, API should be too
-    if (currentHost.includes('railway.app')) {
-      // Extract the project pattern and construct API URL
-      const railwayApiUrl = currentHost.replace('web-production-', 'api-production-');
-      return `https://${railwayApiUrl}`;
-    }
-    
-    // For other production domains, try common patterns
-    if (currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
-      // Try subdomain pattern
-      return `https://api.${currentHost}`;
-    }
+/**
+ * Get the API URL following industry best practices
+ * 
+ * BEST PRACTICE: Always use explicit environment variables for API URLs
+ * - Production: Set VITE_API_URL during build process
+ * - Development: Falls back to local development URL
+ * 
+ * This approach is:
+ * - Reliable and explicit
+ * - Environment-agnostic
+ * - Easy to debug and maintain
+ * - Secure and predictable
+ */
+const getApiUrl = (): string => {
+  // PRODUCTION: Use explicit environment variable (set during build)
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
   }
-  
+
+  // DEVELOPMENT: Use local development API URL
+  // This is the only acceptable fallback
   return DEFAULT_API_URL;
 };
 
 export const config = {
-    api: {
-      // Client-side API URL (browser) - runtime resolution with fallbacks
-      clientUrl: import.meta.env.VITE_API_URL || getProductionApiUrl(),
-      
-      // Server-side API URL - prefer env var, fallback to production resolution
-      serverUrl: import.meta.env.VITE_API_URL || getProductionApiUrl(),
-      
-      // Timeout settings
-      timeout: CONFIG_CONSTANTS.API.DEFAULT_TIMEOUT,
-    },
+  api: {
+    // API URL - uses environment-aware resolution following best practices
+    url: getApiUrl(),
     
-    // Feature flags
-    features: {
-      enableDebugMode: import.meta.env.DEV,
-    },
-    
-    // Environment
-    env: import.meta.env.MODE || 'development',
-    isProduction: import.meta.env.PROD,
-    isDevelopment: import.meta.env.DEV,
-  };
+    // Timeout settings
+    timeout: CONFIG_CONSTANTS.API.DEFAULT_TIMEOUT,
+  },
   
-  // Helper to get the correct API URL based on context
-  export const getApiUrl = (isServer = typeof window === 'undefined'): string => {
-    return isServer ? config.api.serverUrl : config.api.clientUrl;
-  };
+  // Feature flags
+  features: {
+    enableDebugMode: import.meta.env.DEV,
+  },
+  
+  // Environment
+  env: import.meta.env.MODE || 'development',
+  isProduction: import.meta.env.PROD,
+  isDevelopment: import.meta.env.DEV,
+};
+
+// Export the API URL getter for external use
+export { getApiUrl };
