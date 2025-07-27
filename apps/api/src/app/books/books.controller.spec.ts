@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Logger } from '@nestjs/common';
 import { BooksController } from './books.controller';
 import { BooksService } from './books.service';
+import { BooksExportService } from './books-export.service';
 import { CorrectionLearningService } from './correction-learning.service';
 import { BulkTextFixesService } from './bulk-text-fixes.service';
 import { TextCorrectionRepository } from './text-correction.repository';
@@ -20,6 +21,14 @@ describe('BooksController', () => {
 
   const mockBooksService = {
     // Add mock methods as needed
+  };
+
+  const mockBooksExportService = {
+    getBookExportStatus: jest.fn(),
+    startPageExport: jest.fn(),
+    deletePageAudio: jest.fn(),
+    getPageAudioStream: jest.fn(),
+    cancelPageExport: jest.fn(),
   };
 
   const mockBulkTextFixesService = {
@@ -54,6 +63,10 @@ describe('BooksController', () => {
         {
           provide: BooksService,
           useValue: mockBooksService,
+        },
+        {
+          provide: BooksExportService,
+          useValue: mockBooksExportService,
         },
         {
           provide: CorrectionLearningService,

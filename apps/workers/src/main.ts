@@ -354,6 +354,177 @@ const worker = new Worker(
               throw error;
             }
 
+          case 'combine-page-audio':
+            logger.info('Starting page audio combination', {
+              pageId: job.data.pageId,
+              bookId: job.data.bookId,
+            });
+
+            try {
+              // Get page and its completed paragraphs with audio
+              const { prisma } = require('./database.service.js');
+              
+              const page = await prisma.page.findUnique({
+                where: { id: job.data.pageId },
+                include: {
+                  paragraphs: {
+                    where: {
+                      completed: true,
+                      audioStatus: 'READY',
+                      audioS3Key: { not: null },
+                    },
+                    orderBy: { orderIndex: 'asc' },
+                    select: {
+                      id: true,
+                      orderIndex: true,
+                      audioS3Key: true,
+                      audioDuration: true,
+                    },
+                  },
+                },
+              });
+              
+              if (!page) {
+                throw new Error(`Page not found: ${job.data.pageId}`);
+              }
+              
+              if (page.paragraphs.length === 0) {
+                throw new Error(`No completed paragraphs with audio found for page ${page.pageNumber}`);
+              }
+              
+              logger.info(`Found ${page.paragraphs.length} completed paragraphs with audio for page ${page.pageNumber}`);
+              
+              // Download all paragraph audio files
+              const audioFiles: { localPath: string; duration: number }[] = [];
+              let totalDuration = 0;
+              
+              for (const paragraph of page.paragraphs) {
+                if (!paragraph.audioS3Key) continue;
+                
+                logger.debug(`Downloading audio for paragraph ${paragraph.id}`);
+                const localPath = await downloadFromS3(paragraph.audioS3Key);
+                const duration = paragraph.audioDuration || 0;
+                
+                audioFiles.push({ localPath, duration });
+                totalDuration += duration;
+              }
+              
+              if (audioFiles.length === 0) {
+                throw new Error('No audio files downloaded');
+              }
+              
+              // Combine audio files using ffmpeg
+              const ffmpeg = require('fluent-ffmpeg');
+              const path = require('path');
+              const fs = require('fs/promises');
+              const os = require('os');
+              
+              const outputPath = path.join(os.tmpdir(), `page-${page.pageNumber}-${Date.now()}.mp3`);
+              
+              logger.info(`Combining ${audioFiles.length} audio files into: ${outputPath}`);
+              
+              await new Promise((resolve, reject) => {
+                let command = ffmpeg();
+                
+                // Add all input files
+                audioFiles.forEach(file => {
+                  command = command.input(file.localPath);
+                });
+                
+                // Set output options
+                command
+                  .audioCodec('mp3')
+                  .audioBitrate('128k')
+                  .audioFrequency(22050)
+                  .audioChannels(1)
+                  .on('start', (commandLine) => {
+                    logger.debug('FFmpeg command:', commandLine);
+                  })
+                  .on('progress', (progress) => {
+                    logger.debug(`Processing: ${progress.percent}% done`);
+                  })
+                  .on('end', () => {
+                    logger.info('Audio combination completed successfully');
+                    resolve(outputPath);
+                  })
+                  .on('error', (err) => {
+                    logger.error('FFmpeg error:', err.message);
+                    reject(err);
+                  })
+                  .mergeToFile(outputPath);
+              });
+              
+              // Upload combined audio to S3
+              const s3Key = `books/${job.data.bookId}/pages/page-${page.pageNumber}-${Date.now()}.mp3`;
+              logger.info(`Uploading combined audio to S3: ${s3Key}`);
+              
+              await uploadToS3(outputPath, s3Key);
+              
+              // Update page with combined audio info
+              await prisma.page.update({
+                where: { id: job.data.pageId },
+                data: {
+                  audioS3Key: s3Key,
+                  audioStatus: 'READY',
+                  audioDuration: totalDuration,
+                },
+              });
+              
+              // Clean up temporary files
+              try {
+                await fs.unlink(outputPath);
+                for (const file of audioFiles) {
+                  await fs.unlink(file.localPath).catch((err) => {
+                    logger.debug('Failed to delete temp file:', err.message);
+                  });
+                }
+              } catch (cleanupError) {
+                logger.warn('Failed to clean up temporary files:', cleanupError.message);
+              }
+              
+              logger.info('Page audio combination completed', {
+                pageId: job.data.pageId,
+                pageNumber: page.pageNumber,
+                bookId: job.data.bookId,
+                s3Key,
+                totalDuration,
+                paragraphCount: page.paragraphs.length,
+                duration: Date.now() - startTime,
+              });
+              
+              return {
+                processed: true,
+                pageId: job.data.pageId,
+                pageNumber: page.pageNumber,
+                bookId: job.data.bookId,
+                s3Key,
+                totalDuration,
+                paragraphCount: page.paragraphs.length,
+                duration: Date.now() - startTime,
+              };
+            } catch (error) {
+              logger.error('Page audio combination failed', {
+                pageId: job.data.pageId,
+                bookId: job.data.bookId,
+                error: error.message,
+                stack: error.stack,
+                duration: Date.now() - startTime,
+              });
+              
+              // Update page status to ERROR
+              try {
+                const { prisma } = require('./database.service.js');
+                await prisma.page.update({
+                  where: { id: job.data.pageId },
+                  data: { audioStatus: 'ERROR' },
+                });
+              } catch (dbError) {
+                logger.error('Failed to update page status to ERROR:', dbError.message);
+              }
+              
+              throw error;
+            }
+
           default:
             logger.warn('Unknown job type received', {
               jobType: job.name,

@@ -63,4 +63,44 @@ export class QueueService {
     );
     return { jobId: job.id };
   }
+
+  async cancelPageAudioCombinationJob(pageId: string) {
+    const correlationId = getCurrentCorrelationId();
+    
+    // Find jobs for this page that are waiting or active
+    const waitingJobs = await this.audioQueue.getWaiting();
+    const activeJobs = await this.audioQueue.getActive();
+    
+    const allJobs = [...waitingJobs, ...activeJobs];
+    const pageJobs = allJobs.filter(job => 
+      job.name === 'combine-page-audio' && job.data.pageId === pageId
+    );
+    
+    let cancelledCount = 0;
+    
+    for (const job of pageJobs) {
+      try {
+        await job.remove();
+        cancelledCount++;
+        this.logger.log(
+          `Cancelled page audio combination job ${job.id} for page ${pageId}`,
+          {
+            jobId: job.id,
+            correlationId,
+          }
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Failed to cancel job ${job.id} for page ${pageId}: ${error.message}`,
+          {
+            jobId: job.id,
+            error: error.message,
+            correlationId,
+          }
+        );
+      }
+    }
+    
+    return { cancelledJobs: cancelledCount };
+  }
 }

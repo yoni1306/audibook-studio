@@ -188,4 +188,30 @@ export class S3Service {
       throw error;
     }
   }
+
+  /**
+   * Get a readable stream for an object from S3
+   */
+  async getObjectStream(key: string) {
+    this.logger.log(`📥 Getting object stream for key: ${key}`);
+    
+    try {
+      const command = new GetObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+      });
+      
+      const response = await this.s3Client.send(command);
+      
+      if (!response.Body) {
+        throw new Error(`No body in S3 response for key: ${key}`);
+      }
+      
+      this.logger.log(`✅ Successfully retrieved object stream for key: ${key}`);
+      return response.Body as NodeJS.ReadableStream;
+    } catch (error) {
+      this.logger.error(`❌ Failed to get object stream for key ${key}:`, error.message);
+      throw error;
+    }
+  }
 }

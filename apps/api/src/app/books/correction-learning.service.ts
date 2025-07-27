@@ -184,8 +184,8 @@ export class CorrectionLearningService {
 
   private extractWords(text: string): string[] {
     // Extract Hebrew words, handling niqqud and punctuation
-    const hebrewWordRegex = /[\u0590-\u05FF]+/g;
-    const matches = text.match(hebrewWordRegex) || [];
+    const hebrewWordRegex = /[֐-׿]+/g;
+    const matches: string[] = text.match(hebrewWordRegex) || [];
     
     // Remove duplicates and filter out very short words
     return [...new Set(matches.filter(word => word.length > 1))];

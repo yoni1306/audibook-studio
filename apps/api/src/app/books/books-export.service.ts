@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { S3Service } from '../s3/s3.service';
 import { BookExportStatusDto, StartBookExportResponseDto, PageExportStatusDto } from './dto/book-export.dto';
+import { AudioStatus } from '@prisma/client';
 
 @Injectable()
 export class BooksExportService {
@@ -319,6 +320,93 @@ export class BooksExportService {
     } catch (error) {
       this.logger.error(`❌ Failed to delete exported audio for page ${pageId}:`, error);
       throw new Error('Failed to delete page audio');
+    }
+  }
+
+  /**
+   * Get audio stream for a specific exported page
+   */
+  async getPageAudioStream(bookId: string, pageId: string) {
+    this.logger.log(`🎵 Getting audio stream for page: ${pageId} in book: ${bookId}`);
+
+    const page = await this.prisma.page.findUnique({
+      where: { 
+        id: pageId,
+        bookId 
+      },
+      select: {
+        id: true,
+        pageNumber: true,
+        audioS3Key: true,
+        audioStatus: true,
+      },
+    });
+
+    if (!page) {
+      throw new Error('Page not found');
+    }
+
+    if (page.audioStatus !== AudioStatus.READY || !page.audioS3Key) {
+      throw new Error('No exported audio available for this page');
+    }
+
+    try {
+      this.logger.log(`📥 Streaming audio from S3: ${page.audioS3Key}`);
+      const audioStream = await this.s3Service.getObjectStream(page.audioS3Key);
+      
+      this.logger.log(`✅ Successfully retrieved audio stream for page ${pageId}`);
+      return audioStream;
+    } catch (error) {
+      this.logger.error(`❌ Failed to get audio stream for page ${pageId}:`, error);
+      throw new Error('Failed to retrieve page audio');
+    }
+  }
+
+  /**
+   * Cancel export for a specific page
+   */
+  async cancelPageExport(bookId: string, pageId: string): Promise<{ success: boolean; message: string }> {
+    this.logger.log(`🚫 Cancelling export for page: ${pageId} in book: ${bookId}`);
+
+    const page = await this.prisma.page.findUnique({
+      where: { id: pageId, bookId },
+      select: {
+        id: true,
+        pageNumber: true,
+        audioStatus: true,
+      },
+    });
+
+    if (!page) {
+      throw new Error(`Page not found: ${pageId}`);
+    }
+
+    if (page.audioStatus !== 'GENERATING') {
+      return {
+        success: false,
+        message: `Page ${page.pageNumber} is not currently being exported (status: ${page.audioStatus || 'none'}).`,
+      };
+    }
+
+    try {
+      // Cancel the job in the queue
+      const result = await this.queueService.cancelPageAudioCombinationJob(pageId);
+      
+      // Update page status back to null (not generating)
+      await this.prisma.page.update({
+        where: { id: pageId },
+        data: { audioStatus: null },
+      });
+
+      this.logger.log(`✅ Successfully cancelled export for page ${page.pageNumber} (cancelled ${result.cancelledJobs} jobs)`);
+      
+      return {
+        success: true,
+        message: `Export cancelled for page ${page.pageNumber}. ${result.cancelledJobs} job(s) were cancelled.`,
+      };
+    } catch (error) {
+      this.logger.error(`❌ Failed to cancel export for page ${pageId}:`, error);
+      throw new Error('Failed to cancel page export');
     }
   }
 }
