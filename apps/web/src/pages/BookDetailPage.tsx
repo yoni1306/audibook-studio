@@ -410,15 +410,10 @@ export default function BookDetailPage() {
     try {
       logger.info(`Toggling paragraph ${paragraphId} completed status to ${completed}`);
       
-      const response = await fetch(`/api/books/${bookId}/paragraphs/${paragraphId}/completed`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ completed }),
-    });
+      // Use API client to ensure correct URL is used
+      const { error } = await apiClient.books.setParagraphCompleted(bookId || '', paragraphId, { completed });
       
-      if (response.ok) {
+      if (!error) {
         // Update the local state immediately
         if (book) {
           const updatedBook = {
@@ -434,8 +429,7 @@ export default function BookDetailPage() {
         
         logger.info(`Successfully updated paragraph ${paragraphId} completed status to ${completed}`);
       } else {
-        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
-        logger.error('Error updating paragraph completed status:', errorData);
+        logger.error('Error updating paragraph completed status:', error);
         alert('Failed to update paragraph status');
       }
     } catch (error) {
