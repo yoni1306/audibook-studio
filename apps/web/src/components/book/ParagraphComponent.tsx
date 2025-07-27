@@ -467,9 +467,23 @@ export default function ParagraphComponent({
                     e.stopPropagation();
                     onGenerateAudio();
                   }}
-                  className="button button-primary button-sm"
                   style={{
-                    fontSize: 'var(--font-size-xs)'
+                    cursor: 'pointer',
+                    minWidth: '140px',
+                    height: '36px',
+                    padding: '0 var(--spacing-3)',
+                    fontSize: 'var(--font-size-sm)',
+                    fontWeight: '600',
+                    color: 'white',
+                    backgroundColor: 'var(--color-primary-500)',
+                    border: 'none',
+                    borderRadius: 'var(--radius-md)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 'var(--spacing-1)',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
                   }}
                 >
                   🎵 Generate Audio
