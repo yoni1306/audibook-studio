@@ -13,6 +13,7 @@ function Navigation() {
     { href: '/books', label: 'Books', icon: '📚' },
     { href: '/corrections', label: 'Corrections', icon: '📝' },
     { href: '/upload', label: 'Upload', icon: '📤' },
+    { href: '/export', label: 'Export', icon: '🎵' },
     { href: '/queue', label: 'Queue', icon: '⏳' },
   ];
 
