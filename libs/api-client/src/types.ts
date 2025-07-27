@@ -385,6 +385,90 @@ export interface paths {
     patch: operations['BooksController_setParagraphCompleted'];
     trace?: never;
   };
+  '/books/{id}/export/status': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get book export status
+     * @description Get the current export status for a book, including page-level details
+     */
+    get: operations['BooksController_getBookExportStatus'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/books/{id}/export/start': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Start book export
+     * @description Start the audio export process for a book. Combines completed paragraphs audio into page-level audio files.
+     */
+    post: operations['BooksController_startBookExport'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/books/{id}/pages/{pageId}/export': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Start page export
+     * @description Start the audio export process for a specific page.
+     */
+    post: operations['BooksController_startPageExport'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/books/{id}/pages/{pageId}/audio': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get page audio
+     * @description Stream the exported audio file for a specific page.
+     */
+    get: operations['BooksController_getPageAudio'];
+    put?: never;
+    post?: never;
+    /**
+     * Delete page audio
+     * @description Delete the exported audio file for a specific page.
+     */
+    delete: operations['BooksController_deletePageAudio'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/books/test-endpoint': {
     parameters: {
       query?: never;
@@ -953,6 +1037,150 @@ export interface components {
       /** @description Total number of correction instances */
       total: number;
       /** @description Response timestamp */
+      timestamp: string;
+    };
+    PageExportStatusDto: {
+      /**
+       * @description Page ID
+       * @example uuid-page-id
+       */
+      id: string;
+      /**
+       * @description Page number in the book
+       * @example 1
+       */
+      pageNumber: number;
+      /**
+       * @description Number of completed paragraphs on this page
+       * @example 3
+       */
+      completedParagraphsCount: number;
+      /**
+       * @description Total number of paragraphs on this page
+       * @example 5
+       */
+      totalParagraphsCount: number;
+      /**
+       * @description Audio status for this page
+       * @example READY
+       * @enum {string}
+       */
+      audioStatus: 'PENDING' | 'GENERATING' | 'READY' | 'ERROR';
+      /**
+       * @description Duration of the combined audio in seconds
+       * @example 45.5
+       */
+      audioDuration?: number;
+      /**
+       * @description S3 key for the combined page audio
+       * @example books/book-id/pages/page-1-audio.mp3
+       */
+      audioS3Key?: string;
+      /**
+       * @description Whether this page will be included in export (has completed paragraphs)
+       * @example true
+       */
+      willBeExported: boolean;
+    };
+    BookExportStatusDto: {
+      /**
+       * @description Book ID
+       * @example uuid-book-id
+       */
+      bookId: string;
+      /**
+       * @description Book title
+       * @example My Book Title
+       */
+      bookTitle: string;
+      /**
+       * @description Book author
+       * @example Author Name
+       */
+      bookAuthor?: string;
+      /**
+       * @description Total number of pages in the book
+       * @example 10
+       */
+      totalPages: number;
+      /**
+       * @description Number of pages that will be exported (have completed paragraphs)
+       * @example 7
+       */
+      exportablePages: number;
+      /**
+       * @description Number of pages with audio generation in progress
+       * @example 2
+       */
+      pagesInProgress: number;
+      /**
+       * @description Number of pages with ready audio
+       * @example 5
+       */
+      pagesReady: number;
+      /**
+       * @description Number of pages with audio generation errors
+       * @example 0
+       */
+      pagesWithErrors: number;
+      /**
+       * @description Overall export status
+       * @example in_progress
+       * @enum {string}
+       */
+      exportStatus:
+        | 'not_started'
+        | 'in_progress'
+        | 'completed'
+        | 'partial_errors'
+        | 'failed';
+      /** @description Detailed status for each page */
+      pages: components['schemas']['PageExportStatusDto'][];
+      /**
+       * @description Total estimated duration of all exportable audio in seconds
+       * @example 1200.5
+       */
+      totalDuration?: number;
+      /**
+       * @description Timestamp when export status was last updated
+       * @example 2024-01-01T12:00:00Z
+       */
+      lastUpdated: string;
+    };
+    StartBookExportResponseDto: {
+      /**
+       * @description Whether the export was successfully started
+       * @example true
+       */
+      success: boolean;
+      /**
+       * @description Message describing the result
+       * @example Book export started successfully. 7 pages will be processed.
+       */
+      message: string;
+      /**
+       * @description Number of pages that will be processed
+       * @example 7
+       */
+      pagesQueued: number;
+      /**
+       * @description Number of pages skipped (no completed paragraphs)
+       * @example 3
+       */
+      pagesSkipped: number;
+      /**
+       * @description Job IDs for the queued audio generation tasks
+       * @example [
+       *       "job-1",
+       *       "job-2",
+       *       "job-3"
+       *     ]
+       */
+      jobIds: string[];
+      /**
+       * @description Timestamp when export was started
+       * @example 2024-01-01T12:00:00Z
+       */
       timestamp: string;
     };
     JobDto: {
@@ -1537,6 +1765,123 @@ export interface operations {
     };
     responses: {
       /** @description Paragraph completed status updated successfully */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BooksController_getBookExportStatus: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description ID of the book to get export status for */
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Book export status retrieved successfully */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BookExportStatusDto'];
+        };
+      };
+    };
+  };
+  BooksController_startBookExport: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description ID of the book to export */
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Book export started successfully */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StartBookExportResponseDto'];
+        };
+      };
+    };
+  };
+  BooksController_startPageExport: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description ID of the book */
+        id: string;
+        /** @description ID of the page to export */
+        pageId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Page export started successfully */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StartBookExportResponseDto'];
+        };
+      };
+    };
+  };
+  BooksController_getPageAudio: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description ID of the book */
+        id: string;
+        /** @description ID of the page */
+        pageId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Audio file streamed successfully */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BooksController_deletePageAudio: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description ID of the book */
+        id: string;
+        /** @description ID of the page */
+        pageId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Page audio deleted successfully */
       200: {
         headers: {
           [name: string]: unknown;

@@ -224,4 +224,118 @@ describe('QueueService', () => {
       expect(addCall[1]).toHaveProperty('correlationId');
     });
   });
+
+  describe('addPageAudioCombinationJob', () => {
+    it('should add page audio combination job to queue', async () => {
+      const jobData = {
+        bookId: 'book-1',
+        pageId: 'page-1',
+      };
+
+      const expectedJob = {
+        id: 'combine-job-123',
+        data: {
+          ...jobData,
+          correlationId: expect.any(String),
+        },
+      };
+
+      mockQueue.add.mockResolvedValue(expectedJob as any);
+
+      const result = await service.addPageAudioCombinationJob(jobData);
+
+      expect(mockQueue.add).toHaveBeenCalledWith('combine-page-audio', {
+        ...jobData,
+        correlationId: expect.any(String),
+      });
+      expect(result).toEqual({ jobId: expectedJob.id });
+    });
+
+    it('should handle queue errors for page combination', async () => {
+      const jobData = {
+        bookId: 'book-1',
+        pageId: 'page-1',
+      };
+
+      const queueError = new Error('Queue connection failed');
+      mockQueue.add.mockRejectedValue(queueError);
+
+      await expect(service.addPageAudioCombinationJob(jobData)).rejects.toThrow('Queue connection failed');
+      
+      expect(mockQueue.add).toHaveBeenCalledWith('combine-page-audio', {
+        ...jobData,
+        correlationId: expect.any(String),
+      });
+    });
+  });
+
+  describe('cancelPageAudioCombinationJob', () => {
+    beforeEach(() => {
+      mockQueue.getJobs = jest.fn();
+    });
+
+    it('should cancel pending page audio combination job', async () => {
+      const mockPendingJob = {
+        id: 'pending-job-123',
+        data: { pageId: 'page-1', bookId: 'book-1' },
+        remove: jest.fn().mockResolvedValue(undefined),
+      };
+
+      mockQueue.getJobs.mockResolvedValue([mockPendingJob] as any);
+
+      const result = await service.cancelPageAudioCombinationJob('page-1');
+
+      expect(mockQueue.getJobs).toHaveBeenCalledWith(['waiting', 'active'], 0, -1);
+      expect(mockPendingJob.remove).toHaveBeenCalled();
+      expect(result).toBe(true);
+    });
+
+    it('should cancel active page audio combination job', async () => {
+      const mockActiveJob = {
+        id: 'active-job-456',
+        data: { pageId: 'page-1', bookId: 'book-1' },
+        remove: jest.fn().mockResolvedValue(undefined),
+      };
+
+      mockQueue.getJobs.mockResolvedValue([mockActiveJob] as any);
+
+      const result = await service.cancelPageAudioCombinationJob('page-1');
+
+      expect(mockQueue.getJobs).toHaveBeenCalledWith(['waiting', 'active'], 0, -1);
+      expect(mockActiveJob.remove).toHaveBeenCalled();
+      expect(result).toBe(true);
+    });
+
+    it('should return false if no job found to cancel', async () => {
+      mockQueue.getJobs.mockResolvedValue([]);
+
+      const result = await service.cancelPageAudioCombinationJob('nonexistent-page');
+
+      expect(mockQueue.getJobs).toHaveBeenCalledWith(['waiting', 'active'], 0, -1);
+      expect(result).toBe(false);
+    });
+
+    it('should handle multiple jobs and cancel only matching pageId', async () => {
+      const mockJobs = [
+        {
+          id: 'job-1',
+          data: { pageId: 'page-1', bookId: 'book-1' },
+          remove: jest.fn().mockResolvedValue(undefined),
+        },
+        {
+          id: 'job-2',
+          data: { pageId: 'page-2', bookId: 'book-1' },
+          remove: jest.fn().mockResolvedValue(undefined),
+        },
+      ];
+
+      mockQueue.getJobs.mockResolvedValue(mockJobs as any);
+
+      const result = await service.cancelPageAudioCombinationJob('page-1');
+
+      expect(mockJobs[0].remove).toHaveBeenCalled();
+      expect(mockJobs[1].remove).not.toHaveBeenCalled();
+      expect(result).toBe(true);
+    });
+  });
 });

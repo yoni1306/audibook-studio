@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useApiClient } from '../../hooks/useApiClient';
 import { BookWithCounts, BookExportStatus, PageExportStatus } from '@audibook/api-client';
@@ -16,22 +16,25 @@ interface PageCardProps {
 
 function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
   const [isExporting, setIsExporting] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
+  const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
 
   const completionPercentage = page.totalParagraphsCount > 0 
     ? Math.round((page.completedParagraphsCount / page.totalParagraphsCount) * 100) 
     : 0;
 
-  const canExport = page.audioStatus === 'READY' || page.audioStatus === 'EXPORTED';
-  const hasAudio = page.audioStatus === 'EXPORTED' && page.audioS3Key;
+  // Allow export if page has at least one completed paragraph
+  const canExport = page.completedParagraphsCount > 0;
+  // Check for READY status (which means exported and ready for playback) and S3 key
+  const hasAudio = page.audioStatus === 'READY' && page.audioS3Key;
 
   const handleExport = async () => {
     if (!canExport) return;
     
     try {
       setIsExporting(true);
-      const { error } = await apiClient.books.startPageExport(bookId, page.pageNumber);
+      const { error } = await apiClient.books.startPageExport(bookId, page.id);
       
       if (error) {
         console.error('Failed to export page:', error);
@@ -50,31 +53,35 @@ function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
   };
 
   const handlePlayAudio = async () => {
-    if (!hasAudio || !page.audioS3Key) return;
+    if (isPlaying) {
+      setCurrentAudio(null);
+      setIsPlaying(false);
+      return;
+    }
+    
+    if (!hasAudio || !page.audioS3Key) {
+      setCurrentAudio(null);
+      setIsPlaying(false);
+      return;
+    }
     
     try {
-      if (isPlaying && audio) {
-        audio.pause();
-        setIsPlaying(false);
-        return;
-      }
-      
-      const audioUrl = `/api/books/${bookId}/pages/${page.pageNumber}/audio`;
+      const audioUrl = `/api/books/${bookId}/pages/${page.id}/audio`;
       const newAudio = new Audio(audioUrl);
       
       newAudio.onended = () => {
         setIsPlaying(false);
-        setAudio(null);
+        setCurrentAudio(null);
       };
       
       newAudio.onerror = () => {
         console.error('Failed to play audio');
         setIsPlaying(false);
-        setAudio(null);
+        setCurrentAudio(null);
       };
       
       await newAudio.play();
-      setAudio(newAudio);
+      setCurrentAudio(newAudio);
       setIsPlaying(true);
     } catch (err) {
       console.error('Failed to play audio:', err);
@@ -85,7 +92,7 @@ function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
     if (!hasAudio || !page.audioS3Key) return;
     
     try {
-      const { error } = await apiClient.books.deletePageAudio(bookId, page.pageNumber.toString());
+      const { error } = await apiClient.books.deletePageAudio(bookId, page.id);
       
       if (error) {
         console.error('Failed to delete audio:', error);
@@ -98,11 +105,42 @@ function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
     }
   };
 
+  const handleCancelExport = async () => {
+    if (page.audioStatus !== 'GENERATING') return;
+    
+    try {
+      setIsCancelling(true);
+      const response = await fetch(`/api/books/${bookId}/pages/${page.id}/cancel-export`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        console.error('Failed to cancel export:', response.statusText);
+        return;
+      }
+      
+      const result = await response.json();
+      console.log('Export cancelled:', result.message);
+      
+      // Refresh status after cancellation
+      setTimeout(() => {
+        onStatusChange();
+      }, 500);
+    } catch (err) {
+      console.error('Failed to cancel export:', err);
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'EXPORTED': return 'var(--color-primary-600)';
       case 'READY': return 'var(--color-green-600)';
-      case 'GENERATING': return 'var(--color-blue-600)';
+      case 'GENERATING': return 'var(--color-orange-600)';
       case 'ERROR': return 'var(--color-red-600)';
       default: return 'var(--color-gray-500)';
     }
@@ -111,10 +149,20 @@ function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'EXPORTED': return '✅';
-      case 'READY': return '🟢';
-      case 'GENERATING': return '🔄';
+      case 'READY': return '🎵';
+      case 'GENERATING': return '⏳';
       case 'ERROR': return '❌';
       default: return '⚪';
+    }
+  };
+
+  const getStatusMessage = (status: string) => {
+    switch (status) {
+      case 'EXPORTED': return 'Exported';
+      case 'READY': return 'Ready to Play';
+      case 'GENERATING': return 'Export in Progress...';
+      case 'ERROR': return 'Export Failed';
+      default: return 'Not Exported';
     }
   };
 
@@ -143,10 +191,17 @@ function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
             alignItems: 'center',
             gap: '8px',
             fontSize: '14px',
-            color: getStatusColor(page.audioStatus)
+            color: getStatusColor(page.audioStatus),
+            padding: '4px 8px',
+            backgroundColor: page.audioStatus === 'GENERATING' ? 'var(--color-orange-50)' : 'transparent',
+            borderRadius: '6px',
+            border: page.audioStatus === 'GENERATING' ? '1px solid var(--color-orange-200)' : 'none'
           }}>
-            <span>{getStatusIcon(page.audioStatus)}</span>
-            <span style={{ fontWeight: '500' }}>{page.audioStatus}</span>
+            <span style={{
+              fontSize: '16px',
+              animation: page.audioStatus === 'GENERATING' ? 'pulse 2s infinite' : 'none'
+            }}>{getStatusIcon(page.audioStatus)}</span>
+            <span style={{ fontWeight: '500' }}>{getStatusMessage(page.audioStatus)}</span>
           </div>
         </div>
         {page.audioDuration && (
@@ -242,6 +297,35 @@ function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
           )}
         </button>
 
+        {/* Cancel button - temporarily always visible for testing */}
+        {(
+          <button
+            onClick={handleCancelExport}
+            disabled={isCancelling}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: 'var(--color-red-500)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontWeight: '600',
+              cursor: isCancelling ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: isCancelling ? 0.6 : 1
+            }}
+          >
+            {isCancelling ? (
+              <span>Stopping...</span>
+            ) : (
+              <span>Stop Export</span>
+            )}
+          </button>
+        )}
+
         {/* Play button */}
         {hasAudio && (
           <button
@@ -315,17 +399,36 @@ function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
 
 export default function ExportPage() {
   const [books, setBooks] = useState<BookWithCounts[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selectedBook, setSelectedBook] = useState<BookWithCounts | null>(null);
-  const [exportStatus, setExportStatus] = useState<BookExportStatus | null>(null);
+  const [exportStatus, setExportStatus] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [loadingExportStatus, setLoadingExportStatus] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const apiClient = useApiClient();
+
+  // Add CSS animations for progress indicators
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.7; transform: scale(1.1); }
+      }
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
 
   useEffect(() => {
     const fetchBooks = async () => {
       try {
-        setLoading(true);
+        setIsLoading(true);
         setError(null);
         
         const { data, error: apiError } = await apiClient.books.getAll();
@@ -345,7 +448,7 @@ export default function ExportPage() {
         setError('Failed to load books');
         setBooks([]);
       } finally {
-        setLoading(false);
+        setIsLoading(false);
       }
     };
 
@@ -375,6 +478,8 @@ export default function ExportPage() {
 
   // Handle book selection
   const handleBookSelect = async (book: BookWithCounts) => {
+    console.log('handleBookSelect called with book:', book.title);
+    logger.info('Selecting book:', book.title);
     setSelectedBook(book);
     await fetchExportStatus(book.id);
   };
@@ -388,21 +493,19 @@ export default function ExportPage() {
 
   const getBookStats = (book: BookWithCounts) => {
     const totalParagraphs = book._count?.paragraphs || 0;
-    // Note: We don't have completed paragraph count in BookWithCounts, 
-    // so we'll assume some paragraphs are completed if the book has any paragraphs
-    // This is a placeholder - in a real implementation, we'd need to fetch this data
-    const completedParagraphs = totalParagraphs > 0 ? Math.floor(totalParagraphs * 0.5) : 0; // Placeholder: assume 50% completion
-    const readyForExport = completedParagraphs > 0;
+    // Note: BookWithCounts doesn't include completed paragraphs count
+    // We'll make all books with paragraphs clickable and show real data in detailed view
+    const readyForExport = totalParagraphs > 0;
     
     return {
       totalParagraphs,
-      completedParagraphs,
+      completedParagraphs: 0, // Will be loaded in detailed view
       readyForExport,
-      completionPercentage: totalParagraphs > 0 ? Math.round((completedParagraphs / totalParagraphs) * 100) : 0
+      completionPercentage: 0 // Will be calculated in detailed view
     };
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div style={{ padding: '20px', textAlign: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
@@ -681,15 +784,8 @@ export default function ExportPage() {
                   borderRadius: '12px',
                   padding: '20px',
                   boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.05)';
-                  e.currentTarget.style.transform = 'translateY(0)';
+                  transition: 'all 0.2s ease',
+                  pointerEvents: 'auto'
                 }}
               >
                 {/* Book Info */}
@@ -743,13 +839,13 @@ export default function ExportPage() {
                     <span style={{
                       fontSize: '14px',
                       fontWeight: '600',
-                      color: stats.readyForExport ? 'var(--color-green-600)' : 'var(--color-gray-500)'
+                      color: 'var(--color-blue-600)'
                     }}>
-                      {stats.completedParagraphs}/{stats.totalParagraphs} ({stats.completionPercentage}%)
+                      {stats.totalParagraphs} paragraphs (click to view completion)
                     </span>
                   </div>
                   
-                  {/* Progress Bar */}
+                  {/* Progress Bar - placeholder */}
                   <div style={{
                     width: '100%',
                     height: '8px',
@@ -758,9 +854,9 @@ export default function ExportPage() {
                     overflow: 'hidden'
                   }}>
                     <div style={{
-                      width: `${stats.completionPercentage}%`,
+                      width: '100%',
                       height: '100%',
-                      backgroundColor: stats.readyForExport ? 'var(--color-green-500)' : 'var(--color-gray-400)',
+                      backgroundColor: 'var(--color-blue-400)',
                       transition: 'width 0.3s ease'
                     }} />
                   </div>
@@ -768,53 +864,30 @@ export default function ExportPage() {
 
                 {/* Export Button */}
                 <div style={{ textAlign: 'center' }}>
-                  {stats.readyForExport ? (
-                    <button
-                      onClick={() => handleBookSelect(book)}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        padding: '12px 24px',
-                        backgroundColor: 'var(--color-primary-500)',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '8px',
-                        fontSize: '14px',
-                        fontWeight: '600',
-                        transition: 'all 0.2s ease',
-                        width: '100%',
-                        justifyContent: 'center',
-                        cursor: 'pointer'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'var(--color-primary-600)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'var(--color-primary-500)';
-                      }}
-                    >
-                      <span>🎵</span>
-                      <span>View Pages</span>
-                    </button>
-                  ) : (
-                    <div style={{
-                      display: 'flex',
+                  <button
+                    onClick={() => {
+                      console.log('Button clicked for book:', book.title);
+                      handleBookSelect(book);
+                    }}
+                    style={{
+                      display: 'inline-flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
                       gap: '8px',
                       padding: '12px 24px',
-                      backgroundColor: 'var(--color-gray-100)',
-                      color: 'var(--color-gray-500)',
+                      backgroundColor: 'var(--color-primary-500)',
+                      color: 'white',
+                      border: 'none',
                       borderRadius: '8px',
                       fontSize: '14px',
-                      fontWeight: '500',
-                      border: '1px solid var(--color-gray-200)'
-                    }}>
-                      <span>⚠️</span>
-                      <span>No completed paragraphs</span>
-                    </div>
-                  )}
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      width: '100%',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <span>🎵</span>
+                    <span>View Pages</span>
+                  </button>
                 </div>
               </div>
             );

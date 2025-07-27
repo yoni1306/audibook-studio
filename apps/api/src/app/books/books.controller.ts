@@ -1,4 +1,5 @@
-import { Controller, Post, Get, Patch, Delete, Param, Body, Query, NotFoundException, BadRequestException, Redirect, Logger, InternalServerErrorException } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Param, Body, Query, NotFoundException, BadRequestException, Redirect, Logger, InternalServerErrorException, Res } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { BooksService } from './books.service';
 import { BooksExportService } from './books-export.service';
@@ -835,6 +836,78 @@ export class BooksController {
       }
       
       throw new InternalServerErrorException('Failed to start page export');
+    }
+  }
+
+  /**
+   * Cancel export for a specific page
+   */
+  @Post(':id/pages/:pageId/cancel-export')
+  @ApiOperation({ summary: 'Cancel page export', description: 'Cancel the audio export process for a specific page.' })
+  @ApiParam({ name: 'id', description: 'ID of the book' })
+  @ApiParam({ name: 'pageId', description: 'ID of the page' })
+  @ApiResponse({ status: 200, description: 'Export cancelled successfully' })
+  async cancelPageExport(
+    @Param('id') bookId: string,
+    @Param('pageId') pageId: string
+  ) {
+    this.logger.log(`🚫 [API] Cancelling export for page: ${pageId} in book: ${bookId}`);
+    
+    try {
+      const result = await this.booksExportService.cancelPageExport(bookId, pageId);
+      
+      this.logger.log(`✅ [API] Successfully cancelled export for page ${pageId} in book ${bookId}`);
+      return result;
+    } catch (error) {
+      this.logger.error(`❌ [API] Failed to cancel export for page ${pageId} in book ${bookId}:`, error);
+      
+      if (error.message.includes('Page not found')) {
+        throw new NotFoundException(`Page not found: ${pageId}`);
+      }
+      
+      throw new InternalServerErrorException('Failed to cancel page export');
+    }
+  }
+
+  /**
+   * Get exported audio for a specific page
+   */
+  @Get(':id/pages/:pageId/audio')
+  @ApiOperation({ summary: 'Get page audio', description: 'Stream the exported audio file for a specific page.' })
+  @ApiParam({ name: 'id', description: 'ID of the book' })
+  @ApiParam({ name: 'pageId', description: 'ID of the page' })
+  @ApiResponse({ status: 200, description: 'Audio file streamed successfully' })
+  async getPageAudio(
+    @Param('id') bookId: string,
+    @Param('pageId') pageId: string,
+    @Res() res: Response
+  ) {
+    this.logger.log(`🎵 [API] Serving audio for page: ${pageId} in book: ${bookId}`);
+    
+    try {
+      const audioStream = await this.booksExportService.getPageAudioStream(bookId, pageId);
+      
+      res.set({
+        'Content-Type': 'audio/mpeg',
+        'Accept-Ranges': 'bytes',
+        'Cache-Control': 'public, max-age=3600'
+      });
+      
+      audioStream.pipe(res);
+      
+      this.logger.log(`✅ [API] Successfully served audio for page ${pageId} in book ${bookId}`);
+    } catch (error) {
+      this.logger.error(`❌ [API] Failed to serve audio for page ${pageId} in book ${bookId}:`, error);
+      
+      if (error.message.includes('Page not found')) {
+        throw new NotFoundException(`Page not found: ${pageId}`);
+      }
+      
+      if (error.message.includes('No exported audio')) {
+        throw new NotFoundException(`No exported audio found for page ${pageId}`);
+      }
+      
+      throw new InternalServerErrorException('Failed to serve page audio');
     }
   }
 
