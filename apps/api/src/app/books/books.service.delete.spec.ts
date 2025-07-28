@@ -5,6 +5,7 @@ import { QueueService } from '../queue/queue.service';
 import { TextFixesService } from './text-fixes.service';
 import { BulkTextFixesService } from './bulk-text-fixes.service';
 import { S3Service } from '../s3/s3.service';
+import { MetricsService } from '../metrics/metrics.service';
 
 describe('BooksService - Delete Book', () => {
   let service: BooksService;
@@ -61,6 +62,10 @@ describe('BooksService - Delete Book', () => {
     const mockQueueService = {};
     const mockTextFixesService = {};
     const mockBulkTextFixesService = {};
+    const mockMetricsService = {
+      recordTextEdit: jest.fn().mockResolvedValue(undefined),
+      recordEvent: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -84,6 +89,10 @@ describe('BooksService - Delete Book', () => {
         {
           provide: BulkTextFixesService,
           useValue: mockBulkTextFixesService,
+        },
+        {
+          provide: MetricsService,
+          useValue: mockMetricsService,
         },
       ],
     }).compile();

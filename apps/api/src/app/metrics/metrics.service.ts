@@ -118,6 +118,51 @@ export class MetricsService {
   }
 
   /**
+   * Create bulk fix event data
+   */
+  private createBulkFixEventData(
+    originalWord: string,
+    correctedWord: string,
+    paragraphIds: string[],
+    fixType: string
+  ) {
+    return {
+      originalWord,
+      correctedWord,
+      paragraphIds,
+      fixType,
+      affectedParagraphs: paragraphIds.length,
+    };
+  }
+
+  /**
+   * Validate bulk fix parameters
+   */
+  private validateBulkFixParams(
+    bookId: string,
+    originalWord: string,
+    correctedWord: string,
+    paragraphIds: string[],
+    fixType: string
+  ): void {
+    if (!bookId?.trim()) {
+      throw new Error('Book ID is required for bulk fix');
+    }
+    if (!originalWord?.trim()) {
+      throw new Error('Original word is required for bulk fix');
+    }
+    if (!correctedWord?.trim()) {
+      throw new Error('Corrected word is required for bulk fix');
+    }
+    if (!Array.isArray(paragraphIds) || paragraphIds.length === 0) {
+      throw new Error('At least one paragraph ID is required for bulk fix');
+    }
+    if (!fixType?.trim()) {
+      throw new Error('Fix type is required for bulk fix');
+    }
+  }
+
+  /**
    * Record a bulk fix event
    */
   async recordBulkFix(
@@ -127,14 +172,18 @@ export class MetricsService {
     paragraphIds: string[],
     fixType: string
   ): Promise<void> {
-    const eventData = {
+    // Validate input parameters
+    this.validateBulkFixParams(bookId, originalWord, correctedWord, paragraphIds, fixType);
+
+    // Create event data
+    const eventData = this.createBulkFixEventData(
       originalWord,
       correctedWord,
       paragraphIds,
-      fixType,
-      affectedParagraphs: paragraphIds.length,
-    };
+      fixType
+    );
 
+    // Record the event
     await this.recordEvent({
       bookId,
       eventType: EventType.BULK_FIX_APPLIED,

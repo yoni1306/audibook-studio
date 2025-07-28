@@ -1,5 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Layout } from '../components/Layout';
+import {
+  Box,
+  Container,
+  Typography,
+  Paper,
+  Grid,
+  Fade,
+  Skeleton,
+  Alert,
+  Button,
+  Chip,
+  useTheme,
+  alpha,
+} from '@mui/material';
+import {
+  Analytics,
+  TrendingUp,
+  Refresh,
+} from '@mui/icons-material';
 import { GlobalMetricsCard } from '../components/analytics/GlobalMetricsCard';
 import { ActivityTimelineChart } from '../components/analytics/ActivityTimelineChart';
 import { PerformanceChart } from '../components/analytics/PerformanceChart';
@@ -38,6 +56,7 @@ export interface PerformanceMetrics {
 export type TimeRange = '1d' | '7d' | '30d' | '90d' | '1y';
 
 export const AnalyticsPage: React.FC = () => {
+  const theme = useTheme();
   const [timeRange, setTimeRange] = useState<TimeRange>('30d');
   const [globalMetrics, setGlobalMetrics] = useState<GlobalMetrics | null>(null);
   const [activityData, setActivityData] = useState<ActivityTimelineData[]>([]);
@@ -87,95 +106,292 @@ export const AnalyticsPage: React.FC = () => {
 
   if (loading) {
     return (
-      <Layout>
-        <div className="min-h-screen bg-gray-50 p-6">
-          <div className="max-w-7xl mx-auto">
-            <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-              <span className="ml-3 text-gray-600">Loading analytics...</span>
-            </div>
-          </div>
-        </div>
-      </Layout>
+      <Container maxWidth="xl" sx={{ py: 4 }}>
+        <Fade in={loading}>
+          <Box>
+            {/* Header Skeleton */}
+            <Box sx={{ mb: 4 }}>
+              <Skeleton variant="text" width={300} height={48} />
+              <Skeleton variant="text" width={500} height={24} sx={{ mt: 1 }} />
+            </Box>
+            
+            {/* Metrics Cards Skeleton */}
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+              {[1, 2, 3, 4].map((i) => (
+                <Grid item xs={12} sm={6} md={3} key={i}>
+                  <Paper sx={{ p: 3, height: 140 }}>
+                    <Skeleton variant="rectangular" width="100%" height={80} />
+                    <Skeleton variant="text" width="60%" sx={{ mt: 2 }} />
+                  </Paper>
+                </Grid>
+              ))}
+            </Grid>
+            
+            {/* Charts Skeleton */}
+            <Grid container spacing={3}>
+              <Grid item xs={12} lg={6}>
+                <Paper sx={{ p: 3, height: 400 }}>
+                  <Skeleton variant="text" width={200} height={32} />
+                  <Skeleton variant="rectangular" width="100%" height={300} sx={{ mt: 2 }} />
+                </Paper>
+              </Grid>
+              <Grid item xs={12} lg={6}>
+                <Paper sx={{ p: 3, height: 400 }}>
+                  <Skeleton variant="text" width={200} height={32} />
+                  <Skeleton variant="rectangular" width="100%" height={300} sx={{ mt: 2 }} />
+                </Paper>
+              </Grid>
+            </Grid>
+          </Box>
+        </Fade>
+      </Container>
     );
   }
 
   if (error) {
     return (
-      <Layout>
-        <div className="min-h-screen bg-gray-50 p-6">
-          <div className="max-w-7xl mx-auto">
-            <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-              <h3 className="text-lg font-medium text-red-800 mb-2">Error Loading Analytics</h3>
-              <p className="text-red-600">{error}</p>
-              <button
+      <Container maxWidth="xl" sx={{ py: 4 }}>
+        <Fade in={!!error}>
+          <Alert 
+            severity="error" 
+            sx={{ 
+              borderRadius: 2,
+              boxShadow: theme.shadows[1]
+            }}
+            action={
+              <Button 
+                color="inherit" 
+                size="small" 
                 onClick={fetchAnalyticsData}
-                className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                startIcon={<Refresh />}
+                sx={{ fontWeight: 600 }}
               >
                 Retry
-              </button>
-            </div>
-          </div>
-        </div>
-      </Layout>
+              </Button>
+            }
+          >
+            <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+              Error Loading Analytics
+            </Typography>
+            <Typography variant="body2">
+              {error}
+            </Typography>
+          </Alert>
+        </Fade>
+      </Container>
     );
   }
 
   return (
-    <Layout>
-      <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">Analytics Dashboard</h1>
-                <p className="text-gray-600 mt-2">
-                  Monitor your audiobook production metrics and performance
-                </p>
-              </div>
-              <TimeRangeSelector
-                value={timeRange}
-                onChange={setTimeRange}
-              />
-            </div>
-          </div>
+    <Container maxWidth="xl" sx={{ py: 4 }}>
+      <Fade in={!loading && !error} timeout={800}>
+        <Box>
+          {/* Header with Gradient Background */}
+          <Box 
+            sx={{
+              background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)} 0%, ${alpha(theme.palette.secondary.main, 0.05)} 100%)`,
+              borderRadius: 3,
+              p: 4,
+              mb: 4,
+              position: 'relative',
+              overflow: 'hidden',
+              '&::before': {
+                content: '""',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: `linear-gradient(45deg, ${alpha(theme.palette.primary.main, 0.02)} 25%, transparent 25%), linear-gradient(-45deg, ${alpha(theme.palette.primary.main, 0.02)} 25%, transparent 25%)`,
+                backgroundSize: '20px 20px',
+                pointerEvents: 'none',
+              }
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Box 
+                  sx={{
+                    background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
+                    borderRadius: 2,
+                    p: 1.5,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: theme.shadows[3]
+                  }}
+                >
+                  <Analytics sx={{ color: 'white', fontSize: 32 }} />
+                </Box>
+                <Box>
+                  <Typography 
+                    variant="h3" 
+                    sx={{ 
+                      fontWeight: 800,
+                      background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
+                      backgroundClip: 'text',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      mb: 1
+                    }}
+                  >
+                    Analytics Dashboard
+                  </Typography>
+                  <Typography 
+                    variant="body1" 
+                    sx={{ 
+                      color: theme.palette.text.secondary,
+                      fontWeight: 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1
+                    }}
+                  >
+                    <TrendingUp sx={{ fontSize: 20 }} />
+                    Monitor your audiobook production metrics and performance
+                  </Typography>
+                </Box>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Chip 
+                  label="Live Data" 
+                  color="success" 
+                  variant="filled"
+                  sx={{ 
+                    fontWeight: 600,
+                    boxShadow: theme.shadows[2]
+                  }}
+                />
+                <TimeRangeSelector
+                  value={timeRange}
+                  onChange={setTimeRange}
+                />
+              </Box>
+            </Box>
+          </Box>
 
           {/* Global Metrics Cards */}
           {globalMetrics && (
-            <div className="mb-8">
-              <GlobalMetricsCard metrics={globalMetrics} />
-            </div>
+            <Fade in={!!globalMetrics} timeout={1000}>
+              <Box sx={{ mb: 4 }}>
+                <GlobalMetricsCard metrics={globalMetrics} />
+              </Box>
+            </Fade>
           )}
 
           {/* Charts Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          <Grid container spacing={3} sx={{ mb: 4 }}>
             {/* Activity Timeline Chart */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Activity Timeline</h2>
-              <ActivityTimelineChart
-                data={activityData}
-                timeRange={timeRange}
-              />
-            </div>
+            <Grid item xs={12} lg={6}>
+              <Fade in timeout={1200}>
+                <Box 
+                  sx={{ 
+                    borderRadius: 3,
+                    border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                    background: `linear-gradient(145deg, ${theme.palette.background.paper} 0%, ${alpha(theme.palette.primary.main, 0.02)} 100%)`,
+                    transition: 'all 0.3s ease-in-out',
+                    overflow: 'hidden',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: theme.shadows[8],
+                      border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`
+                    },
+                    '& .MuiCard-root': {
+                      boxShadow: 'none',
+                      border: 'none',
+                      background: 'transparent'
+                    }
+                  }}
+                >
+                  <ActivityTimelineChart
+                    data={activityData}
+                    timeRange={timeRange}
+                  />
+                </Box>
+              </Fade>
+            </Grid>
 
             {/* Performance Chart */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Performance Metrics</h2>
-              <PerformanceChart
-                data={performanceData}
-                timeRange={timeRange}
-              />
-            </div>
-          </div>
+            <Grid item xs={12} lg={6}>
+              <Fade in timeout={1400}>
+                <Box 
+                  sx={{ 
+                    borderRadius: 3,
+                    border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                    background: `linear-gradient(145deg, ${theme.palette.background.paper} 0%, ${alpha(theme.palette.secondary.main, 0.02)} 100%)`,
+                    transition: 'all 0.3s ease-in-out',
+                    overflow: 'hidden',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: theme.shadows[8],
+                      border: `1px solid ${alpha(theme.palette.secondary.main, 0.2)}`
+                    },
+                    '& .MuiCard-root': {
+                      boxShadow: 'none',
+                      border: 'none',
+                      background: 'transparent'
+                    }
+                  }}
+                >
+                  <PerformanceChart
+                    data={performanceData}
+                    timeRange={timeRange}
+                  />
+                </Box>
+              </Fade>
+            </Grid>
+          </Grid>
 
           {/* Book Metrics Table */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Book Performance</h2>
-            <BookMetricsTable timeRange={timeRange} />
-          </div>
-        </div>
-      </div>
-    </Layout>
+          <Fade in timeout={1600}>
+            <Box 
+              sx={{ 
+                borderRadius: 3,
+                border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                background: `linear-gradient(145deg, ${theme.palette.background.paper} 0%, ${alpha(theme.palette.info.main, 0.02)} 100%)`,
+                transition: 'all 0.3s ease-in-out',
+                overflow: 'hidden',
+                '&:hover': {
+                  transform: 'translateY(-1px)',
+                  boxShadow: theme.shadows[4],
+                  border: `1px solid ${alpha(theme.palette.info.main, 0.2)}`
+                },
+                '& .MuiPaper-root': {
+                  boxShadow: 'none',
+                  border: 'none',
+                  background: 'transparent'
+                }
+              }}
+            >
+              <Box sx={{ p: 3 }}>
+                <Typography 
+                  variant="h5" 
+                  sx={{ 
+                    fontWeight: 700,
+                    mb: 3,
+                    color: theme.palette.text.primary,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1
+                  }}
+                >
+                  <Box 
+                    sx={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: `linear-gradient(135deg, ${theme.palette.info.main} 0%, ${theme.palette.success.main} 100%)`,
+                      mr: 1
+                    }}
+                  />
+                  Book Performance
+                </Typography>
+                <BookMetricsTable timeRange={timeRange} />
+              </Box>
+            </Box>
+          </Fade>
+        </Box>
+      </Fade>
+    </Container>
   );
 };

@@ -5,6 +5,7 @@ import { QueueService } from '../queue/queue.service';
 import { TextFixesService } from './text-fixes.service';
 import { BulkTextFixesService } from './bulk-text-fixes.service';
 import { S3Service } from '../s3/s3.service';
+import { MetricsService } from '../metrics/metrics.service';
 import { BookStatus } from '@prisma/client';
 
 describe('BooksService', () => {
@@ -13,6 +14,7 @@ describe('BooksService', () => {
   let queueService: jest.Mocked<QueueService>;
   let textFixesService: jest.Mocked<TextFixesService>;
   let bulkTextFixesService: jest.Mocked<BulkTextFixesService>;
+  let metricsService: jest.Mocked<MetricsService>;
 
   const mockBook = {
     id: 'book-1',
@@ -97,6 +99,11 @@ describe('BooksService', () => {
       findSimilarFixesInBook: jest.fn().mockResolvedValue([]),
     };
 
+    const mockMetricsService = {
+      recordTextEdit: jest.fn().mockResolvedValue(undefined),
+      recordEvent: jest.fn().mockResolvedValue(undefined),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         BooksService,
@@ -120,6 +127,10 @@ describe('BooksService', () => {
           provide: S3Service,
           useValue: mockS3Service,
         },
+        {
+          provide: MetricsService,
+          useValue: mockMetricsService,
+        },
       ],
     }).compile();
 
@@ -128,6 +139,7 @@ describe('BooksService', () => {
     queueService = module.get(QueueService);
     textFixesService = module.get(TextFixesService);
     bulkTextFixesService = module.get(BulkTextFixesService);
+    metricsService = module.get(MetricsService);
   });
 
   it('should be defined', () => {

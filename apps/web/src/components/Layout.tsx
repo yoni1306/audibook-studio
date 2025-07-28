@@ -65,7 +65,7 @@ function Navigation() {
   );
 }
 
-export default function Layout({ children }: LayoutProps) {
+function Layout({ children }: LayoutProps) {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--color-gray-50)' }}>
       <header style={{
@@ -122,3 +122,7 @@ export default function Layout({ children }: LayoutProps) {
     </div>
   );
 }
+
+// Export both named and default exports for compatibility
+export { Layout };
+export default Layout;

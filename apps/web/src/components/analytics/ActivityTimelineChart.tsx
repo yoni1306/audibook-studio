@@ -1,6 +1,25 @@
-import React, { useMemo } from 'react';
-import Highcharts from 'highcharts';
-import HighchartsReact from 'highcharts-react-official';
+import React from 'react';
+import {
+  Box,
+  Card,
+  CardContent,
+  Typography,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Chip,
+  Avatar,
+  Divider,
+} from '@mui/material';
+import {
+  Edit,
+  VolumeUp,
+  AutoFixHigh,
+  CheckCircle,
+  Book,
+  Schedule,
+} from '@mui/icons-material';
 import { ActivityTimelineData, TimeRange } from '../../pages/AnalyticsPage';
 
 interface ActivityTimelineChartProps {
@@ -8,131 +27,160 @@ interface ActivityTimelineChartProps {
   timeRange: TimeRange;
 }
 
+const getEventIcon = (eventType: string) => {
+  switch (eventType) {
+    case 'text_edit':
+      return <Edit />;
+    case 'audio_generation':
+      return <VolumeUp />;
+    case 'bulk_fix':
+      return <AutoFixHigh />;
+    case 'correction':
+      return <CheckCircle />;
+    case 'book_upload':
+      return <Book />;
+    default:
+      return <Schedule />;
+  }
+};
+
+const getEventColor = (eventType: string): 'primary' | 'secondary' | 'success' | 'warning' | 'error' => {
+  switch (eventType) {
+    case 'text_edit':
+      return 'secondary';
+    case 'audio_generation':
+      return 'success';
+    case 'bulk_fix':
+      return 'warning';
+    case 'correction':
+      return 'primary';
+    case 'book_upload':
+      return 'primary';
+    default:
+      return 'secondary';
+  }
+};
+
+const formatEventType = (eventType: string): string => {
+  return eventType
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
+
 export const ActivityTimelineChart: React.FC<ActivityTimelineChartProps> = ({ data, timeRange }) => {
-  const chartOptions = useMemo(() => {
-    // Sort data by timestamp
-    const sortedData = [...data].sort((a, b) => 
-      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-    );
+  const sortedData = [...data].sort((a, b) => 
+    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  );
 
-    // Prepare series data
-    const textEditsData = sortedData.map(item => [
-      new Date(item.timestamp).getTime(),
-      item.textEdits
-    ]);
+  const formatTimestamp = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+    
+    if (diffInHours < 1) {
+      const diffInMinutes = Math.floor(diffInHours * 60);
+      return `${diffInMinutes} minutes ago`;
+    } else if (diffInHours < 24) {
+      return `${Math.floor(diffInHours)} hours ago`;
+    } else {
+      return date.toLocaleDateString();
+    }
+  };
 
-    const audioGeneratedData = sortedData.map(item => [
-      new Date(item.timestamp).getTime(),
-      item.audioGenerated
-    ]);
+  // Create timeline items from activity data
+  const timelineItems = sortedData.flatMap(item => {
+    const items = [];
+    if (item.textEdits > 0) {
+      items.push({ eventType: 'text_edit', count: item.textEdits, timestamp: item.timestamp });
+    }
+    if (item.audioGenerated > 0) {
+      items.push({ eventType: 'audio_generation', count: item.audioGenerated, timestamp: item.timestamp });
+    }
+    if (item.bulkFixes > 0) {
+      items.push({ eventType: 'bulk_fix', count: item.bulkFixes, timestamp: item.timestamp });
+    }
+    if (item.corrections > 0) {
+      items.push({ eventType: 'correction', count: item.corrections, timestamp: item.timestamp });
+    }
+    return items;
+  }).slice(0, 20); // Limit to 20 most recent items
 
-    const bulkFixesData = sortedData.map(item => [
-      new Date(item.timestamp).getTime(),
-      item.bulkFixes
-    ]);
-
-    const correctionsData = sortedData.map(item => [
-      new Date(item.timestamp).getTime(),
-      item.corrections
-    ]);
-
-    return {
-      chart: {
-        type: 'line',
-        height: 400,
-        backgroundColor: 'transparent',
-      },
-      title: {
-        text: null,
-      },
-      xAxis: {
-        type: 'datetime',
-        title: {
-          text: 'Date',
-        },
-        gridLineWidth: 1,
-        gridLineColor: '#f0f0f0',
-      },
-      yAxis: {
-        title: {
-          text: 'Number of Events',
-        },
-        min: 0,
-        gridLineColor: '#f0f0f0',
-      },
-      tooltip: {
-        shared: true,
-        crosshairs: true,
-        formatter: function() {
-          const date = Highcharts.dateFormat('%Y-%m-%d', this.x);
-          let tooltip = `<b>${date}</b><br/>`;
-          
-          this.points?.forEach(point => {
-            tooltip += `<span style="color:${point.color}">●</span> ${point.series.name}: <b>${point.y}</b><br/>`;
-          });
-          
-          return tooltip;
-        },
-      },
-      legend: {
-        align: 'center',
-        verticalAlign: 'bottom',
-        layout: 'horizontal',
-      },
-      plotOptions: {
-        line: {
-          marker: {
-            enabled: true,
-            radius: 4,
-          },
-          lineWidth: 2,
-        },
-      },
-      series: [
-        {
-          name: 'Text Edits',
-          data: textEditsData,
-          color: '#10b981', // green-500
-        },
-        {
-          name: 'Audio Generated',
-          data: audioGeneratedData,
-          color: '#8b5cf6', // purple-500
-        },
-        {
-          name: 'Bulk Fixes',
-          data: bulkFixesData,
-          color: '#f59e0b', // amber-500
-        },
-        {
-          name: 'Corrections',
-          data: correctionsData,
-          color: '#3b82f6', // blue-500
-        },
-      ],
-      credits: {
-        enabled: false,
-      },
-    };
-  }, [data]);
-
-  if (!data || data.length === 0) {
+  if (!data || data.length === 0 || timelineItems.length === 0) {
     return (
-      <div className="flex items-center justify-center h-64 text-gray-500">
-        <div className="text-center">
-          <div className="text-4xl mb-2">📊</div>
-          <p>No activity data available for the selected time range</p>
-        </div>
-      </div>
+      <Card>
+        <CardContent>
+          <Typography variant="h5" component="h2" sx={{ mb: 3, fontWeight: 'bold' }}>
+            Activity Timeline
+          </Typography>
+          <Box sx={{ textAlign: 'center', py: 4 }}>
+            <Typography variant="body1" color="text.secondary">
+              No activity data available for the selected time range
+            </Typography>
+          </Box>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div className="w-full">
-      <HighchartsReact
-        highcharts={Highcharts}
-        options={chartOptions}
-      />
-    </div>
+    <Card>
+      <CardContent>
+        <Typography variant="h5" component="h2" sx={{ mb: 3, fontWeight: 'bold' }}>
+          Activity Timeline
+        </Typography>
+        
+        <List>
+          {timelineItems.map((item, index) => (
+            <React.Fragment key={index}>
+              <ListItem sx={{ py: 2 }}>
+                <ListItemIcon>
+                  <Avatar 
+                    sx={{ 
+                      width: 40, 
+                      height: 40, 
+                      bgcolor: `${getEventColor(item.eventType)}.main`,
+                      color: 'white'
+                    }}
+                  >
+                    {getEventIcon(item.eventType)}
+                  </Avatar>
+                </ListItemIcon>
+                
+                <ListItemText
+                  primary={
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Typography variant="h6" component="span">
+                        {formatEventType(item.eventType)}
+                      </Typography>
+                      <Chip 
+                        label={item.count} 
+                        size="small" 
+                        color={getEventColor(item.eventType)}
+                        variant="outlined"
+                      />
+                    </Box>
+                  }
+                  secondary={
+                    <Typography variant="body2" color="text.secondary">
+                      {formatTimestamp(item.timestamp)}
+                    </Typography>
+                  }
+                />
+              </ListItem>
+              {index < timelineItems.length - 1 && <Divider />}
+            </React.Fragment>
+          ))}
+        </List>
+        
+        {timelineItems.length >= 20 && (
+          <Box sx={{ textAlign: 'center', mt: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              Showing latest 20 activities
+            </Typography>
+          </Box>
+        )}
+      </CardContent>
+    </Card>
   );
 };

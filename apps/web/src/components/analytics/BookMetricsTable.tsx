@@ -1,4 +1,23 @@
 import React, { useState, useEffect } from 'react';
+import {
+  Box,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Typography,
+  Chip,
+  CircularProgress,
+  Alert,
+  Button,
+} from '@mui/material';
+import {
+  Refresh,
+  Book,
+} from '@mui/icons-material';
 import { TimeRange } from '../../pages/AnalyticsPage';
 
 interface BookMetrics {
@@ -101,108 +120,121 @@ export const BookMetricsTable: React.FC<BookMetricsTableProps> = ({ timeRange })
     return date.toLocaleDateString();
   };
 
-  const getCompletionColor = (percentage: number): string => {
-    if (percentage >= 90) return 'text-green-600 bg-green-100';
-    if (percentage >= 70) return 'text-yellow-600 bg-yellow-100';
-    return 'text-red-600 bg-red-100';
+  const getCompletionColor = (percentage: number): 'success' | 'warning' | 'error' => {
+    if (percentage >= 90) return 'success';
+    if (percentage >= 70) return 'warning';
+    return 'error';
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-32">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span className="ml-3 text-gray-600">Loading book metrics...</span>
-      </div>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 4 }}>
+        <CircularProgress size={32} sx={{ mr: 2 }} />
+        <Typography color="text.secondary">Loading book metrics...</Typography>
+      </Box>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-        <p className="text-red-600">{error}</p>
-        <button
-          onClick={fetchBookMetrics}
-          className="mt-2 px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm"
-        >
-          Retry
-        </button>
-      </div>
+      <Alert 
+        severity="error" 
+        action={
+          <Button 
+            color="inherit" 
+            size="small" 
+            onClick={fetchBookMetrics}
+            startIcon={<Refresh />}
+          >
+            Retry
+          </Button>
+        }
+      >
+        {error}
+      </Alert>
     );
   }
 
   if (bookMetrics.length === 0) {
     return (
-      <div className="text-center py-8 text-gray-500">
-        <div className="text-4xl mb-2">📚</div>
-        <p>No book metrics available for the selected time range</p>
-      </div>
+      <Box sx={{ textAlign: 'center', py: 6 }}>
+        <Book sx={{ fontSize: 60, color: 'text.secondary', mb: 2 }} />
+        <Typography variant="body1" color="text.secondary">
+          No book metrics available for the selected time range
+        </Typography>
+      </Box>
     );
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
-          <tr>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Book ID
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Text Edits
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Audio Generated
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Bulk Fixes
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Corrections
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Avg Time
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Completion
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Last Activity
-            </th>
-          </tr>
-        </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
+    <TableContainer component={Paper} sx={{ boxShadow: 'none', border: 'none', background: 'transparent' }}>
+      <Table sx={{ minWidth: 650 }}>
+        <TableHead>
+          <TableRow>
+            <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>Book ID</TableCell>
+            <TableCell align="right" sx={{ fontWeight: 600, color: 'text.secondary' }}>Text Edits</TableCell>
+            <TableCell align="right" sx={{ fontWeight: 600, color: 'text.secondary' }}>Audio Generated</TableCell>
+            <TableCell align="right" sx={{ fontWeight: 600, color: 'text.secondary' }}>Bulk Fixes</TableCell>
+            <TableCell align="right" sx={{ fontWeight: 600, color: 'text.secondary' }}>Corrections</TableCell>
+            <TableCell align="right" sx={{ fontWeight: 600, color: 'text.secondary' }}>Avg Time</TableCell>
+            <TableCell align="center" sx={{ fontWeight: 600, color: 'text.secondary' }}>Completion</TableCell>
+            <TableCell align="right" sx={{ fontWeight: 600, color: 'text.secondary' }}>Last Activity</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
           {bookMetrics.map((book) => (
-            <tr key={book.bookId} className="hover:bg-gray-50">
-              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+            <TableRow 
+              key={book.bookId} 
+              sx={{ 
+                '&:hover': { backgroundColor: 'action.hover' },
+                '&:last-child td, &:last-child th': { border: 0 }
+              }}
+            >
+              <TableCell component="th" scope="row" sx={{ fontWeight: 600 }}>
                 {book.bookId}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {book.totalTextEdits.toLocaleString()}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {book.totalAudioGenerated.toLocaleString()}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {book.totalBulkFixes.toLocaleString()}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {book.totalCorrections.toLocaleString()}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {formatProcessingTime(book.avgProcessingTime)}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getCompletionColor(book.completionPercentage)}`}>
-                  {book.completionPercentage.toFixed(1)}%
-                </span>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {formatDate(book.lastActivity)}
-              </td>
-            </tr>
+              </TableCell>
+              <TableCell align="right">
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  {book.totalTextEdits.toLocaleString()}
+                </Typography>
+              </TableCell>
+              <TableCell align="right">
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  {book.totalAudioGenerated.toLocaleString()}
+                </Typography>
+              </TableCell>
+              <TableCell align="right">
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  {book.totalBulkFixes.toLocaleString()}
+                </Typography>
+              </TableCell>
+              <TableCell align="right">
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  {book.totalCorrections.toLocaleString()}
+                </Typography>
+              </TableCell>
+              <TableCell align="right">
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  {formatProcessingTime(book.avgProcessingTime)}
+                </Typography>
+              </TableCell>
+              <TableCell align="center">
+                <Chip 
+                  label={`${book.completionPercentage.toFixed(1)}%`}
+                  color={getCompletionColor(book.completionPercentage)}
+                  size="small"
+                  sx={{ fontWeight: 600 }}
+                />
+              </TableCell>
+              <TableCell align="right">
+                <Typography variant="body2" color="text.secondary">
+                  {formatDate(book.lastActivity)}
+                </Typography>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
-    </div>
+        </TableBody>
+      </Table>
+    </TableContainer>
   );
 };
