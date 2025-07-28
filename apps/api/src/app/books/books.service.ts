@@ -6,6 +6,7 @@ import { TextFixesService } from './text-fixes.service';
 import { UpdateParagraphResponseDto, BulkFixSuggestion as BulkFixSuggestionDto } from './dto/paragraph-update.dto';
 import { S3Service } from '../s3/s3.service';
 import { BulkTextFixesService, BulkFixSuggestion as ServiceBulkFixSuggestion } from './bulk-text-fixes.service';
+import { MetricsService } from '../metrics/metrics.service';
 
 @Injectable()
 export class BooksService {
@@ -38,7 +39,8 @@ export class BooksService {
     private queueService: QueueService,
     private textFixesService: TextFixesService,
     private s3Service: S3Service,
-    private bulkTextFixesService: BulkTextFixesService
+    private bulkTextFixesService: BulkTextFixesService,
+    private metricsService: MetricsService
   ) {}
 
   async createBook(data: { title: string; author?: string; s3Key: string }) {
@@ -74,7 +76,7 @@ export class BooksService {
 
     // Track text changes if content is different
     let textChanges = [];
-  
+
     if (existingParagraph.content !== content) {
       this.logger.log(`Tracking text changes for paragraph ${paragraphId}`);
       textChanges = await this.textFixesService.processParagraphUpdate(
@@ -86,6 +88,23 @@ export class BooksService {
       this.logger.log(
         `Detected ${textChanges.length} text changes for paragraph ${paragraphId}`
       );
+
+      // Record metrics for text editing activity
+      try {
+        await this.metricsService.recordTextEdit(
+          existingParagraph.bookId, // Use the bookId directly from the paragraph
+          paragraphId,
+          textChanges.map(change => ({
+            originalWord: change.originalWord,
+            correctedWord: change.correctedWord,
+            position: change.position,
+            fixType: change.fixType,
+          }))
+        );
+      } catch (error) {
+        this.logger.error(`Failed to record text edit metrics: ${error.message}`);
+        // Don't fail the main operation if metrics recording fails
+      }
     }
 
     // Update the paragraph
@@ -243,6 +262,24 @@ export class BooksService {
         updatedAt: new Date(),
       },
     });
+
+    // Record metrics for paragraph completion
+    if (completed) {
+      try {
+        await this.metricsService.recordEvent({
+          bookId: existingParagraph.bookId,
+          eventType: 'PARAGRAPH_COMPLETED' as any, // Temporary type assertion
+          eventData: {
+            paragraphId,
+            completedAt: new Date().toISOString(),
+          },
+          success: true,
+        });
+      } catch (error) {
+        this.logger.error(`Failed to record paragraph completion metrics: ${error.message}`);
+        // Don't fail the main operation if metrics recording fails
+      }
+    }
 
     this.logger.log(`Successfully updated paragraph ${paragraphId} completed status to: ${completed}`);
     

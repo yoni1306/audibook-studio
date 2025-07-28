@@ -17,6 +17,9 @@ model Book {
   status          BookStatus        @default(PROCESSING)
   pages           Page[]            // Pages detected from EPUB
   textCorrections TextCorrection[]  // All text corrections for this book
+  // Metrics relations
+  metricEvents    MetricEvent[]     // All metric events for this book
+  bookMetrics     BookMetrics?      // Aggregated metrics for this book
   // Enhanced metadata fields
   totalPages      Int?              // Total number of pages detected
   totalParagraphs Int?              // Total number of paragraphs
@@ -114,6 +117,60 @@ enum AudioStatus {
   GENERATING
   READY
   ERROR
+}
+
+// Metrics and Analytics Models
+model MetricEvent {
+  id          String    @id @default(uuid())
+  bookId      String
+  book        Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  eventType   EventType
+  eventData   Json?     // Flexible event-specific data
+  duration    Int?      // Processing time in milliseconds
+  success     Boolean   @default(true)
+  errorMessage String?  // Error details if success = false
+  timestamp   DateTime  @default(now())
+  
+  @@index([bookId, eventType, timestamp])
+  @@index([eventType, timestamp])
+  @@index([timestamp])
+  @@map("metric_events")
+}
+
+model BookMetrics {
+  id                    String   @id @default(uuid())
+  bookId                String   @unique
+  book                  Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  
+  // Core Activity Metrics
+  totalTextEdits        Int      @default(0)
+  totalAudioGenerated   Int      @default(0)
+  totalBulkFixes        Int      @default(0)
+  totalCorrections      Int      @default(0)
+  
+  // Performance Metrics
+  avgProcessingTime     Float?   // Average processing time in milliseconds
+  completionPercentage  Float    @default(0) // Percentage of paragraphs completed
+  
+  // Timestamps
+  lastActivity          DateTime @default(now())
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  @@index([lastActivity])
+  @@index([completionPercentage])
+  @@map("book_metrics")
+}
+
+enum EventType {
+  TEXT_EDIT
+  AUDIO_GENERATION
+  BULK_FIX_APPLIED
+  BULK_FIX_SUGGESTED
+  PARAGRAPH_COMPLETED
+  BOOK_UPLOADED
+  EPUB_PARSED
+  CORRECTION_RECORDED
 }
 
 enum FixType {
