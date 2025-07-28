@@ -60,39 +60,58 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
         {
           provide: FixTypeHandlerRegistry,
           useValue: {
-            classifyCorrection: jest.fn().mockImplementation((originalWord: string, correctedWord: string) => {
-              // Return different fix types based on the words being corrected
-              let fixType: FixType = FixType.vowelization; // default
+            classifyCorrection: jest
+              .fn()
+              .mockImplementation(
+                (originalWord: string, correctedWord: string) => {
+                  // Return different fix types based on the words being corrected
+                  let fixType: FixType = FixType.vowelization; // default
 
-              if (originalWord === 'ספר' && correctedWord === 'ספרי') {
-                fixType = FixType.disambiguation;
-              } else if (originalWord === '5' && correctedWord === 'חמש') {
-                fixType = FixType.expansion;
-              } else if (originalWord === 'בית' && correctedWord === 'בַּיִת') {
-                fixType = FixType.vowelization;
-              } else if (originalWord === 'יום' && correctedWord === 'יוֹם') {
-                fixType = FixType.vowelization;
-              } else if (originalWord === 'טוב' && correctedWord === 'טוֹב') {
-                fixType = FixType.vowelization;
-              } else if (originalWord === 'ראשון' && correctedWord === 'רִאשׁוֹן') {
-                fixType = FixType.vowelization;
-              } else if (originalWord === 'שני' && correctedWord === 'שֵׁנִי') {
-                fixType = FixType.vowelization;
-              }
+                  if (originalWord === 'ספר' && correctedWord === 'ספרי') {
+                    fixType = FixType.disambiguation;
+                  } else if (originalWord === '5' && correctedWord === 'חמש') {
+                    fixType = FixType.expansion;
+                  } else if (
+                    originalWord === 'בית' &&
+                    correctedWord === 'בַּיִת'
+                  ) {
+                    fixType = FixType.vowelization;
+                  } else if (
+                    originalWord === 'יום' &&
+                    correctedWord === 'יוֹם'
+                  ) {
+                    fixType = FixType.vowelization;
+                  } else if (
+                    originalWord === 'טוב' &&
+                    correctedWord === 'טוֹב'
+                  ) {
+                    fixType = FixType.vowelization;
+                  } else if (
+                    originalWord === 'ראשון' &&
+                    correctedWord === 'רִאשׁוֹן'
+                  ) {
+                    fixType = FixType.vowelization;
+                  } else if (
+                    originalWord === 'שני' &&
+                    correctedWord === 'שֵׁנִי'
+                  ) {
+                    fixType = FixType.vowelization;
+                  }
 
-              return {
-                fixType,
-                confidence: 0.8,
-                reason: 'Mock classification',
-                matches: [],
-                debugInfo: {
-                  totalHandlers: 1,
-                  matchingHandlers: 1,
-                  allMatches: [],
-                  validationPassed: true
+                  return {
+                    fixType,
+                    confidence: 0.8,
+                    reason: 'Mock classification',
+                    matches: [],
+                    debugInfo: {
+                      totalHandlers: 1,
+                      matchingHandlers: 1,
+                      allMatches: [],
+                      validationPassed: true,
+                    },
+                  };
                 }
-              };
-            }),
+              ),
           },
         },
         {
@@ -116,7 +135,9 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
 
     service = module.get<BulkTextFixesService>(BulkTextFixesService);
     textFixesService = module.get<TextFixesService>(TextFixesService);
-    textCorrectionRepository = module.get<TextCorrectionRepository>(TextCorrectionRepository);
+    textCorrectionRepository = module.get<TextCorrectionRepository>(
+      TextCorrectionRepository
+    );
 
     // Suppress console logs during tests
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
@@ -188,7 +209,8 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
       expect(textCorrectionRepository.create).toHaveBeenCalledTimes(4);
 
       // Get all the calls to textCorrectionRepository.create
-      const createCalls = (textCorrectionRepository.create as jest.Mock).mock.calls;
+      const createCalls = (textCorrectionRepository.create as jest.Mock).mock
+        .calls;
 
       // ASSERTION: Should have 2 records for 'שלום' -> 'שָׁלוֹם' (one per paragraph)
       const shalomCorrections = createCalls.filter(
@@ -280,7 +302,11 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
       await service.applyBulkFixes(mockBookId, fixes);
 
       // Extract repository create calls
-      const createCalls = (textCorrectionRepository.create as jest.MockedFunction<typeof textCorrectionRepository.create>).mock.calls;
+      const createCalls = (
+        textCorrectionRepository.create as jest.MockedFunction<
+          typeof textCorrectionRepository.create
+        >
+      ).mock.calls;
 
       // ASSERTION: Should create exactly 4 text correction records (2 for טוב per paragraph + 1 for יום per paragraph)
       expect(createCalls).toHaveLength(4);
@@ -351,7 +377,11 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
       await service.applyBulkFixes(mockBookId, fixes);
 
       // Extract repository create calls
-      const createCalls = (textCorrectionRepository.create as jest.MockedFunction<typeof textCorrectionRepository.create>).mock.calls;
+      const createCalls = (
+        textCorrectionRepository.create as jest.MockedFunction<
+          typeof textCorrectionRepository.create
+        >
+      ).mock.calls;
 
       // ASSERTION: Should create exactly 2 text correction records (one per word per paragraph)
       expect(createCalls).toHaveLength(2);
@@ -368,13 +398,17 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
       expect(sheniCorrections).toHaveLength(1);
 
       // ASSERTION: Records should have their original fix types
-      const niqqudCorrections = createCalls.filter(call => call[0].originalWord === 'ראשון');
-      const vowelizationCorrections = createCalls.filter(call => call[0].originalWord === 'שני');
-      
+      const niqqudCorrections = createCalls.filter(
+        (call) => call[0].originalWord === 'ראשון'
+      );
+      const vowelizationCorrections = createCalls.filter(
+        (call) => call[0].originalWord === 'שני'
+      );
+
       niqqudCorrections.forEach((call) => {
         expect(call[0].fixType).toBe(FixType.vowelization);
       });
-      
+
       vowelizationCorrections.forEach((call) => {
         expect(call[0].fixType).toBe(FixType.vowelization);
       });
@@ -426,7 +460,11 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
       await service.applyBulkFixes(mockBookId, fixes);
 
       // Extract repository create calls
-      const createCalls = (textCorrectionRepository.create as jest.MockedFunction<typeof textCorrectionRepository.create>).mock.calls;
+      const createCalls = (
+        textCorrectionRepository.create as jest.MockedFunction<
+          typeof textCorrectionRepository.create
+        >
+      ).mock.calls;
 
       // ASSERTION: Should create records for standalone 'בית' but not 'בית-ספר'
       // This tests the Hebrew word boundary logic
@@ -484,7 +522,11 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
       await service.applyBulkFixes(mockBookId, fixes);
 
       // Extract repository create calls
-      const createCalls = (textCorrectionRepository.create as jest.MockedFunction<typeof textCorrectionRepository.create>).mock.calls;
+      const createCalls = (
+        textCorrectionRepository.create as jest.MockedFunction<
+          typeof textCorrectionRepository.create
+        >
+      ).mock.calls;
 
       // ASSERTION: Should create no records when no matches found
       expect(createCalls).toHaveLength(0);
@@ -569,7 +611,11 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
       await service.applyBulkFixes(mockBookId, fixes);
 
       // Extract repository create calls
-      const createCalls = (textCorrectionRepository.create as jest.MockedFunction<typeof textCorrectionRepository.create>).mock.calls;
+      const createCalls = (
+        textCorrectionRepository.create as jest.MockedFunction<
+          typeof textCorrectionRepository.create
+        >
+      ).mock.calls;
 
       // ASSERTION: Should create exactly 3 text correction records (standalone matches only)
       expect(createCalls).toHaveLength(3);
@@ -587,7 +633,8 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
 
       // ASSERTION: Should have 2 records for '5' -> 'חמש' (para-complex-1 and para-complex-3)
       const numberCorrections = createCalls.filter(
-        (call) => call[0].originalWord === '5' && call[0].correctedWord === 'חמש'
+        (call) =>
+          call[0].originalWord === '5' && call[0].correctedWord === 'חמש'
       );
       expect(numberCorrections).toHaveLength(2);
       const numberParagraphIds = numberCorrections.map(
@@ -597,13 +644,17 @@ describe('BulkTextFixesService - Duplicate Records Issue', () => {
       expect(numberParagraphIds).toContain('para-complex-3');
 
       // ASSERTION: Records should have their original fix types
-      const grammarCorrections = createCalls.filter(call => call[0].originalWord === 'ספר');
-      const numberToWordCorrections = createCalls.filter(call => call[0].originalWord === '5');
-      
+      const grammarCorrections = createCalls.filter(
+        (call) => call[0].originalWord === 'ספר'
+      );
+      const numberToWordCorrections = createCalls.filter(
+        (call) => call[0].originalWord === '5'
+      );
+
       grammarCorrections.forEach((call) => {
         expect(call[0].fixType).toBe(FixType.disambiguation);
       });
-      
+
       numberToWordCorrections.forEach((call) => {
         expect(call[0].fixType).toBe(FixType.expansion);
       });
