@@ -30,6 +30,8 @@ export interface BookMetricsDto {
   lastActivity: Date;
 }
 
+
+
 @Injectable()
 export class MetricsService {
   private readonly logger = new Logger(MetricsService.name);
@@ -45,7 +47,7 @@ export class MetricsService {
         data: {
           bookId: eventData.bookId,
           eventType: eventData.eventType,
-          eventData: eventData.eventData || {},
+          eventData: eventData.eventData as any || {},
           duration: eventData.duration,
           success: eventData.success ?? true,
           errorMessage: eventData.errorMessage,
@@ -179,6 +181,222 @@ export class MetricsService {
     } catch (error) {
       this.logger.error(`Failed to get book metrics: ${error.message}`);
       throw new Error('Failed to retrieve book metrics');
+    }
+  }
+
+  /**
+   * Get global metrics across all books
+   */
+  async getGlobalMetrics(timeRange?: { start: Date; end: Date }): Promise<{
+    totalBooks: number;
+    totalTextEdits: number;
+    totalAudioGenerated: number;
+    totalBulkFixes: number;
+    totalCorrections: number;
+    avgProcessingTime: number | null;
+    activeBooks: number;
+  }> {
+    try {
+      const whereClause: any = {};
+      
+      if (timeRange) {
+        whereClause.lastActivity = {
+          gte: timeRange.start,
+          lte: timeRange.end,
+        };
+      }
+
+      const bookMetrics = await this.prisma.bookMetrics.findMany({
+        where: whereClause,
+      });
+
+      const totalBooks = bookMetrics.length;
+      const activeBooks = bookMetrics.filter(
+        metrics => metrics.lastActivity > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+      ).length;
+
+      const totals = bookMetrics.reduce(
+        (acc, metrics) => ({
+          totalTextEdits: acc.totalTextEdits + metrics.totalTextEdits,
+          totalAudioGenerated: acc.totalAudioGenerated + metrics.totalAudioGenerated,
+          totalBulkFixes: acc.totalBulkFixes + metrics.totalBulkFixes,
+          totalCorrections: acc.totalCorrections + metrics.totalCorrections,
+          avgProcessingTimeSum: acc.avgProcessingTimeSum + (metrics.avgProcessingTime || 0),
+          avgProcessingTimeCount: acc.avgProcessingTimeCount + (metrics.avgProcessingTime ? 1 : 0),
+        }),
+        {
+          totalTextEdits: 0,
+          totalAudioGenerated: 0,
+          totalBulkFixes: 0,
+          totalCorrections: 0,
+          avgProcessingTimeSum: 0,
+          avgProcessingTimeCount: 0,
+        }
+      );
+
+      return {
+        totalBooks,
+        totalTextEdits: totals.totalTextEdits,
+        totalAudioGenerated: totals.totalAudioGenerated,
+        totalBulkFixes: totals.totalBulkFixes,
+        totalCorrections: totals.totalCorrections,
+        avgProcessingTime: totals.avgProcessingTimeCount > 0 
+          ? totals.avgProcessingTimeSum / totals.avgProcessingTimeCount 
+          : null,
+        activeBooks,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get global metrics: ${error.message}`);
+      throw new Error('Failed to retrieve global metrics');
+    }
+  }
+
+  /**
+   * Get activity timeline data
+   */
+  async getActivityTimeline(
+    bookId?: string,
+    timeRange?: { start: Date; end: Date }
+  ): Promise<Array<{
+    timestamp: Date;
+    textEdits: number;
+    audioGenerated: number;
+    bulkFixes: number;
+    corrections: number;
+  }>> {
+    try {
+      const whereClause: any = {};
+      
+      if (bookId) {
+        whereClause.bookId = bookId;
+      }
+      
+      if (timeRange) {
+        whereClause.timestamp = {
+          gte: timeRange.start,
+          lte: timeRange.end,
+        };
+      } else {
+        // Default to last 30 days
+        whereClause.timestamp = {
+          gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+        };
+      }
+
+      const events = await this.prisma.metricEvent.findMany({
+        where: whereClause,
+        orderBy: { timestamp: 'asc' },
+      });
+
+      // Group events by day
+      const dailyGroups = new Map<string, {
+        timestamp: Date;
+        textEdits: number;
+        audioGenerated: number;
+        bulkFixes: number;
+        corrections: number;
+      }>();
+
+      events.forEach(event => {
+        const dayKey = event.timestamp.toISOString().split('T')[0];
+        
+        if (!dailyGroups.has(dayKey)) {
+          dailyGroups.set(dayKey, {
+            timestamp: new Date(dayKey),
+            textEdits: 0,
+            audioGenerated: 0,
+            bulkFixes: 0,
+            corrections: 0,
+          });
+        }
+
+        const dayData = dailyGroups.get(dayKey)!;
+        switch (event.eventType) {
+          case 'TEXT_EDIT':
+            dayData.textEdits++;
+            break;
+          case 'AUDIO_GENERATION':
+            dayData.audioGenerated++;
+            break;
+          case 'BULK_FIX_APPLIED':
+            dayData.bulkFixes++;
+            break;
+          case 'CORRECTION_RECORDED':
+            dayData.corrections++;
+            break;
+        }
+      });
+
+      return Array.from(dailyGroups.values()).sort(
+        (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
+      );
+    } catch (error) {
+      this.logger.error(`Failed to get activity timeline: ${error.message}`);
+      throw new Error('Failed to retrieve activity timeline');
+    }
+  }
+
+  /**
+   * Get performance metrics for a specific event type
+   */
+  async getPerformanceMetrics(
+    eventType: EventType,
+    timeRange?: { start: Date; end: Date }
+  ): Promise<{
+    eventType: EventType;
+    totalEvents: number;
+    successfulEvents: number;
+    failedEvents: number;
+    successRate: number;
+    avgProcessingTime: number | null;
+    minProcessingTime: number | null;
+    maxProcessingTime: number | null;
+  }> {
+    try {
+      const whereClause: any = {
+        eventType,
+      };
+      
+      if (timeRange) {
+        whereClause.timestamp = {
+          gte: timeRange.start,
+          lte: timeRange.end,
+        };
+      }
+
+      const events = await this.prisma.metricEvent.findMany({
+        where: whereClause,
+      });
+
+      const totalEvents = events.length;
+      const successfulEvents = events.filter(e => e.success).length;
+      const failedEvents = totalEvents - successfulEvents;
+      const successRate = totalEvents > 0 ? (successfulEvents / totalEvents) * 100 : 0;
+
+      const durations = events
+        .filter(e => e.duration !== null)
+        .map(e => e.duration as number);
+
+      const avgProcessingTime = durations.length > 0 
+        ? durations.reduce((sum, d) => sum + d, 0) / durations.length 
+        : null;
+      
+      const minProcessingTime = durations.length > 0 ? Math.min(...durations) : null;
+      const maxProcessingTime = durations.length > 0 ? Math.max(...durations) : null;
+
+      return {
+        eventType,
+        totalEvents,
+        successfulEvents,
+        failedEvents,
+        successRate: Math.round(successRate * 100) / 100,
+        avgProcessingTime: avgProcessingTime ? Math.round(avgProcessingTime) : null,
+        minProcessingTime,
+        maxProcessingTime,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get performance metrics: ${error.message}`);
+      throw new Error('Failed to retrieve performance metrics');
     }
   }
 
