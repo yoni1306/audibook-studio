@@ -25,6 +25,7 @@ describe('BooksController', () => {
 
   const mockBooksExportService = {
     getBookExportStatus: jest.fn(),
+    startBookExport: jest.fn(),
     startPageExport: jest.fn(),
     deletePageAudio: jest.fn(),
     getPageAudioStream: jest.fn(),

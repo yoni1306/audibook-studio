@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BooksController } from './books.controller';
 import { BooksService } from './books.service';
+import { BooksExportService } from './books-export.service';
 import { BulkTextFixesService } from './bulk-text-fixes.service';
 import { CorrectionLearningService } from './correction-learning.service';
 import { TextCorrectionRepository } from './text-correction.repository';
@@ -16,6 +17,7 @@ describe('BooksController - Delete Book', () => {
       deleteBook: jest.fn(),
     };
 
+    const mockBooksExportService = {};
     const mockBulkTextFixesService = {};
     const mockCorrectionLearningService = {};
     const mockTextCorrectionRepository = {};
@@ -27,6 +29,10 @@ describe('BooksController - Delete Book', () => {
         {
           provide: BooksService,
           useValue: mockBooksService,
+        },
+        {
+          provide: BooksExportService,
+          useValue: mockBooksExportService,
         },
         {
           provide: BulkTextFixesService,
