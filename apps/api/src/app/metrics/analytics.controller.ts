@@ -32,6 +32,25 @@ export class AnalyticsController {
   }
 
   /**
+   * Get metrics for all books
+   * @param timeRange - Time range filter (1d, 7d, 30d, 90d, 1y)
+   */
+  @Get('books')
+  async getAllBookMetrics(
+    @Query('timeRange') timeRange?: string
+  ): Promise<BookMetricsDto[]> {
+    this.logger.log(`📊 Getting metrics for all books with time range: ${timeRange || 'all'}`);
+    
+    try {
+      const timeRangeObj = timeRange ? this.getTimeRangeFromString(timeRange) : undefined;
+      return await this.metricsService.getAllBookMetrics(timeRangeObj);
+    } catch (error) {
+      this.logger.error(`Failed to get all book metrics: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
    * Get metrics for a specific book
    * @param bookId - Book ID
    */

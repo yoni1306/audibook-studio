@@ -1,7 +1,12 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { QueueService } from './queue.service';
 import { QueueController } from './queue.controller';
+import { AudioProcessorService } from './audio-processor.service';
+import { EpubProcessorService } from './epub-processor.service';
+import { PrismaModule } from '../prisma/prisma.module';
+import { MetricsModule } from '../metrics/metrics.module';
+import { S3Module } from '../s3/s3.module';
 
 @Module({
   imports: [
@@ -31,11 +36,17 @@ import { QueueController } from './queue.controller';
       },
     }),
     BullModule.registerQueue({
-      name: 'audio-processing',
+      name: 'audio',
     }),
+    BullModule.registerQueue({
+      name: 'epub',
+    }),
+    PrismaModule,
+    forwardRef(() => MetricsModule),
+    forwardRef(() => S3Module),
   ],
   controllers: [QueueController],
-  providers: [QueueService],
+  providers: [QueueService, AudioProcessorService, EpubProcessorService],
   exports: [QueueService],
 })
 export class QueueModule {}

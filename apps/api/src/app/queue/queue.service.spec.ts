@@ -10,7 +10,8 @@ jest.mock('@audibook/correlation', () => ({
 
 describe('QueueService', () => {
   let service: QueueService;
-  let mockQueue: jest.Mocked<Queue>;
+  let mockAudioQueue: jest.Mocked<Queue>;
+  let mockEpubQueue: jest.Mocked<Queue>;
 
   const mockJob = {
     id: 'job-123',
@@ -34,14 +35,19 @@ describe('QueueService', () => {
       providers: [
         QueueService,
         {
-          provide: getQueueToken('audio-processing'),
+          provide: getQueueToken('audio'),
+          useValue: mockQueueInstance,
+        },
+        {
+          provide: getQueueToken('epub'),
           useValue: mockQueueInstance,
         },
       ],
     }).compile();
 
     service = module.get<QueueService>(QueueService);
-    mockQueue = module.get(getQueueToken('audio-processing'));
+    mockAudioQueue = module.get(getQueueToken('audio'));
+    mockEpubQueue = module.get(getQueueToken('epub'));
   });
 
   it('should be defined', () => {
@@ -63,11 +69,11 @@ describe('QueueService', () => {
         },
       };
 
-      mockQueue.add.mockResolvedValue(expectedJob as any);
+      mockEpubQueue.add.mockResolvedValue(expectedJob as any);
 
       const result = await service.addEpubParsingJob(jobData);
 
-      expect(mockQueue.add).toHaveBeenCalledWith('parse-epub', {
+      expect(mockEpubQueue.add).toHaveBeenCalledWith('parse-epub', {
         ...jobData,
         correlationId: expect.any(String),
       });
@@ -83,11 +89,11 @@ describe('QueueService', () => {
         content: 'Test content for audio generation',
       };
 
-      mockQueue.add.mockResolvedValue(mockJob as any);
+      mockAudioQueue.add.mockResolvedValue(mockJob as any);
 
       const result = await service.addAudioGenerationJob(jobData);
 
-      expect(mockQueue.add).toHaveBeenCalledWith('generate-audio', {
+      expect(mockAudioQueue.add).toHaveBeenCalledWith('generate-audio', {
         ...jobData,
         correlationId: expect.any(String),
       });
@@ -109,11 +115,11 @@ describe('QueueService', () => {
         },
       };
 
-      mockQueue.add.mockResolvedValue(hebrewJob as any);
+      mockAudioQueue.add.mockResolvedValue(hebrewJob as any);
 
       const result = await service.addAudioGenerationJob(jobData);
 
-      expect(mockQueue.add).toHaveBeenCalledWith('generate-audio', {
+      expect(mockAudioQueue.add).toHaveBeenCalledWith('generate-audio', {
         ...jobData,
         correlationId: expect.any(String),
       });
@@ -137,11 +143,11 @@ describe('QueueService', () => {
         },
       };
 
-      mockQueue.add.mockResolvedValue(longJob as any);
+      mockAudioQueue.add.mockResolvedValue(longJob as any);
 
       const result = await service.addAudioGenerationJob(jobData);
 
-      expect(mockQueue.add).toHaveBeenCalledWith('generate-audio', {
+      expect(mockAudioQueue.add).toHaveBeenCalledWith('generate-audio', {
         ...jobData,
         correlationId: expect.any(String),
       });
@@ -156,11 +162,11 @@ describe('QueueService', () => {
       };
 
       const queueError = new Error('Queue connection failed');
-      mockQueue.add.mockRejectedValue(queueError);
+      mockAudioQueue.add.mockRejectedValue(queueError);
 
       await expect(service.addAudioGenerationJob(jobData)).rejects.toThrow('Queue connection failed');
       
-      expect(mockQueue.add).toHaveBeenCalledWith('generate-audio', {
+      expect(mockAudioQueue.add).toHaveBeenCalledWith('generate-audio', {
         ...jobData,
         correlationId: expect.any(String),
       });
@@ -187,7 +193,7 @@ describe('QueueService', () => {
         },
       ];
 
-      mockQueue.add
+      mockAudioQueue.add
         .mockResolvedValueOnce({ id: 'job-1', data: jobs[0] } as any)
         .mockResolvedValueOnce({ id: 'job-2', data: jobs[1] } as any)
         .mockResolvedValueOnce({ id: 'job-3', data: jobs[2] } as any);
@@ -201,7 +207,7 @@ describe('QueueService', () => {
         { jobId: 'job-2' },
         { jobId: 'job-3' },
       ]);
-      expect(mockQueue.add).toHaveBeenCalledTimes(3);
+      expect(mockAudioQueue.add).toHaveBeenCalledTimes(3);
     });
 
     it('should maintain job data integrity', async () => {
@@ -211,14 +217,14 @@ describe('QueueService', () => {
         content: 'Test content with special characters: !@#$%^&*()',
       };
 
-      mockQueue.add.mockResolvedValue({
+      mockAudioQueue.add.mockResolvedValue({
         id: 'integrity-job',
         data: { ...jobData, correlationId: 'test-correlation' },
       } as any);
 
       await service.addAudioGenerationJob(jobData);
 
-      const addCall = mockQueue.add.mock.calls[0];
+      const addCall = mockAudioQueue.add.mock.calls[0];
       expect(addCall[0]).toBe('generate-audio');
       expect(addCall[1]).toMatchObject(jobData);
       expect(addCall[1]).toHaveProperty('correlationId');

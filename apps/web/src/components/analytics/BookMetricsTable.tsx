@@ -45,52 +45,27 @@ export const BookMetricsTable: React.FC<BookMetricsTableProps> = ({ timeRange })
       setLoading(true);
       setError(null);
 
-      // For now, we'll fetch global metrics and simulate book-specific data
-      // In a real implementation, you'd have an endpoint that returns all book metrics
-      const response = await fetch(`/api/analytics/global?timeRange=${timeRange}`);
+      // Fetch real book metrics from the API
+      const response = await fetch(`/api/analytics/books?timeRange=${timeRange}`);
       if (!response.ok) {
         throw new Error('Failed to fetch book metrics');
       }
 
-      // This is a placeholder - in reality you'd have a dedicated endpoint
-      // that returns individual book metrics
-      const globalData = await response.json();
+      const bookMetricsData = await response.json();
       
-      // Simulate some book data for demonstration
-      const simulatedBooks: BookMetrics[] = [
-        {
-          bookId: 'book-1',
-          totalTextEdits: Math.floor(globalData.totalTextEdits * 0.4),
-          totalAudioGenerated: Math.floor(globalData.totalAudioGenerated * 0.4),
-          totalBulkFixes: Math.floor(globalData.totalBulkFixes * 0.3),
-          totalCorrections: Math.floor(globalData.totalCorrections * 0.5),
-          avgProcessingTime: globalData.avgProcessingTime,
-          completionPercentage: 85.5,
-          lastActivity: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-        },
-        {
-          bookId: 'book-2',
-          totalTextEdits: Math.floor(globalData.totalTextEdits * 0.3),
-          totalAudioGenerated: Math.floor(globalData.totalAudioGenerated * 0.3),
-          totalBulkFixes: Math.floor(globalData.totalBulkFixes * 0.4),
-          totalCorrections: Math.floor(globalData.totalCorrections * 0.3),
-          avgProcessingTime: globalData.avgProcessingTime ? globalData.avgProcessingTime * 1.2 : null,
-          completionPercentage: 62.3,
-          lastActivity: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-        },
-        {
-          bookId: 'book-3',
-          totalTextEdits: Math.floor(globalData.totalTextEdits * 0.3),
-          totalAudioGenerated: Math.floor(globalData.totalAudioGenerated * 0.3),
-          totalBulkFixes: Math.floor(globalData.totalBulkFixes * 0.3),
-          totalCorrections: Math.floor(globalData.totalCorrections * 0.2),
-          avgProcessingTime: globalData.avgProcessingTime ? globalData.avgProcessingTime * 0.8 : null,
-          completionPercentage: 94.7,
-          lastActivity: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-        },
-      ];
+      // Convert API response to BookMetrics format
+      const books: BookMetrics[] = bookMetricsData.map((book: any) => ({
+        bookId: book.bookId,
+        totalTextEdits: book.totalTextEdits,
+        totalAudioGenerated: book.totalAudioGenerated,
+        totalBulkFixes: book.totalBulkFixes,
+        totalCorrections: book.totalCorrections,
+        avgProcessingTime: book.avgProcessingTime,
+        completionPercentage: book.completionPercentage,
+        lastActivity: new Date(book.lastActivity),
+      }));
 
-      setBookMetrics(simulatedBooks);
+      setBookMetrics(books);
     } catch (err) {
       console.error('Failed to fetch book metrics:', err);
       setError(err instanceof Error ? err.message : 'Failed to load book metrics');

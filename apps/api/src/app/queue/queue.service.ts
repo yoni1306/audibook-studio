@@ -7,11 +7,14 @@ import { getCurrentCorrelationId } from '@audibook/correlation';
 export class QueueService {
   private readonly logger = new Logger(QueueService.name);
 
-  constructor(@InjectQueue('audio-processing') private audioQueue: Queue) {}
+  constructor(
+    @InjectQueue('audio') private audioQueue: Queue,
+    @InjectQueue('epub') private epubQueue: Queue
+  ) {}
 
   async addEpubParsingJob(data: { bookId: string; s3Key: string; parsingMethod?: 'page-based' | 'xhtml-based' }) {
     const correlationId = getCurrentCorrelationId();
-    const job = await this.audioQueue.add('parse-epub', {
+    const job = await this.epubQueue.add('parse-epub', {
       ...data,
       correlationId,
     });

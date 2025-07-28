@@ -11,7 +11,8 @@ export class QueueController {
 
   constructor(
     private queueService: QueueService,
-    @InjectQueue('audio-processing') private audioQueue: Queue
+    @InjectQueue('audio') private audioQueue: Queue,
+    @InjectQueue('epub') private epubQueue: Queue
   ) {}
 
   @Post('parse-epub')
@@ -57,11 +58,25 @@ export class QueueController {
     try {
       this.logger.log('📊 [API] Getting queue status');
       
-      const waiting = await this.audioQueue.getWaitingCount();
-      const active = await this.audioQueue.getActiveCount();
-      const completed = await this.audioQueue.getCompletedCount();
-      const failed = await this.audioQueue.getFailedCount();
-      const delayed = await this.audioQueue.getDelayedCount();
+      // Get counts from both queues
+      const audioWaiting = await this.audioQueue.getWaitingCount();
+      const audioActive = await this.audioQueue.getActiveCount();
+      const audioCompleted = await this.audioQueue.getCompletedCount();
+      const audioFailed = await this.audioQueue.getFailedCount();
+      const audioDelayed = await this.audioQueue.getDelayedCount();
+      
+      const epubWaiting = await this.epubQueue.getWaitingCount();
+      const epubActive = await this.epubQueue.getActiveCount();
+      const epubCompleted = await this.epubQueue.getCompletedCount();
+      const epubFailed = await this.epubQueue.getFailedCount();
+      const epubDelayed = await this.epubQueue.getDelayedCount();
+      
+      // Combine counts from both queues
+      const waiting = audioWaiting + epubWaiting;
+      const active = audioActive + epubActive;
+      const completed = audioCompleted + epubCompleted;
+      const failed = audioFailed + epubFailed;
+      const delayed = audioDelayed + epubDelayed;
 
       const status = {
         waiting,

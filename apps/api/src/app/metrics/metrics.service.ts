@@ -193,6 +193,41 @@ export class MetricsService {
   }
 
   /**
+   * Get metrics for all books
+   */
+  async getAllBookMetrics(timeRange?: { start: Date; end: Date }): Promise<BookMetricsDto[]> {
+    try {
+      const whereClause: any = {};
+      
+      if (timeRange) {
+        whereClause.lastActivity = {
+          gte: timeRange.start,
+          lte: timeRange.end,
+        };
+      }
+
+      const bookMetrics = await this.prisma.bookMetrics.findMany({
+        where: whereClause,
+        orderBy: { lastActivity: 'desc' },
+      });
+
+      return bookMetrics.map(metrics => ({
+        bookId: metrics.bookId,
+        totalTextEdits: metrics.totalTextEdits,
+        totalAudioGenerated: metrics.totalAudioGenerated,
+        totalBulkFixes: metrics.totalBulkFixes,
+        totalCorrections: metrics.totalCorrections,
+        avgProcessingTime: metrics.avgProcessingTime,
+        completionPercentage: metrics.completionPercentage,
+        lastActivity: metrics.lastActivity,
+      }));
+    } catch (error) {
+      this.logger.error(`Failed to get all book metrics: ${error.message}`);
+      throw new Error('Failed to retrieve all book metrics');
+    }
+  }
+
+  /**
    * Get metrics for a specific book
    */
   async getBookMetrics(bookId: string): Promise<BookMetricsDto> {
