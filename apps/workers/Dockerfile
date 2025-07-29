@@ -1,7 +1,8 @@
 # Multi-stage build for Workers service
 FROM node:20-alpine AS base
 
-# Install pnpm globally
+# Install FFmpeg and pnpm globally
+RUN apk add --no-cache ffmpeg
 RUN npm install -g pnpm
 
 # Set working directory
@@ -27,7 +28,8 @@ RUN pnpm build:workers
 # Production stage
 FROM node:20-alpine AS production
 
-# Install pnpm
+# Install FFmpeg and pnpm
+RUN apk add --no-cache ffmpeg
 RUN npm install -g pnpm
 
 WORKDIR /app
