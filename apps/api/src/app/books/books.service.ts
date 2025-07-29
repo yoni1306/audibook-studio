@@ -192,6 +192,60 @@ export class BooksService {
     };
   }
 
+  async getCompletedParagraphs(bookId: string) {
+    this.logger.log(`🔍 Getting completed paragraphs for book: ${bookId}`);
+    
+    const book = await this.prisma.book.findUnique({
+      where: { id: bookId },
+      include: {
+        pages: {
+          orderBy: { pageNumber: 'asc' },
+          include: {
+            paragraphs: {
+              where: { completed: true }, // Only get completed paragraphs
+              orderBy: { orderIndex: 'asc' },
+              select: {
+                id: true,
+                content: true,
+                orderIndex: true,
+                audioStatus: true,
+                audioDuration: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!book) {
+      this.logger.log(`📚 Book not found: ${bookId}`);
+      return null;
+    }
+
+    // Transform data to the expected format
+    const pages = book.pages
+      .filter(page => page.paragraphs.length > 0) // Only include pages with completed paragraphs
+      .map(page => ({
+        pageId: page.id,
+        pageNumber: page.pageNumber,
+        completedParagraphs: page.paragraphs,
+      }));
+
+    const totalCompletedParagraphs = pages.reduce(
+      (total, page) => total + page.completedParagraphs.length,
+      0
+    );
+
+    this.logger.log(`✅ Found ${totalCompletedParagraphs} completed paragraphs across ${pages.length} pages for book: ${bookId}`);
+
+    return {
+      bookId: book.id,
+      bookTitle: book.title,
+      pages,
+      totalCompletedParagraphs,
+    };
+  }
+
   async getAllBooks() {
     return this.prisma.book.findMany({
       orderBy: { createdAt: 'desc' },

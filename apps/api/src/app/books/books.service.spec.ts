@@ -1004,4 +1004,330 @@ describe('BooksService', () => {
       expect(result).toEqual([]);
     });
   });
+
+  describe('getCompletedParagraphs', () => {
+    const mockBookId = 'test-book-id';
+    const mockCompletedParagraph1 = {
+      id: 'paragraph-1',
+      content: 'This is the first completed paragraph.',
+      orderIndex: 1,
+      audioStatus: 'COMPLETED',
+      audioDuration: 5.2,
+    };
+    const mockCompletedParagraph2 = {
+      id: 'paragraph-2',
+      content: 'This is the second completed paragraph.',
+      orderIndex: 2,
+      audioStatus: 'COMPLETED',
+      audioDuration: 3.8,
+    };
+    const mockCompletedParagraph3 = {
+      id: 'paragraph-3',
+      content: 'This is a completed paragraph on page 2.',
+      orderIndex: 1,
+      audioStatus: 'COMPLETED',
+      audioDuration: 4.1,
+    };
+
+    const mockBookWithCompletedParagraphs = {
+      id: mockBookId,
+      title: 'Test Book Title',
+      pages: [
+        {
+          id: 'page-1',
+          pageNumber: 1,
+          paragraphs: [mockCompletedParagraph1, mockCompletedParagraph2],
+        },
+        {
+          id: 'page-2',
+          pageNumber: 2,
+          paragraphs: [mockCompletedParagraph3],
+        },
+      ],
+    };
+
+    it('should return completed paragraphs organized by page', async () => {
+      (prismaService.book.findUnique as jest.Mock).mockResolvedValue(mockBookWithCompletedParagraphs);
+
+      const result = await service.getCompletedParagraphs(mockBookId);
+
+      expect(prismaService.book.findUnique).toHaveBeenCalledWith({
+        where: { id: mockBookId },
+        include: {
+          pages: {
+            orderBy: { pageNumber: 'asc' },
+            include: {
+              paragraphs: {
+                where: { completed: true },
+                orderBy: { orderIndex: 'asc' },
+                select: {
+                  id: true,
+                  content: true,
+                  orderIndex: true,
+                  audioStatus: true,
+                  audioDuration: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      expect(result).toEqual({
+        bookId: mockBookId,
+        bookTitle: 'Test Book Title',
+        pages: [
+          {
+            pageId: 'page-1',
+            pageNumber: 1,
+            completedParagraphs: [mockCompletedParagraph1, mockCompletedParagraph2],
+          },
+          {
+            pageId: 'page-2',
+            pageNumber: 2,
+            completedParagraphs: [mockCompletedParagraph3],
+          },
+        ],
+        totalCompletedParagraphs: 3,
+      });
+    });
+
+    it('should filter out pages with no completed paragraphs', async () => {
+      const mockBookWithMixedPages = {
+        id: mockBookId,
+        title: 'Test Book Title',
+        pages: [
+          {
+            id: 'page-1',
+            pageNumber: 1,
+            paragraphs: [mockCompletedParagraph1], // Has completed paragraphs
+          },
+          {
+            id: 'page-2',
+            pageNumber: 2,
+            paragraphs: [], // No completed paragraphs
+          },
+          {
+            id: 'page-3',
+            pageNumber: 3,
+            paragraphs: [mockCompletedParagraph3], // Has completed paragraphs
+          },
+        ],
+      };
+
+      (prismaService.book.findUnique as jest.Mock).mockResolvedValue(mockBookWithMixedPages);
+
+      const result = await service.getCompletedParagraphs(mockBookId);
+
+      expect(result.pages).toHaveLength(2); // Only pages with completed paragraphs
+      expect(result.pages[0].pageNumber).toBe(1);
+      expect(result.pages[1].pageNumber).toBe(3);
+      expect(result.totalCompletedParagraphs).toBe(2);
+    });
+
+    it('should handle book with no completed paragraphs', async () => {
+      const mockBookWithNoCompletedParagraphs = {
+        id: mockBookId,
+        title: 'Test Book Title',
+        pages: [
+          {
+            id: 'page-1',
+            pageNumber: 1,
+            paragraphs: [], // No completed paragraphs
+          },
+          {
+            id: 'page-2',
+            pageNumber: 2,
+            paragraphs: [], // No completed paragraphs
+          },
+        ],
+      };
+
+      (prismaService.book.findUnique as jest.Mock).mockResolvedValue(mockBookWithNoCompletedParagraphs);
+
+      const result = await service.getCompletedParagraphs(mockBookId);
+
+      expect(result).toEqual({
+        bookId: mockBookId,
+        bookTitle: 'Test Book Title',
+        pages: [],
+        totalCompletedParagraphs: 0,
+      });
+    });
+
+    it('should return null when book not found', async () => {
+      (prismaService.book.findUnique as jest.Mock).mockResolvedValue(null);
+
+      const result = await service.getCompletedParagraphs(mockBookId);
+
+      expect(result).toBeNull();
+      expect(prismaService.book.findUnique).toHaveBeenCalledWith({
+        where: { id: mockBookId },
+        include: {
+          pages: {
+            orderBy: { pageNumber: 'asc' },
+            include: {
+              paragraphs: {
+                where: { completed: true },
+                orderBy: { orderIndex: 'asc' },
+                select: {
+                  id: true,
+                  content: true,
+                  orderIndex: true,
+                  audioStatus: true,
+                  audioDuration: true,
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+
+    it('should maintain correct paragraph order within pages', async () => {
+      const mockBookWithOrderedParagraphs = {
+        id: mockBookId,
+        title: 'Test Book Title',
+        pages: [
+          {
+            id: 'page-1',
+            pageNumber: 1,
+            paragraphs: [
+              { ...mockCompletedParagraph2, orderIndex: 1 },
+              { id: 'paragraph-4', content: 'Third paragraph', orderIndex: 2, audioStatus: 'COMPLETED', audioDuration: 2.5 },
+              { ...mockCompletedParagraph1, orderIndex: 3 },
+            ],
+          },
+        ],
+      };
+
+      (prismaService.book.findUnique as jest.Mock).mockResolvedValue(mockBookWithOrderedParagraphs);
+
+      const result = await service.getCompletedParagraphs(mockBookId);
+
+      expect(result.pages[0].completedParagraphs).toHaveLength(3);
+      expect(result.pages[0].completedParagraphs[0].orderIndex).toBe(1); // Should be ordered by orderIndex
+      expect(result.pages[0].completedParagraphs[1].orderIndex).toBe(2);
+      expect(result.pages[0].completedParagraphs[2].orderIndex).toBe(3);
+    });
+
+    it('should maintain correct page order', async () => {
+      const mockBookWithOrderedPages = {
+        id: mockBookId,
+        title: 'Test Book Title',
+        pages: [
+          {
+            id: 'page-1',
+            pageNumber: 1,
+            paragraphs: [mockCompletedParagraph1],
+          },
+          {
+            id: 'page-2',
+            pageNumber: 2,
+            paragraphs: [mockCompletedParagraph2],
+          },
+          {
+            id: 'page-3',
+            pageNumber: 3,
+            paragraphs: [mockCompletedParagraph3],
+          },
+        ],
+      };
+
+      (prismaService.book.findUnique as jest.Mock).mockResolvedValue(mockBookWithOrderedPages);
+
+      const result = await service.getCompletedParagraphs(mockBookId);
+
+      expect(result.pages).toHaveLength(3);
+      expect(result.pages[0].pageNumber).toBe(1); // Should be ordered by pageNumber
+      expect(result.pages[1].pageNumber).toBe(2);
+      expect(result.pages[2].pageNumber).toBe(3);
+    });
+
+    it('should calculate total completed paragraphs correctly', async () => {
+      const mockBookWithVariousParagraphs = {
+        id: mockBookId,
+        title: 'Test Book Title',
+        pages: [
+          {
+            id: 'page-1',
+            pageNumber: 1,
+            paragraphs: [mockCompletedParagraph1, mockCompletedParagraph2], // 2 paragraphs
+          },
+          {
+            id: 'page-2',
+            pageNumber: 2,
+            paragraphs: [], // 0 paragraphs (filtered out)
+          },
+          {
+            id: 'page-3',
+            pageNumber: 3,
+            paragraphs: [mockCompletedParagraph3], // 1 paragraph
+          },
+        ],
+      };
+
+      (prismaService.book.findUnique as jest.Mock).mockResolvedValue(mockBookWithVariousParagraphs);
+
+      const result = await service.getCompletedParagraphs(mockBookId);
+
+      expect(result.totalCompletedParagraphs).toBe(3); // 2 + 0 + 1 = 3
+      expect(result.pages).toHaveLength(2); // Only pages with paragraphs
+    });
+
+    it('should only select required paragraph fields', async () => {
+      (prismaService.book.findUnique as jest.Mock).mockResolvedValue(mockBookWithCompletedParagraphs);
+
+      await service.getCompletedParagraphs(mockBookId);
+
+      expect(prismaService.book.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: {
+            pages: {
+              orderBy: { pageNumber: 'asc' },
+              include: {
+                paragraphs: {
+                  where: { completed: true },
+                  orderBy: { orderIndex: 'asc' },
+                  select: {
+                    id: true,
+                    content: true,
+                    orderIndex: true,
+                    audioStatus: true,
+                    audioDuration: true,
+                  },
+                },
+              },
+            },
+          },
+        })
+      );
+    });
+
+    it('should log appropriate messages', async () => {
+      const logSpy = jest.spyOn(service['logger'], 'log');
+      
+      (prismaService.book.findUnique as jest.Mock).mockResolvedValue(mockBookWithCompletedParagraphs);
+
+      await service.getCompletedParagraphs(mockBookId);
+
+      expect(logSpy).toHaveBeenCalledWith(`🔍 Getting completed paragraphs for book: ${mockBookId}`);
+      expect(logSpy).toHaveBeenCalledWith(`✅ Found 3 completed paragraphs across 2 pages for book: ${mockBookId}`);
+      
+      logSpy.mockRestore();
+    });
+
+    it('should log when book not found', async () => {
+      const logSpy = jest.spyOn(service['logger'], 'log');
+      
+      (prismaService.book.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await service.getCompletedParagraphs(mockBookId);
+
+      expect(logSpy).toHaveBeenCalledWith(`🔍 Getting completed paragraphs for book: ${mockBookId}`);
+      expect(logSpy).toHaveBeenCalledWith(`📚 Book not found: ${mockBookId}`);
+      
+      logSpy.mockRestore();
+    });
+  });
 });

@@ -3,6 +3,16 @@ import { promises as fsPromises } from 'fs';
 import * as path from 'path';
 import { XHTMLBasedEPUBParser, XHTMLParserOptions } from './xhtml-based-epub-parser';
 
+// Mock the logger to suppress expected error logs in tests
+jest.mock('@audibook/logger', () => ({
+  createLogger: () => ({
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  }),
+}));
+
 describe('XHTMLBasedEPUBParser', () => {
   let parser: XHTMLBasedEPUBParser;
   let testEpubPath: string;
@@ -143,7 +153,7 @@ describe('XHTMLBasedEPUBParser', () => {
       const nonExistentPath = '/path/to/non-existent.epub';
       
       await expect(parser.parseEpub(nonExistentPath)).rejects.toThrow(/ENOENT|no such file/);
-    }, 10000); // 10 second timeout
+    });
 
     it('should handle invalid EPUB files', async () => {
       const invalidEpubPath = path.join(__dirname, '../../../../package.json');
