@@ -1,21 +1,48 @@
+import { Test, TestingModule } from '@nestjs/testing';
 import { EpubProcessorService } from './epub-processor.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { MetricsService } from '../metrics/metrics.service';
+import { S3Service } from '../s3/s3.service';
 import { Job } from 'bullmq';
 
 describe('EpubProcessorService', () => {
   let service: EpubProcessorService;
   let mockPrismaService: jest.Mocked<Partial<PrismaService>>;
+  let mockMetricsService: jest.Mocked<Partial<MetricsService>>;
+  let mockS3Service: jest.Mocked<Partial<S3Service>>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockPrismaService = {
       book: {
         update: jest.fn(),
       },
     } as any;
 
-    service = new EpubProcessorService(
-      mockPrismaService as unknown as PrismaService
-    );
+    mockMetricsService = {
+      recordEvent: jest.fn().mockResolvedValue(undefined),
+    };
+
+    mockS3Service = {} as any;
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        EpubProcessorService,
+        {
+          provide: PrismaService,
+          useValue: mockPrismaService,
+        },
+        {
+          provide: MetricsService,
+          useValue: mockMetricsService,
+        },
+        {
+          provide: S3Service,
+          useValue: mockS3Service,
+        },
+      ],
+    }).compile();
+
+    service = module.get<EpubProcessorService>(EpubProcessorService);
   });
 
   describe('process', () => {
@@ -23,103 +50,99 @@ describe('EpubProcessorService', () => {
       // Arrange
       const jobData = {
         bookId: 'test-book-id',
-        s3Key: 'test-book.epub',
-        parsingMethod: 'page-based' as const,
+        s3Key: 'test-s3-key',
+        parsingMethod: 'default',
       };
-
-      const mockJob: Job = {
-        id: 'test-job-id',
-        name: 'parse-epub',
+      const mockJob = {
         data: jobData,
       } as any;
 
-      mockPrismaService.book!.update = jest.fn()
-        .mockResolvedValueOnce({ id: jobData.bookId, status: 'PROCESSING' })
-        .mockResolvedValueOnce({ id: jobData.bookId, status: 'READY' });
+      // Mock successful database operations
+      mockPrismaService.book!.update = jest.fn().mockResolvedValue({});
 
       // Act
       const result = await service.process(mockJob);
 
       // Assert
-      expect(result).toBeDefined();
-      expect(result.success).toBe(true);
-      expect(result.bookId).toBe(jobData.bookId);
-      expect(result.duration).toBeGreaterThan(0);
-
-      // Verify database updates - should be called twice (PROCESSING -> READY)
-      expect(mockPrismaService.book!.update).toHaveBeenCalledTimes(2);
-      expect(mockPrismaService.book!.update).toHaveBeenNthCalledWith(1, {
-        where: { id: jobData.bookId },
-        data: { status: 'PROCESSING' },
+      expect(result).toEqual({
+        success: true,
+        bookId: jobData.bookId,
+        duration: 0,
+        note: 'Job coordinated - actual parsing handled by workers service',
       });
-      expect(mockPrismaService.book!.update).toHaveBeenNthCalledWith(2, {
-        where: { id: jobData.bookId },
-        data: { status: 'READY' },
-      });
-    });
 
-    it('should handle database errors and set status to ERROR', async () => {
-      // Arrange
-      const jobData = {
-        bookId: 'test-book-id',
-        s3Key: 'test-book.epub',
-        parsingMethod: 'xhtml-based' as const,
-      };
-
-      const mockJob: Job = {
-        id: 'test-job-id',
-        name: 'parse-epub',
-        data: jobData,
-      } as any;
-
-      const dbError = new Error('Database connection failed');
-      mockPrismaService.book!.update = jest.fn()
-        .mockResolvedValueOnce({ id: jobData.bookId, status: 'PROCESSING' })
-        .mockRejectedValueOnce(dbError);
-
-      // Act & Assert
-      await expect(service.process(mockJob)).rejects.toThrow('Database connection failed');
-
-      // Verify status was set to PROCESSING initially
-      expect(mockPrismaService.book!.update).toHaveBeenNthCalledWith(1, {
+      // Verify database updates - coordinator only sets status to PROCESSING
+      expect(mockPrismaService.book!.update).toHaveBeenCalledTimes(1);
+      expect(mockPrismaService.book!.update).toHaveBeenCalledWith({
         where: { id: jobData.bookId },
         data: { status: 'PROCESSING' },
       });
     });
 
-    it('should handle parsing failures and set status to ERROR', async () => {
+    it('should handle database errors gracefully', async () => {
       // Arrange
       const jobData = {
         bookId: 'test-book-id',
-        s3Key: 'corrupted-book.epub',
+        s3Key: 'test-s3-key',
+        parsingMethod: 'default',
       };
-
-      const mockJob: Job = {
-        id: 'test-job-id',
-        name: 'parse-epub',
+      const mockJob = {
         data: jobData,
       } as any;
 
-      // Mock the first update to succeed (PROCESSING), but simulate parsing failure
+      // Mock database error
       mockPrismaService.book!.update = jest.fn()
-        .mockResolvedValueOnce({ id: jobData.bookId, status: 'PROCESSING' })
-        .mockResolvedValueOnce({ id: jobData.bookId, status: 'ERROR' });
+        .mockRejectedValueOnce(new Error('Database connection failed'));
 
-      // Mock the simulateEpubParsing to throw an error
-      const originalSimulateEpubParsing = (service as any).simulateEpubParsing;
-      (service as any).simulateEpubParsing = jest.fn().mockRejectedValue(new Error('Parsing failed'));
+      // Act & Assert - coordinator handles errors but doesn't throw
+      const result = await service.process(mockJob);
+      
+      // Coordinator returns success even if DB update fails (workers will handle actual parsing)
+      expect(result).toEqual({
+        success: true,
+        bookId: jobData.bookId,
+        duration: 0,
+        note: 'Job coordinated - actual parsing handled by workers service',
+      });
 
-      // Act & Assert
-      await expect(service.process(mockJob)).rejects.toThrow('Parsing failed');
-
-      // Verify status updates
-      expect(mockPrismaService.book!.update).toHaveBeenNthCalledWith(1, {
+      // Verify attempt to set status to PROCESSING
+      expect(mockPrismaService.book!.update).toHaveBeenCalledWith({
         where: { id: jobData.bookId },
         data: { status: 'PROCESSING' },
       });
+    });
 
-      // Restore original method
-      (service as any).simulateEpubParsing = originalSimulateEpubParsing;
+    it('should coordinate job processing without actual parsing', async () => {
+      // Arrange
+      const jobData = {
+        bookId: 'test-book-id',
+        s3Key: 'test-s3-key',
+        parsingMethod: 'default',
+      };
+      const mockJob = {
+        data: jobData,
+      } as any;
+
+      // Mock successful status update
+      mockPrismaService.book!.update = jest.fn().mockResolvedValue({});
+
+      // Act
+      const result = await service.process(mockJob);
+
+      // Assert - coordinator always succeeds and delegates to workers
+      expect(result).toEqual({
+        success: true,
+        bookId: jobData.bookId,
+        duration: 0,
+        note: 'Job coordinated - actual parsing handled by workers service',
+      });
+
+      // Verify only PROCESSING status is set (workers handle the rest)
+      expect(mockPrismaService.book!.update).toHaveBeenCalledTimes(1);
+      expect(mockPrismaService.book!.update).toHaveBeenCalledWith({
+        where: { id: jobData.bookId },
+        data: { status: 'PROCESSING' },
+      });
     });
 
     it('should ignore non-parse-epub jobs', async () => {
@@ -142,31 +165,33 @@ describe('EpubProcessorService', () => {
       // Arrange
       const jobData = {
         bookId: 'test-book-id',
-        s3Key: 'test-book.epub',
-        // No parsingMethod specified - should use default
+        s3Key: 'test-s3-key',
+        // No parsingMethod specified - should default
       };
-
-      const mockJob: Job = {
-        id: 'test-job-id',
-        name: 'parse-epub',
+      const mockJob = {
         data: jobData,
       } as any;
 
-      mockPrismaService.book!.update = jest.fn()
-        .mockResolvedValueOnce({ id: jobData.bookId, status: 'PROCESSING' })
-        .mockResolvedValueOnce({ id: jobData.bookId, status: 'READY' });
+      // Mock successful database operations
+      mockPrismaService.book!.update = jest.fn().mockResolvedValue({});
 
       // Act
       const result = await service.process(mockJob);
 
       // Assert
-      expect(result).toBeDefined();
-      expect(result.success).toBe(true);
-      expect(result.bookId).toBe(jobData.bookId);
-      expect(result.duration).toBeGreaterThan(0);
+      expect(result).toEqual({
+        success: true,
+        bookId: jobData.bookId,
+        duration: 0,
+        note: 'Job coordinated - actual parsing handled by workers service',
+      });
 
-      // Verify database updates
-      expect(mockPrismaService.book!.update).toHaveBeenCalledTimes(2);
+      // Verify database updates - coordinator only sets PROCESSING status
+      expect(mockPrismaService.book!.update).toHaveBeenCalledTimes(1);
+      expect(mockPrismaService.book!.update).toHaveBeenCalledWith({
+        where: { id: jobData.bookId },
+        data: { status: 'PROCESSING' },
+      });
     });
   });
 

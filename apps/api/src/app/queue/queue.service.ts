@@ -8,13 +8,12 @@ export class QueueService {
   private readonly logger = new Logger(QueueService.name);
 
   constructor(
-    @InjectQueue('audio') private audioQueue: Queue,
-    @InjectQueue('epub') private epubQueue: Queue
+    @InjectQueue('audio-processing') private audioProcessingQueue: Queue
   ) {}
 
   async addEpubParsingJob(data: { bookId: string; s3Key: string; parsingMethod?: 'page-based' | 'xhtml-based' }) {
     const correlationId = getCurrentCorrelationId();
-    const job = await this.epubQueue.add('parse-epub', {
+    const job = await this.audioProcessingQueue.add('parse-epub', {
       ...data,
       correlationId,
     });
@@ -34,7 +33,7 @@ export class QueueService {
     content: string;
   }) {
     const correlationId = getCurrentCorrelationId();
-    const job = await this.audioQueue.add('generate-audio', {
+    const job = await this.audioProcessingQueue.add('generate-audio', {
       ...data,
       correlationId,
     });

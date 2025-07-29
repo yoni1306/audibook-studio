@@ -1,9 +1,8 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { QueueService } from './queue.service';
-import { QueueController } from './queue.controller';
 import { AudioProcessorService } from './audio-processor.service';
-import { EpubProcessorService } from './epub-processor.service';
+import { QueueController } from './queue.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { MetricsModule } from '../metrics/metrics.module';
 import { S3Module } from '../s3/s3.module';
@@ -35,18 +34,17 @@ import { S3Module } from '../s3/s3.module';
         commandTimeout: 30000, // Increased for Railway network conditions
       },
     }),
+    // Register the unified 'audio-processing' queue to match workers service
+    // Both audio generation and EPUB parsing jobs use this same queue
     BullModule.registerQueue({
-      name: 'audio',
-    }),
-    BullModule.registerQueue({
-      name: 'epub',
+      name: 'audio-processing',
     }),
     PrismaModule,
     forwardRef(() => MetricsModule),
     forwardRef(() => S3Module),
   ],
   controllers: [QueueController],
-  providers: [QueueService, AudioProcessorService, EpubProcessorService],
+  providers: [QueueService, AudioProcessorService],
   exports: [QueueService],
 })
 export class QueueModule {}

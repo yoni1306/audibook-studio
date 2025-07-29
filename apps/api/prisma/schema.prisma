@@ -20,6 +20,7 @@ model Book {
   // Metrics relations
   metricEvents    MetricEvent[]     // All metric events for this book
   bookMetrics     BookMetrics?      // Aggregated metrics for this book
+  ttsUsageEvents  TTSUsageEvent[]   // TTS usage tracking for this book
   // Enhanced metadata fields
   totalPages      Int?              // Total number of pages detected
   totalParagraphs Int?              // Total number of paragraphs
@@ -171,6 +172,7 @@ enum EventType {
   BOOK_UPLOADED
   EPUB_PARSED
   CORRECTION_RECORDED
+  TTS_USAGE
 }
 
 enum FixType {
@@ -181,4 +183,85 @@ enum FixType {
   dialogue_marking  // Adding quotation marks and dialogue indicators
   expansion         // Expanding numbers, currency, and acronyms into readable form
   default          // Default/unclassified text correction when no specific type matches
+}
+
+// TTS Cost Tracking Models
+model TTSUsageEvent {
+  id              String       @id @default(uuid())
+  bookId          String
+  book            Book         @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  paragraphId     String?      // Optional: specific paragraph if applicable
+  
+  // TTS Provider Details
+  provider        TTSProvider  // OpenAI, ElevenLabs, Azure, etc.
+  model           String       // Specific model used (e.g., "tts-1", "eleven_multilingual_v2")
+  voice           String       // Voice ID or name
+  
+  // Usage Metrics
+  characterCount  Int          // Number of characters processed
+  audioLength     Float?       // Duration of generated audio in seconds
+  
+  // Cost Information
+  costPerUnit     Float        // Cost per character/second for this provider/model
+  totalCost       Float        // Calculated total cost for this usage
+  currency        String       @default("USD")
+  
+  // Performance Metrics
+  processingTime  Int?         // Time taken to generate audio (ms)
+  success         Boolean      @default(true)
+  errorMessage    String?      // Error details if failed
+  
+  // Metadata
+  timestamp       DateTime     @default(now())
+  createdAt       DateTime     @default(now())
+  
+  @@index([bookId, provider, timestamp])
+  @@index([provider, model, timestamp])
+  @@index([timestamp])
+  @@map("tts_usage_events")
+}
+
+model TTSPricingConfig {
+  id              String       @id @default(uuid())
+  provider        TTSProvider
+  model           String       // Model identifier
+  voice           String?      // Optional: specific voice pricing
+  
+  // Pricing Structure
+  costPerUnit     Float        // Cost per character or per second
+  unitType        PricingUnit  // CHARACTER or SECOND
+  currency        String       @default("USD")
+  
+  // Tier Information (for volume discounts)
+  tierName        String?      // e.g., "Standard", "Premium", "Enterprise"
+  minUnits        Int?         // Minimum units for this tier
+  maxUnits        Int?         // Maximum units for this tier (null = unlimited)
+  
+  // Metadata
+  effectiveFrom   DateTime     @default(now())
+  effectiveTo     DateTime?    // null = currently active
+  isActive        Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  
+  @@unique([provider, model, voice, effectiveFrom])
+  @@index([provider, model, isActive])
+  @@index([effectiveFrom, effectiveTo])
+  @@map("tts_pricing_config")
+}
+
+enum TTSProvider {
+  OPENAI
+  ELEVENLABS
+  AZURE
+  GOOGLE
+  AWS_POLLY
+  CUSTOM
+}
+
+enum PricingUnit {
+  CHARACTER
+  SECOND
+  WORD
+  REQUEST
 }

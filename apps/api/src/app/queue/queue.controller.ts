@@ -11,8 +11,7 @@ export class QueueController {
 
   constructor(
     private queueService: QueueService,
-    @InjectQueue('audio') private audioQueue: Queue,
-    @InjectQueue('epub') private epubQueue: Queue
+    @InjectQueue('audio-processing') private audioProcessingQueue: Queue
   ) {}
 
   @Post('parse-epub')
@@ -58,25 +57,12 @@ export class QueueController {
     try {
       this.logger.log('📊 [API] Getting queue status');
       
-      // Get counts from both queues
-      const audioWaiting = await this.audioQueue.getWaitingCount();
-      const audioActive = await this.audioQueue.getActiveCount();
-      const audioCompleted = await this.audioQueue.getCompletedCount();
-      const audioFailed = await this.audioQueue.getFailedCount();
-      const audioDelayed = await this.audioQueue.getDelayedCount();
-      
-      const epubWaiting = await this.epubQueue.getWaitingCount();
-      const epubActive = await this.epubQueue.getActiveCount();
-      const epubCompleted = await this.epubQueue.getCompletedCount();
-      const epubFailed = await this.epubQueue.getFailedCount();
-      const epubDelayed = await this.epubQueue.getDelayedCount();
-      
-      // Combine counts from both queues
-      const waiting = audioWaiting + epubWaiting;
-      const active = audioActive + epubActive;
-      const completed = audioCompleted + epubCompleted;
-      const failed = audioFailed + epubFailed;
-      const delayed = audioDelayed + epubDelayed;
+      // Get counts from unified audio-processing queue
+      const waiting = await this.audioProcessingQueue.getWaitingCount();
+      const active = await this.audioProcessingQueue.getActiveCount();
+      const completed = await this.audioProcessingQueue.getCompletedCount();
+      const failed = await this.audioProcessingQueue.getFailedCount();
+      const delayed = await this.audioProcessingQueue.getDelayedCount();
 
       const status = {
         waiting,
@@ -113,19 +99,19 @@ export class QueueController {
 
       switch (status) {
         case 'waiting':
-          jobs = await this.audioQueue.getWaiting(0, 100);
+          jobs = await this.audioProcessingQueue.getWaiting(0, 100);
           break;
         case 'active':
-          jobs = await this.audioQueue.getActive(0, 100);
+          jobs = await this.audioProcessingQueue.getActive(0, 100);
           break;
         case 'completed':
-          jobs = await this.audioQueue.getCompleted(0, 100);
+          jobs = await this.audioProcessingQueue.getCompleted(0, 100);
           break;
         case 'failed':
-          jobs = await this.audioQueue.getFailed(0, 100);
+          jobs = await this.audioProcessingQueue.getFailed(0, 100);
           break;
         case 'delayed':
-          jobs = await this.audioQueue.getDelayed(0, 100);
+          jobs = await this.audioProcessingQueue.getDelayed(0, 100);
           break;
         default:
           this.logger.warn(`📋 [API] Invalid status requested: ${status}`);
@@ -176,7 +162,8 @@ export class QueueController {
     try {
       this.logger.log(`🔍 [API] Getting job details for ID: ${id}`);
       
-      const job = await this.audioQueue.getJob(id);
+      // Find the job in the unified audio-processing queue
+      const job = await this.audioProcessingQueue.getJob(id);
       if (!job) {
         this.logger.warn(`🔍 [API] Job not found: ${id}`);
         return { 
@@ -235,10 +222,10 @@ export class QueueController {
 
       switch (status) {
         case 'completed':
-          await this.audioQueue.clean(grace, limit, 'completed');
+          await this.audioProcessingQueue.clean(grace, limit, 'completed');
           break;
         case 'failed':
-          await this.audioQueue.clean(grace, limit, 'failed');
+          await this.audioProcessingQueue.clean(grace, limit, 'failed');
           break;
         default:
           this.logger.warn(`🧹 [API] Invalid clean status: ${status}`);
@@ -274,7 +261,7 @@ export class QueueController {
     try {
       this.logger.log(`🔄 [API] Retrying job: ${id}`);
       
-      const job = await this.audioQueue.getJob(id);
+      const job = await this.audioProcessingQueue.getJob(id);
       if (!job) {
         this.logger.warn(`🔄 [API] Job not found for retry: ${id}`);
         return { 

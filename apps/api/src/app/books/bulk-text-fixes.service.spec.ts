@@ -199,6 +199,12 @@ describe('BulkTextFixesService', () => {
             }),
           },
         },
+        {
+          provide: 'MetricsService',
+          useValue: {
+            recordBulkFix: jest.fn().mockResolvedValue(undefined),
+          },
+        },
       ],
     }).compile();
 

@@ -4,6 +4,7 @@ import { TextFixesService, WordChange } from './text-fixes.service';
 import { FixType } from '@prisma/client';
 import { FixTypeHandlerRegistry } from './fix-type-handlers/fix-type-handler-registry';
 import { TextCorrectionRepository } from './text-correction.repository';
+import { MetricsService } from '../metrics/metrics.service';
 
 export interface BulkFixSuggestion {
   originalWord: string;
@@ -42,7 +43,8 @@ export class BulkTextFixesService {
     private prisma: PrismaService,
     private textFixesService: TextFixesService,
     private fixTypeHandlerRegistry: FixTypeHandlerRegistry,
-    private textCorrectionRepository: TextCorrectionRepository
+    private textCorrectionRepository: TextCorrectionRepository,
+    private metricsService: MetricsService
   ) {}
 
   // Common sentence terminators including multilingual punctuation
@@ -502,6 +504,28 @@ export class BulkTextFixesService {
         totalWordsFixed,
         updatedParagraphs,
       };
+
+      // Record metrics for each bulk fix applied
+      this.logger.log(`📊 Recording metrics for ${fixes.length} bulk fixes...`);
+      for (const fix of fixes) {
+        try {
+          await this.metricsService.recordBulkFix(
+            bookId,
+            fix.originalWord,
+            fix.correctedWord,
+            fix.paragraphIds,
+            'bulk_correction' // Default fix type for bulk operations
+          );
+          this.logger.log(
+            `📊 Recorded bulk fix metric: "${fix.originalWord}" → "${fix.correctedWord}" (${fix.paragraphIds.length} paragraphs)`
+          );
+        } catch (metricsError) {
+          // Don't fail the entire operation if metrics recording fails
+          this.logger.error(
+            `⚠️ Failed to record bulk fix metric for "${fix.originalWord}" → "${fix.correctedWord}": ${metricsError.message}`
+          );
+        }
+      }
 
       this.logger.log(`🎉 Bulk fixes completed successfully!`);
       this.logger.log(

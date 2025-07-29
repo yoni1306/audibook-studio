@@ -30,7 +30,7 @@ async function testQueueProcessors() {
       parsingMethod: 'page-based'
     });
     
-    logger.log(`✅ EPUB job added: ${epubJob.id} (${epubJob.name})`);
+    logger.log(`✅ EPUB job added: ${epubJob.jobId}`);
     
     // Test 2: Add an audio generation job
     logger.log('🎵 Testing audio generation job...');
@@ -40,7 +40,7 @@ async function testQueueProcessors() {
       content: 'This is a test paragraph for audio generation testing.'
     });
     
-    logger.log(`✅ Audio job added: ${audioJob.id} (${audioJob.name})`);
+    logger.log(`✅ Audio job added: ${audioJob.jobId}`);
     
     // Wait a bit for jobs to be processed
     logger.log('⏳ Waiting for jobs to be processed...');
