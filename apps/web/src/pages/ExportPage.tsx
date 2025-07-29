@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { getApiUrl } from '../utils/api';
 import { useApiClient } from '../../hooks/useApiClient';
 import { BookWithCounts, BookExportStatus, PageExportStatus } from '@audibook/api-client';
 import { createLogger } from '../utils/logger';
@@ -17,8 +18,6 @@ interface PageCardProps {
 function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
   const [isExporting, setIsExporting] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
 
   const completionPercentage = page.totalParagraphsCount > 0 
     ? Math.round((page.completedParagraphsCount / page.totalParagraphsCount) * 100) 
@@ -52,41 +51,7 @@ function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
     }
   };
 
-  const handlePlayAudio = async () => {
-    if (isPlaying) {
-      setCurrentAudio(null);
-      setIsPlaying(false);
-      return;
-    }
-    
-    if (!hasAudio || !page.audioS3Key) {
-      setCurrentAudio(null);
-      setIsPlaying(false);
-      return;
-    }
-    
-    try {
-      const audioUrl = `/api/books/${bookId}/pages/${page.id}/audio`;
-      const newAudio = new Audio(audioUrl);
-      
-      newAudio.onended = () => {
-        setIsPlaying(false);
-        setCurrentAudio(null);
-      };
-      
-      newAudio.onerror = () => {
-        console.error('Failed to play audio');
-        setIsPlaying(false);
-        setCurrentAudio(null);
-      };
-      
-      await newAudio.play();
-      setCurrentAudio(newAudio);
-      setIsPlaying(true);
-    } catch (err) {
-      console.error('Failed to play audio:', err);
-    }
-  };
+
 
   const handleDeleteAudio = async () => {
     if (!hasAudio || !page.audioS3Key) return;
@@ -105,8 +70,36 @@ function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
     }
   };
 
+  const handleRegenerateAudio = async () => {
+    if (isExporting) return;
+    
+    try {
+      setIsExporting(true);
+      const { error } = await apiClient.books.startPageExport(bookId, page.id);
+      if (error) {
+        console.error('Failed to regenerate audio:', error);
+        return;
+      }
+      
+      // Refresh status after starting regeneration
+      setTimeout(() => {
+        onStatusChange();
+      }, 500);
+    } catch (err) {
+      console.error('Failed to regenerate audio:', err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const handleCancelExport = async () => {
-    if (page.audioStatus !== 'GENERATING') return;
+    console.log('Cancel export clicked. Page status:', page.audioStatus);
+    if (page.audioStatus !== 'GENERATING') {
+      console.log('Cannot cancel export: page is not currently generating. Current status:', page.audioStatus);
+      // Show user feedback for why cancellation isn't possible
+      alert(`Cannot cancel export. Page status is '${page.audioStatus}'. Only pages with status 'GENERATING' can be cancelled.`);
+      return;
+    }
     
     try {
       setIsCancelling(true);
@@ -297,57 +290,96 @@ function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
           )}
         </button>
 
-        {/* Cancel button - temporarily always visible for testing */}
-        {(
-          <button
-            onClick={handleCancelExport}
-            disabled={isCancelling}
-            style={{
-              padding: '8px 12px',
-              backgroundColor: 'var(--color-red-500)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '12px',
-              fontWeight: '600',
-              cursor: isCancelling ? 'not-allowed' : 'pointer',
-              transition: 'all 0.2s ease',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              opacity: isCancelling ? 0.6 : 1
-            }}
-          >
-            {isCancelling ? (
-              <span>Stopping...</span>
-            ) : (
-              <span>Stop Export</span>
-            )}
-          </button>
-        )}
+        {/* Action buttons container */}
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {/* Stop Export button - visible when export is in progress */}
+          {page.audioStatus === 'GENERATING' && (
+            <button
+              onClick={handleCancelExport}
+              disabled={isCancelling}
+              style={{
+                padding: '8px 12px',
+                backgroundColor: 'var(--color-red-500)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: '600',
+                cursor: isCancelling ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: isCancelling ? 0.6 : 1
+              }}
+            >
+              {isCancelling ? (
+                <span>Stopping...</span>
+              ) : (
+                <span>Stop Export</span>
+              )}
+            </button>
+          )}
 
-        {/* Play button */}
+          {/* Regenerate Audio button - visible when audio exists or has error */}
+          {(page.audioStatus === 'READY' || page.audioStatus === 'ERROR') && (
+            <button
+              onClick={handleRegenerateAudio}
+              disabled={isExporting}
+              style={{
+                padding: '8px 12px',
+                backgroundColor: 'var(--color-green-600)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: '600',
+                cursor: isExporting ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '4px',
+                opacity: isExporting ? 0.6 : 1
+              }}
+            >
+              <span>🔄</span>
+              <span>Regenerate</span>
+            </button>
+          )}
+        </div>
+
+        {/* Audio Player */}
         {hasAudio && (
-          <button
-            onClick={handlePlayAudio}
-            style={{
-              padding: '8px 12px',
-              backgroundColor: isPlaying ? 'var(--color-red-500)' : 'var(--color-green-500)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '12px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
+          <div style={{ marginTop: '8px', width: '100%' }}>
+            <div style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '4px'
-            }}
-          >
-            <span>{isPlaying ? '⏹️' : '▶️'}</span>
-            <span>{isPlaying ? 'Stop' : 'Play'}</span>
-          </button>
+              gap: '8px',
+              marginBottom: '8px',
+              fontSize: '12px',
+              color: 'var(--color-green-700)',
+              fontWeight: '500'
+            }}>
+              <span>🎵</span>
+              <span>Audio Available</span>
+            </div>
+            <audio
+              controls
+              style={{ 
+                width: '100%',
+                borderRadius: 'var(--radius-md)',
+                marginBottom: '8px'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <source
+                src={`${getApiUrl()}/api/books/${bookId}/pages/${page.id}/audio?v=${page.audioS3Key ? btoa(page.audioS3Key).slice(-8) : 'none'}`}
+                type="audio/mpeg"
+              />
+              Your browser does not support the audio element.
+            </audio>
+          </div>
         )}
 
         {/* Delete button */}
