@@ -365,12 +365,13 @@ export default function ParagraphComponent({
                       e.stopPropagation();
                       onGenerateAudio();
                     }}
-                    className="button button-sm"
+                    className="btn"
                     style={{
                       backgroundColor: 'var(--color-green-600)',
                       color: 'white',
                       border: 'none',
-                      fontSize: 'var(--font-size-xs)'
+                      fontSize: 'var(--font-size-xs)',
+                      padding: 'var(--spacing-2) var(--spacing-3)'
                     }}
                   >
                     🔄 Regenerate
