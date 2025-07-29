@@ -73,27 +73,7 @@ function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
     }
   };
 
-  const handleRegenerateAudio = async () => {
-    if (isExporting) return;
-    
-    try {
-      setIsExporting(true);
-      const { error } = await apiClient.books.startPageExport(bookId, page.id);
-      if (error) {
-        console.error('Failed to regenerate audio:', error);
-        return;
-      }
-      
-      // Refresh status after starting regeneration
-      setTimeout(() => {
-        onStatusChange();
-      }, 500);
-    } catch (err) {
-      console.error('Failed to regenerate audio:', err);
-    } finally {
-      setIsExporting(false);
-    }
-  };
+
 
   const fetchParagraphs = async () => {
     if (!page.id) return;
@@ -288,7 +268,7 @@ function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
         gap: '8px',
         flexWrap: 'wrap'
       }}>
-        {/* Export button */}
+        {/* Smart Export/Regenerate button */}
         <button
           onClick={handleExport}
           disabled={!canExport || isExporting}
@@ -296,7 +276,11 @@ function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
             flex: '1',
             minWidth: '100px',
             padding: '8px 12px',
-            backgroundColor: canExport ? 'var(--color-primary-500)' : 'var(--color-gray-200)',
+            backgroundColor: canExport 
+              ? (page.audioStatus === 'READY' || page.audioStatus === 'ERROR' 
+                 ? 'var(--color-green-600)' 
+                 : 'var(--color-primary-500)') 
+              : 'var(--color-gray-200)',
             color: canExport ? 'white' : 'var(--color-gray-500)',
             border: 'none',
             borderRadius: '6px',
@@ -317,8 +301,8 @@ function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
             </>
           ) : (
             <>
-              <span>🎵</span>
-              <span>Export</span>
+              <span>{page.audioStatus === 'READY' || page.audioStatus === 'ERROR' ? '🔄' : '🎵'}</span>
+              <span>{page.audioStatus === 'READY' || page.audioStatus === 'ERROR' ? 'Regenerate' : 'Export'}</span>
             </>
           )}
         </button>
@@ -354,32 +338,7 @@ function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
             </button>
           )}
 
-          {/* Regenerate Audio button - visible when audio exists or has error */}
-          {(page.audioStatus === 'READY' || page.audioStatus === 'ERROR') && (
-            <button
-              onClick={handleRegenerateAudio}
-              disabled={isExporting}
-              style={{
-                padding: '8px 12px',
-                backgroundColor: 'var(--color-green-600)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: '600',
-                cursor: isExporting ? 'not-allowed' : 'pointer',
-                transition: 'all 0.2s ease',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '4px',
-                opacity: isExporting ? 0.6 : 1
-              }}
-            >
-              <span>🔄</span>
-              <span>Regenerate</span>
-            </button>
-          )}
+
         </div>
 
         {/* Audio Player */}
@@ -531,8 +490,8 @@ function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
           </div>
         )}
 
-        {/* Delete button */}
-        {hasAudio && (
+        {/* Delete button - hidden for now */}
+        {false && hasAudio && (
           <button
             onClick={handleDeleteAudio}
             style={{
