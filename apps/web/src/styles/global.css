@@ -34,6 +34,27 @@
   --color-error-500: #ef4444;
   --color-error-600: #dc2626;
   
+  /* Additional color palette for export functionality */
+  --color-red-50: #fef2f2;
+  --color-red-200: #fecaca;
+  --color-red-500: #ef4444;
+  --color-red-600: #dc2626;
+  --color-red-700: #b91c1c;
+  
+  --color-green-50: #f0fdf4;
+  --color-green-500: #22c55e;
+  --color-green-600: #16a34a;
+  
+  --color-orange-50: #fff7ed;
+  --color-orange-200: #fed7aa;
+  --color-orange-600: #ea580c;
+  
+  --color-yellow-50: #fefce8;
+  --color-yellow-200: #fef08a;
+  --color-yellow-700: #a16207;
+  
+  --color-blue-600: #2563eb;
+  
   /* Typography */
   --font-family-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
   --font-size-xs: 0.75rem;

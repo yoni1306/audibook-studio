@@ -433,7 +433,7 @@ const worker = new Worker(
                 
                 // Set output options
                 command
-                  .audioCodec('mp3')
+                  .audioCodec('libmp3lame') // Use libmp3lame for better FFmpeg compatibility
                   .audioBitrate('128k')
                   .audioFrequency(22050)
                   .audioChannels(1)

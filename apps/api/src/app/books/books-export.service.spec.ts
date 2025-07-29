@@ -28,6 +28,14 @@ const mockS3Service = {
   getObjectStream: jest.fn(),
 };
 
+// Mock Logger to avoid console output during tests
+const mockLogger = {
+  log: jest.fn(),
+  error: jest.fn(),
+  warn: jest.fn(),
+  debug: jest.fn(),
+};
+
 describe('BooksExportService', () => {
   let service: BooksExportService;
   let prismaService: typeof mockPrismaService;
@@ -74,12 +82,14 @@ describe('BooksExportService', () => {
         { provide: QueueService, useValue: mockQueueService },
         { provide: S3Service, useValue: mockS3Service },
       ],
-    }).compile();
+    })
+    .setLogger(mockLogger)
+    .compile();
 
     service = module.get<BooksExportService>(BooksExportService);
-    prismaService = module.get(PrismaService) as any;
-    queueService = module.get(QueueService) as any;
-    s3Service = module.get(S3Service) as any;
+    prismaService = module.get(PrismaService);
+    queueService = module.get(QueueService);
+    s3Service = module.get(S3Service);
   });
 
   describe('getBookExportStatus', () => {
@@ -113,6 +123,80 @@ describe('BooksExportService', () => {
           },
         ],
       });
+      expect(result.totalPages).toBe(2);
+      expect(result.exportablePages).toBe(1);
+      expect(result.pagesInProgress).toBe(0);
+      expect(result.pagesReady).toBe(1);
+    });
+
+    it('should handle book with no pages', async () => {
+      const bookWithNoPages = { ...mockBook, pages: [] };
+      prismaService.book.findUnique.mockResolvedValue(bookWithNoPages as any);
+
+      const result = await service.getBookExportStatus('book-1');
+
+      expect(result.pages).toHaveLength(0);
+      expect(result.totalPages).toBe(0);
+      expect(result.exportablePages).toBe(0);
+    });
+
+    it('should calculate correct statistics for mixed page states', async () => {
+      const complexBook = {
+        ...mockBook,
+        pages: [
+          {
+            id: 'page-1',
+            pageNumber: 1,
+            audioStatus: AudioStatus.READY,
+            audioS3Key: 'page-1.mp3',
+            audioDuration: 120,
+            paragraphs: [
+              { id: 'para-1', completed: true, audioStatus: AudioStatus.READY, audioDuration: 60 },
+              { id: 'para-2', completed: true, audioStatus: AudioStatus.READY, audioDuration: 60 },
+            ],
+          },
+          {
+            id: 'page-2',
+            pageNumber: 2,
+            audioStatus: AudioStatus.GENERATING,
+            audioS3Key: null,
+            audioDuration: null,
+            paragraphs: [
+              { id: 'para-3', completed: true, audioStatus: AudioStatus.READY, audioDuration: 45 },
+            ],
+          },
+          {
+            id: 'page-3',
+            pageNumber: 3,
+            audioStatus: AudioStatus.ERROR,
+            audioS3Key: null,
+            audioDuration: null,
+            paragraphs: [
+              { id: 'para-4', completed: true, audioStatus: AudioStatus.READY, audioDuration: 30 },
+            ],
+          },
+          {
+            id: 'page-4',
+            pageNumber: 4,
+            audioStatus: AudioStatus.PENDING,
+            audioS3Key: null,
+            audioDuration: null,
+            paragraphs: [
+              { id: 'para-5', completed: false, audioStatus: AudioStatus.PENDING, audioDuration: null },
+            ],
+          },
+        ],
+      };
+      prismaService.book.findUnique.mockResolvedValue(complexBook as any);
+
+      const result = await service.getBookExportStatus('book-1');
+
+      expect(result.totalPages).toBe(4);
+      expect(result.exportablePages).toBe(3); // Pages 1, 2, 3 have completed paragraphs
+      expect(result.pagesInProgress).toBe(1); // Page 2 is GENERATING
+      expect(result.pagesReady).toBe(1); // Page 1 is READY
+      expect(result.pagesWithErrors).toBe(1); // Page 3 has ERROR
+      expect(result.totalDuration).toBe(120); // Only ready pages count
     });
 
     it('should throw error if book not found', async () => {
@@ -120,6 +204,161 @@ describe('BooksExportService', () => {
 
       await expect(service.getBookExportStatus('nonexistent')).rejects.toThrow(
         'Book not found'
+      );
+    });
+
+    it('should handle database errors gracefully', async () => {
+      prismaService.book.findUnique.mockRejectedValue(new Error('Database connection failed'));
+
+      await expect(service.getBookExportStatus('book-1')).rejects.toThrow(
+        'Database connection failed'
+      );
+    });
+  });
+
+  describe('startBookExport', () => {
+    it('should start export for all exportable pages', async () => {
+      const bookWithMultiplePages = {
+        ...mockBook,
+        pages: [
+          {
+            id: 'page-1',
+            pageNumber: 1,
+            audioStatus: AudioStatus.PENDING,
+            paragraphs: [
+              { id: 'para-1', completed: true, audioStatus: AudioStatus.READY, audioS3Key: 'para-1.mp3' },
+              { id: 'para-2', completed: true, audioStatus: AudioStatus.READY, audioS3Key: 'para-2.mp3' },
+            ],
+          },
+          {
+            id: 'page-2',
+            pageNumber: 2,
+            audioStatus: AudioStatus.PENDING,
+            paragraphs: [
+              { id: 'para-3', completed: true, audioStatus: AudioStatus.READY, audioS3Key: 'para-3.mp3' },
+            ],
+          },
+          {
+            id: 'page-3',
+            pageNumber: 3,
+            audioStatus: AudioStatus.PENDING,
+            paragraphs: [
+              { id: 'para-4', completed: false, audioStatus: AudioStatus.PENDING, audioS3Key: null },
+            ],
+          },
+        ],
+      };
+      
+      prismaService.book.findUnique.mockResolvedValue(bookWithMultiplePages);
+      queueService.addPageAudioCombinationJob.mockResolvedValue({ jobId: 'job-123' });
+      prismaService.page.update.mockResolvedValue({});
+
+      const result = await service.startBookExport('book-1');
+
+      expect(result.success).toBe(true);
+      expect(result.pagesQueued).toBe(2); // Pages 1 and 2
+      expect(result.pagesSkipped).toBe(1); // Page 3
+      expect(result.jobIds).toHaveLength(2);
+      expect(result.message).toContain('2 pages will be processed');
+      
+      // Verify queue calls
+      expect(queueService.addPageAudioCombinationJob).toHaveBeenCalledTimes(2);
+      expect(queueService.addPageAudioCombinationJob).toHaveBeenCalledWith({
+        pageId: 'page-1',
+        bookId: 'book-1',
+      });
+      expect(queueService.addPageAudioCombinationJob).toHaveBeenCalledWith({
+        pageId: 'page-2',
+        bookId: 'book-1',
+      });
+      
+      // Verify page status updates
+      expect(prismaService.page.update).toHaveBeenCalledTimes(2);
+    });
+
+    it('should handle book with no exportable pages', async () => {
+      const bookWithNoExportablePages = {
+        ...mockBook,
+        pages: [
+          {
+            id: 'page-1',
+            pageNumber: 1,
+            audioStatus: AudioStatus.PENDING,
+            paragraphs: [
+              { id: 'para-1', completed: false, audioStatus: AudioStatus.PENDING, audioS3Key: null },
+            ],
+          },
+        ],
+      };
+      
+      prismaService.book.findUnique.mockResolvedValue(bookWithNoExportablePages);
+
+      const result = await service.startBookExport('book-1');
+
+      expect(result.success).toBe(false);
+      expect(result.pagesQueued).toBe(0);
+      expect(result.pagesSkipped).toBe(1);
+      expect(result.jobIds).toHaveLength(0);
+      expect(result.message).toContain('No pages available for export');
+      
+      expect(queueService.addPageAudioCombinationJob).not.toHaveBeenCalled();
+      expect(prismaService.page.update).not.toHaveBeenCalled();
+    });
+
+    it('should skip pages with incomplete audio', async () => {
+      const bookWithIncompleteAudio = {
+        ...mockBook,
+        pages: [
+          {
+            id: 'page-1',
+            pageNumber: 1,
+            audioStatus: AudioStatus.PENDING,
+            paragraphs: [
+              { id: 'para-1', completed: true, audioStatus: AudioStatus.READY, audioS3Key: 'para-1.mp3' },
+              { id: 'para-2', completed: true, audioStatus: AudioStatus.GENERATING, audioS3Key: null }, // Missing audio
+            ],
+          },
+        ],
+      };
+      
+      prismaService.book.findUnique.mockResolvedValue(bookWithIncompleteAudio);
+
+      const result = await service.startBookExport('book-1');
+
+      expect(result.success).toBe(false);
+      expect(result.pagesQueued).toBe(0);
+      expect(result.pagesSkipped).toBe(1);
+      expect(queueService.addPageAudioCombinationJob).not.toHaveBeenCalled();
+    });
+
+    it('should throw error if book not found', async () => {
+      prismaService.book.findUnique.mockResolvedValue(null);
+
+      await expect(service.startBookExport('nonexistent')).rejects.toThrow(
+        'Book not found: nonexistent'
+      );
+    });
+
+    it('should handle queue service errors', async () => {
+      const bookWithExportablePages = {
+        ...mockBook,
+        pages: [
+          {
+            id: 'page-1',
+            pageNumber: 1,
+            audioStatus: AudioStatus.PENDING,
+            paragraphs: [
+              { id: 'para-1', completed: true, audioStatus: AudioStatus.READY, audioS3Key: 'para-1.mp3' },
+            ],
+          },
+        ],
+      };
+      
+      prismaService.book.findUnique.mockResolvedValue(bookWithExportablePages);
+      queueService.addPageAudioCombinationJob.mockRejectedValue(new Error('Queue service unavailable'));
+
+      await expect(service.startBookExport('book-1')).rejects.toThrow(
+        'Queue service unavailable'
       );
     });
   });
@@ -131,15 +370,15 @@ describe('BooksExportService', () => {
       pageNumber: 1,
       audioStatus: AudioStatus.PENDING,
       paragraphs: [
-        { id: 'para-1', completed: true, audioS3Key: 'para-1.mp3' },
-        { id: 'para-2', completed: true, audioS3Key: 'para-2.mp3' },
+        { id: 'para-1', completed: true, audioStatus: AudioStatus.READY, audioS3Key: 'para-1.mp3' },
+        { id: 'para-2', completed: true, audioStatus: AudioStatus.READY, audioS3Key: 'para-2.mp3' },
       ],
     };
 
     it('should start page export successfully', async () => {
-      prismaService.page.findUnique.mockResolvedValue(mockPage as any);
-      prismaService.page.update.mockResolvedValue({ ...mockPage, audioStatus: AudioStatus.GENERATING } as any);
-      queueService.addPageAudioCombinationJob.mockResolvedValue(undefined);
+      prismaService.page.findUnique.mockResolvedValue(mockPage);
+      prismaService.page.update.mockResolvedValue({ ...mockPage, audioStatus: AudioStatus.GENERATING });
+      queueService.addPageAudioCombinationJob.mockResolvedValue({ jobId: 'job-456' });
 
       const result = await service.startPageExport('book-1', 'page-1');
 
@@ -151,7 +390,9 @@ describe('BooksExportService', () => {
         bookId: 'book-1',
         pageId: 'page-1',
       });
-      expect(result).toEqual({ success: true });
+      expect(result.success).toBe(true);
+      expect(result.pagesQueued).toBe(1);
+      expect(result.jobIds).toEqual(['job-456']);
     });
 
     it('should throw error if page not found', async () => {
@@ -165,13 +406,34 @@ describe('BooksExportService', () => {
     it('should return failure if no completed paragraphs', async () => {
       const pageWithNoCompleted = {
         ...mockPage,
-        paragraphs: [{ id: 'para-1', completed: false, audioS3Key: null }],
+        paragraphs: [{ id: 'para-1', completed: false, audioStatus: AudioStatus.PENDING, audioS3Key: null }],
       };
-      prismaService.page.findUnique.mockResolvedValue(pageWithNoCompleted as any);
+      prismaService.page.findUnique.mockResolvedValue(pageWithNoCompleted);
 
       const result = await service.startPageExport('book-1', 'page-1');
+      
       expect(result.success).toBe(false);
       expect(result.message).toContain('no completed paragraphs');
+      expect(result.pagesQueued).toBe(0);
+      expect(result.pagesSkipped).toBe(1);
+    });
+
+    it('should return failure if paragraphs missing audio', async () => {
+      const pageWithMissingAudio = {
+        ...mockPage,
+        paragraphs: [
+          { id: 'para-1', completed: true, audioStatus: AudioStatus.READY, audioS3Key: 'para-1.mp3' },
+          { id: 'para-2', completed: true, audioStatus: AudioStatus.GENERATING, audioS3Key: null },
+        ],
+      };
+      prismaService.page.findUnique.mockResolvedValue(pageWithMissingAudio);
+
+      const result = await service.startPageExport('book-1', 'page-1');
+      
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('2 completed paragraphs but only 1 have ready audio');
+      expect(result.pagesQueued).toBe(0);
+      expect(result.pagesSkipped).toBe(1);
     });
   });
 
@@ -184,9 +446,13 @@ describe('BooksExportService', () => {
     };
 
     it('should delete page audio successfully', async () => {
-      prismaService.page.findUnique.mockResolvedValue(mockPageWithAudio as any);
+      const mockPageWithPageNumber = {
+        ...mockPageWithAudio,
+        pageNumber: 1,
+      };
+      prismaService.page.findUnique.mockResolvedValue(mockPageWithPageNumber);
       s3Service.deleteFiles.mockResolvedValue(undefined);
-      prismaService.page.update.mockResolvedValue({ ...mockPageWithAudio, audioStatus: null, audioS3Key: null } as any);
+      prismaService.page.update.mockResolvedValue({ ...mockPageWithPageNumber, audioStatus: null, audioS3Key: null });
 
       const result = await service.deletePageAudio('book-1', 'page-1');
 
@@ -199,7 +465,8 @@ describe('BooksExportService', () => {
           audioDuration: null,
         },
       });
-      expect(result).toEqual({ success: true });
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('has been deleted');
     });
 
     it('should throw error if page not found', async () => {
@@ -269,13 +536,14 @@ describe('BooksExportService', () => {
     const mockGeneratingPage = {
       id: 'page-1',
       bookId: 'book-1',
+      pageNumber: 1,
       audioStatus: AudioStatus.GENERATING,
     };
 
     it('should cancel page export successfully', async () => {
-      prismaService.page.findUnique.mockResolvedValue(mockGeneratingPage as any);
+      prismaService.page.findUnique.mockResolvedValue(mockGeneratingPage);
       queueService.cancelPageAudioCombinationJob.mockResolvedValue({ cancelledJobs: 1 });
-      prismaService.page.update.mockResolvedValue({ ...mockGeneratingPage, audioStatus: null } as any);
+      prismaService.page.update.mockResolvedValue({ ...mockGeneratingPage, audioStatus: null });
 
       const result = await service.cancelPageExport('book-1', 'page-1');
 
@@ -284,7 +552,8 @@ describe('BooksExportService', () => {
         where: { id: 'page-1' },
         data: { audioStatus: null },
       });
-      expect(result).toEqual({ success: true });
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Export cancelled');
     });
 
     it('should throw error if page not found', async () => {
