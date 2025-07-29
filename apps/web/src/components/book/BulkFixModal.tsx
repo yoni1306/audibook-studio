@@ -439,8 +439,8 @@ export default function BulkFixModal({
                                           fontWeight: '500'
                                         }}>Before:</div>
                                         <div style={{
-                                          backgroundColor: 'var(--color-error-50)',
-                                          border: '1px solid var(--color-error-200)',
+                                          backgroundColor: 'var(--color-red-50)',
+                                          border: '1px solid var(--color-red-200)',
                                           borderRadius: 'var(--radius-md)',
                                           padding: 'var(--spacing-3)',
                                           color: 'var(--color-gray-700)',
