@@ -266,7 +266,7 @@ export function createApiClient(baseUrl: string) {
       getById: (id: string): Promise<{ data?: GetBookByIdResponse; error?: unknown }> => client.GET('/books/{id}', {
         params: { path: { id } },
       }),
-      getCompletedParagraphs: (bookId: string): Promise<{ data?: GetCompletedParagraphsResponse; error?: unknown }> => 
+      getCompletedParagraphs: (bookId: string) => 
         client.GET('/books/{id}/completed-paragraphs', {
           params: { path: { id: bookId } },
         }),
