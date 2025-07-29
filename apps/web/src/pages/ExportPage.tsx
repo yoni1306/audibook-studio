@@ -18,6 +18,9 @@ interface PageCardProps {
 function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
   const [isExporting, setIsExporting] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [showParagraphs, setShowParagraphs] = useState(false);
+  const [paragraphs, setParagraphs] = useState<any[]>([]);
+  const [loadingParagraphs, setLoadingParagraphs] = useState(false);
 
   const completionPercentage = page.totalParagraphsCount > 0 
     ? Math.round((page.completedParagraphsCount / page.totalParagraphsCount) * 100) 
@@ -90,6 +93,36 @@ function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
     } finally {
       setIsExporting(false);
     }
+  };
+
+  const fetchParagraphs = async () => {
+    if (!page.id) return;
+    
+    try {
+      setLoadingParagraphs(true);
+      const { data: completedParagraphsData, error } = await apiClient.books.getCompletedParagraphs(bookId);
+      if (error || !completedParagraphsData) {
+        console.error('Failed to fetch completed paragraphs:', error);
+        return;
+      }
+      
+      // Find the page data and extract its paragraphs
+      const pageData = completedParagraphsData.pages.find((p: any) => p.pageNumber === page.pageNumber);
+      const pageParagraphs = pageData ? pageData.completedParagraphs : [];
+      
+      setParagraphs(pageParagraphs);
+    } catch (err) {
+      console.error('Failed to fetch completed paragraphs:', err);
+    } finally {
+      setLoadingParagraphs(false);
+    }
+  };
+
+  const toggleParagraphs = () => {
+    if (!showParagraphs) {
+      fetchParagraphs();
+    }
+    setShowParagraphs(!showParagraphs);
   };
 
   const handleCancelExport = async () => {
@@ -379,6 +412,122 @@ function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
               />
               Your browser does not support the audio element.
             </audio>
+          </div>
+        )}
+
+        {/* View Included Paragraphs */}
+        {page.completedParagraphsCount > 0 && (
+          <div style={{ marginTop: '8px', width: '100%' }}>
+            <button
+              onClick={toggleParagraphs}
+              style={{
+                padding: '6px 10px',
+                backgroundColor: 'transparent',
+                color: 'var(--color-primary-600)',
+                border: '1px solid var(--color-primary-200)',
+                borderRadius: '4px',
+                fontSize: '11px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                width: '100%',
+                justifyContent: 'center'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--color-primary-50)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >
+              <span>{showParagraphs ? '▼' : '▶'}</span>
+              <span>
+                {showParagraphs ? 'Hide' : 'View'} Included Paragraphs ({page.completedParagraphsCount})
+              </span>
+            </button>
+            
+            {showParagraphs && (
+              <div style={{
+                marginTop: '8px',
+                padding: '12px',
+                backgroundColor: 'var(--color-gray-50)',
+                border: '1px solid var(--color-gray-200)',
+                borderRadius: '6px',
+                maxHeight: '300px',
+                overflowY: 'auto'
+              }}>
+                {loadingParagraphs ? (
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '20px',
+                    color: 'var(--color-gray-500)',
+                    fontSize: '12px'
+                  }}>
+                    <span style={{ animation: 'spin 1s linear infinite' }}>🔄</span>
+                    <span style={{ marginLeft: '8px' }}>Loading paragraphs...</span>
+                  </div>
+                ) : paragraphs && paragraphs.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {paragraphs.map((paragraph: any, index: number) => (
+                      <div
+                        key={paragraph.id}
+                        style={{
+                          padding: '8px',
+                          backgroundColor: 'white',
+                          border: '1px solid var(--color-gray-200)',
+                          borderRadius: '4px',
+                          fontSize: '12px'
+                        }}
+                      >
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: '4px'
+                        }}>
+                          <span style={{
+                            fontWeight: '600',
+                            color: 'var(--color-gray-700)',
+                            fontSize: '11px'
+                          }}>
+                            Paragraph {index + 1}
+                          </span>
+                          <span style={{
+                            fontSize: '10px',
+                            color: 'var(--color-green-600)',
+                            backgroundColor: 'var(--color-green-50)',
+                            padding: '2px 6px',
+                            borderRadius: '3px'
+                          }}>
+                            ✓ Included
+                          </span>
+                        </div>
+                        <div style={{
+                          color: 'var(--color-gray-800)',
+                          lineHeight: '1.4',
+                          textAlign: 'right',
+                          direction: 'rtl'
+                        }}>
+                          {paragraph.content}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '20px',
+                    color: 'var(--color-gray-500)',
+                    fontSize: '12px'
+                  }}>
+                    No completed paragraphs found for this page.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

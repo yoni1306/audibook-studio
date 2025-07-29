@@ -1,7 +1,7 @@
 import { AudioStatus } from '@prisma/client';
 
 // Mock dependencies
-jest.mock('./database.service.js', () => ({
+jest.mock('./database.service', () => ({
   prisma: {
     page: {
       findUnique: jest.fn(),
@@ -38,7 +38,7 @@ describe('Page Audio Combination Worker', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     
-    mockPrisma = require('./database.service.js').prisma;
+    mockPrisma = require('./database.service').prisma;
     mockDownloadFromS3 = require('./s3-client').downloadFromS3;
     mockUploadToS3 = require('./s3-client').uploadToS3;
     mockFfmpeg = require('fluent-ffmpeg');

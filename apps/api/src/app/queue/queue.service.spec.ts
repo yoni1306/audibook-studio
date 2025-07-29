@@ -28,6 +28,8 @@ describe('QueueService', () => {
       getJobs: jest.fn(),
       getJobCounts: jest.fn(),
       clean: jest.fn(),
+      getWaiting: jest.fn(),
+      getActive: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -271,71 +273,85 @@ describe('QueueService', () => {
 
   describe('cancelPageAudioCombinationJob', () => {
     beforeEach(() => {
-      mockQueue.getJobs = jest.fn();
+      mockQueue.getWaiting = jest.fn().mockResolvedValue([]);
+      mockQueue.getActive = jest.fn().mockResolvedValue([]);
     });
 
     it('should cancel pending page audio combination job', async () => {
       const mockPendingJob = {
         id: 'pending-job-123',
+        name: 'combine-page-audio',
         data: { pageId: 'page-1', bookId: 'book-1' },
         remove: jest.fn().mockResolvedValue(undefined),
       };
 
-      mockQueue.getJobs.mockResolvedValue([mockPendingJob] as any);
+      mockQueue.getWaiting.mockResolvedValue([mockPendingJob]);
+      mockQueue.getActive.mockResolvedValue([]);
 
       const result = await service.cancelPageAudioCombinationJob('page-1');
 
-      expect(mockQueue.getJobs).toHaveBeenCalledWith(['waiting', 'active'], 0, -1);
+      expect(mockQueue.getWaiting).toHaveBeenCalled();
+      expect(mockQueue.getActive).toHaveBeenCalled();
       expect(mockPendingJob.remove).toHaveBeenCalled();
-      expect(result).toBe(true);
+      expect(result).toEqual({ cancelledJobs: 1 });
     });
 
     it('should cancel active page audio combination job', async () => {
       const mockActiveJob = {
         id: 'active-job-456',
+        name: 'combine-page-audio',
         data: { pageId: 'page-1', bookId: 'book-1' },
         remove: jest.fn().mockResolvedValue(undefined),
       };
 
-      mockQueue.getJobs.mockResolvedValue([mockActiveJob] as any);
+      mockQueue.getWaiting.mockResolvedValue([]);
+      mockQueue.getActive.mockResolvedValue([mockActiveJob]);
 
       const result = await service.cancelPageAudioCombinationJob('page-1');
 
-      expect(mockQueue.getJobs).toHaveBeenCalledWith(['waiting', 'active'], 0, -1);
+      expect(mockQueue.getWaiting).toHaveBeenCalled();
+      expect(mockQueue.getActive).toHaveBeenCalled();
       expect(mockActiveJob.remove).toHaveBeenCalled();
-      expect(result).toBe(true);
+      expect(result).toEqual({ cancelledJobs: 1 });
     });
 
     it('should return false if no job found to cancel', async () => {
-      mockQueue.getJobs.mockResolvedValue([]);
+      mockQueue.getWaiting.mockResolvedValue([]);
+      mockQueue.getActive.mockResolvedValue([]);
 
-      const result = await service.cancelPageAudioCombinationJob('nonexistent-page');
+      const result = await service.cancelPageAudioCombinationJob('page-1');
 
-      expect(mockQueue.getJobs).toHaveBeenCalledWith(['waiting', 'active'], 0, -1);
-      expect(result).toBe(false);
+      expect(mockQueue.getWaiting).toHaveBeenCalled();
+      expect(mockQueue.getActive).toHaveBeenCalled();
+      expect(result).toEqual({ cancelledJobs: 0 });
     });
 
     it('should handle multiple jobs and cancel only matching pageId', async () => {
       const mockJobs = [
         {
           id: 'job-1',
+          name: 'combine-page-audio',
           data: { pageId: 'page-1', bookId: 'book-1' },
           remove: jest.fn().mockResolvedValue(undefined),
         },
         {
           id: 'job-2',
+          name: 'combine-page-audio',
           data: { pageId: 'page-2', bookId: 'book-1' },
           remove: jest.fn().mockResolvedValue(undefined),
         },
       ];
 
-      mockQueue.getJobs.mockResolvedValue(mockJobs as any);
+      mockQueue.getWaiting.mockResolvedValue([mockJobs[0]]);
+      mockQueue.getActive.mockResolvedValue([mockJobs[1]]);
 
       const result = await service.cancelPageAudioCombinationJob('page-1');
 
+      expect(mockQueue.getWaiting).toHaveBeenCalled();
+      expect(mockQueue.getActive).toHaveBeenCalled();
       expect(mockJobs[0].remove).toHaveBeenCalled();
       expect(mockJobs[1].remove).not.toHaveBeenCalled();
-      expect(result).toBe(true);
+      expect(result).toEqual({ cancelledJobs: 1 });
     });
   });
 });

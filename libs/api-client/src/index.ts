@@ -141,6 +141,29 @@ export interface GetBookByIdResponse {
   timestamp: string;
 }
 
+// Completed paragraphs types
+export interface CompletedParagraph {
+  id: string;
+  content: string;
+  orderIndex: number;
+  audioStatus: string;
+  audioDuration: number | null;
+}
+
+export interface PageWithCompletedParagraphs {
+  pageId: string;
+  pageNumber: number;
+  completedParagraphs: CompletedParagraph[];
+}
+
+export interface GetCompletedParagraphsResponse {
+  bookId: string;
+  bookTitle: string;
+  pages: PageWithCompletedParagraphs[];
+  totalCompletedParagraphs: number;
+  timestamp: string;
+}
+
 // Export-related types
 export interface PageExportStatus {
   id: string;
@@ -227,8 +250,9 @@ export interface UpdateParagraphResponseDto {
 
 // API Client Factory using openapi-fetch
 export function createApiClient(baseUrl: string) {
+  const fullBaseUrl = `${baseUrl || 'http://localhost:3000'}/api`;
   const client = createClient<paths>({
-    baseUrl: `${baseUrl || 'http://localhost:3000'}/api`,
+    baseUrl: fullBaseUrl,
   });
 
   return {
@@ -242,6 +266,10 @@ export function createApiClient(baseUrl: string) {
       getById: (id: string): Promise<{ data?: GetBookByIdResponse; error?: unknown }> => client.GET('/books/{id}', {
         params: { path: { id } },
       }),
+      getCompletedParagraphs: (bookId: string): Promise<{ data?: GetCompletedParagraphsResponse; error?: unknown }> => 
+        (client.GET as any)('/books/{id}/completed-paragraphs', {
+          params: { path: { id: bookId } },
+        }),
       createBook: (data: {
         title: string;
         author?: string;

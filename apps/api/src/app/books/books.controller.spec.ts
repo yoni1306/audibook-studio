@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { Logger } from '@nestjs/common';
+import { Logger, NotFoundException } from '@nestjs/common';
 import { BooksController } from './books.controller';
 import { BooksService } from './books.service';
 import { BooksExportService } from './books-export.service';
@@ -20,7 +20,8 @@ describe('BooksController', () => {
   };
 
   const mockBooksService = {
-    // Add mock methods as needed
+    getCompletedParagraphs: jest.fn(),
+    // Add other mock methods as needed
   };
 
   const mockBooksExportService = {
@@ -538,6 +539,176 @@ describe('BooksController', () => {
       await expect(controller.getCorrectionHistory(aggregationKey)).rejects.toThrow('Failed to get correction history');
 
       expect(textCorrectionRepository.findCorrectionsByAggregationKey).toHaveBeenCalledWith(aggregationKey, undefined);
+    });
+  });
+
+  describe('getCompletedParagraphs', () => {
+    const mockBookId = 'test-book-id';
+    const mockCompletedParagraphsResult = {
+      bookId: mockBookId,
+      bookTitle: 'Test Book Title',
+      pages: [
+        {
+          pageId: 'page-1',
+          pageNumber: 1,
+          completedParagraphs: [
+            {
+              id: 'paragraph-1',
+              content: 'This is the first completed paragraph.',
+              orderIndex: 1,
+              audioStatus: 'COMPLETED',
+              audioDuration: 5.2,
+            },
+            {
+              id: 'paragraph-2',
+              content: 'This is the second completed paragraph.',
+              orderIndex: 2,
+              audioStatus: 'COMPLETED',
+              audioDuration: 3.8,
+            },
+          ],
+        },
+        {
+          pageId: 'page-2',
+          pageNumber: 2,
+          completedParagraphs: [
+            {
+              id: 'paragraph-3',
+              content: 'This is a completed paragraph on page 2.',
+              orderIndex: 1,
+              audioStatus: 'COMPLETED',
+              audioDuration: 4.1,
+            },
+          ],
+        },
+      ],
+      totalCompletedParagraphs: 3,
+    };
+
+    it('should return completed paragraphs successfully', async () => {
+      mockBooksService.getCompletedParagraphs.mockResolvedValue(mockCompletedParagraphsResult);
+
+      const result = await controller.getCompletedParagraphs(mockBookId);
+
+      expect(mockBooksService.getCompletedParagraphs).toHaveBeenCalledWith(mockBookId);
+      expect(result).toEqual({
+        ...mockCompletedParagraphsResult,
+        timestamp: expect.any(String),
+      });
+    });
+
+    it('should return completed paragraphs with correct structure', async () => {
+      mockBooksService.getCompletedParagraphs.mockResolvedValue(mockCompletedParagraphsResult);
+
+      const result = await controller.getCompletedParagraphs(mockBookId);
+
+      expect(result).toHaveProperty('bookId', mockBookId);
+      expect(result).toHaveProperty('bookTitle', 'Test Book Title');
+      expect(result).toHaveProperty('pages');
+      expect(result).toHaveProperty('totalCompletedParagraphs', 3);
+      expect(result).toHaveProperty('timestamp');
+      
+      expect(result.pages).toHaveLength(2);
+      expect(result.pages[0]).toHaveProperty('pageId', 'page-1');
+      expect(result.pages[0]).toHaveProperty('pageNumber', 1);
+      expect(result.pages[0]).toHaveProperty('completedParagraphs');
+      expect(result.pages[0].completedParagraphs).toHaveLength(2);
+      
+      expect(result.pages[0].completedParagraphs[0]).toHaveProperty('id', 'paragraph-1');
+      expect(result.pages[0].completedParagraphs[0]).toHaveProperty('content');
+      expect(result.pages[0].completedParagraphs[0]).toHaveProperty('orderIndex', 1);
+      expect(result.pages[0].completedParagraphs[0]).toHaveProperty('audioStatus', 'COMPLETED');
+      expect(result.pages[0].completedParagraphs[0]).toHaveProperty('audioDuration', 5.2);
+    });
+
+    it('should handle empty completed paragraphs result', async () => {
+      const emptyResult = {
+        bookId: mockBookId,
+        bookTitle: 'Test Book Title',
+        pages: [],
+        totalCompletedParagraphs: 0,
+      };
+      
+      mockBooksService.getCompletedParagraphs.mockResolvedValue(emptyResult);
+
+      const result = await controller.getCompletedParagraphs(mockBookId);
+
+      expect(result).toEqual({
+        ...emptyResult,
+        timestamp: expect.any(String),
+      });
+      expect(result.pages).toHaveLength(0);
+      expect(result.totalCompletedParagraphs).toBe(0);
+    });
+
+    it('should throw NotFoundException when book not found', async () => {
+      mockBooksService.getCompletedParagraphs.mockResolvedValue(null);
+
+      await expect(controller.getCompletedParagraphs(mockBookId)).rejects.toThrow(
+        expect.objectContaining({
+          message: `Book with ID ${mockBookId} not found`,
+          status: 404,
+        })
+      );
+
+      expect(mockBooksService.getCompletedParagraphs).toHaveBeenCalledWith(mockBookId);
+    });
+
+    it('should handle service errors and throw InternalServerErrorException', async () => {
+      const serviceError = new Error('Database connection failed');
+      mockBooksService.getCompletedParagraphs.mockRejectedValue(serviceError);
+
+      await expect(controller.getCompletedParagraphs(mockBookId)).rejects.toThrow(
+        expect.objectContaining({
+          message: 'Failed to retrieve completed paragraphs',
+          status: 500,
+        })
+      );
+
+      expect(mockBooksService.getCompletedParagraphs).toHaveBeenCalledWith(mockBookId);
+    });
+
+    it('should not re-throw NotFoundException from service', async () => {
+      const notFoundError = new NotFoundException('Book not found');
+      mockBooksService.getCompletedParagraphs.mockRejectedValue(notFoundError);
+
+      await expect(controller.getCompletedParagraphs(mockBookId)).rejects.toThrow(NotFoundException);
+
+      expect(mockBooksService.getCompletedParagraphs).toHaveBeenCalledWith(mockBookId);
+    });
+
+    it('should log appropriate messages', async () => {
+      const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+      const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+      
+      mockBooksService.getCompletedParagraphs.mockResolvedValue(mockCompletedParagraphsResult);
+
+      await controller.getCompletedParagraphs(mockBookId);
+
+      expect(logSpy).toHaveBeenCalledWith(`🔍 [API] Getting completed paragraphs for book: ${mockBookId}`);
+      expect(logSpy).toHaveBeenCalledWith(`✅ [API] Retrieved completed paragraphs for book ${mockBookId}: 3 paragraphs across 2 pages`);
+      
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it('should log error messages on service failure', async () => {
+      const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+      const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+      
+      const serviceError = new Error('Service failure');
+      mockBooksService.getCompletedParagraphs.mockRejectedValue(serviceError);
+
+      await expect(controller.getCompletedParagraphs(mockBookId)).rejects.toThrow();
+
+      expect(logSpy).toHaveBeenCalledWith(`🔍 [API] Getting completed paragraphs for book: ${mockBookId}`);
+      expect(errorSpy).toHaveBeenCalledWith(
+        `💥 [API] Error getting completed paragraphs for book ${mockBookId}: Service failure`,
+        expect.any(String)
+      );
+      
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
     });
   });
 });

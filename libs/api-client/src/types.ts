@@ -132,6 +132,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/books/{id}/completed-paragraphs': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get completed paragraphs for a book
+     * @description Retrieve all completed paragraphs for a book, organized by page. Used for export preview and content verification.
+     */
+    get: operations['BooksController_getCompletedParagraphs'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/books/paragraphs/{paragraphId}': {
     parameters: {
       query?: never;
@@ -439,6 +459,26 @@ export interface paths {
      * @description Start the audio export process for a specific page.
      */
     post: operations['BooksController_startPageExport'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/books/{id}/pages/{pageId}/cancel-export': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Cancel page export
+     * @description Cancel the audio export process for a specific page.
+     */
+    post: operations['BooksController_cancelPageExport'];
     delete?: never;
     options?: never;
     head?: never;
@@ -1439,6 +1479,52 @@ export interface operations {
       };
     };
   };
+  BooksController_getCompletedParagraphs: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Book ID */
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Completed paragraphs retrieved successfully */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            bookId?: string;
+            bookTitle?: string;
+            pages?: {
+              pageId?: string;
+              pageNumber?: number;
+              completedParagraphs?: {
+                id?: string;
+                content?: string;
+                orderIndex?: number;
+                audioStatus?: string;
+                audioDuration?: number | null;
+              }[];
+            }[];
+            totalCompletedParagraphs?: number;
+            timestamp?: string;
+          };
+        };
+      };
+      /** @description Book not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   BooksController_updateParagraph: {
     parameters: {
       query?: never;
@@ -1841,6 +1927,29 @@ export interface operations {
         content: {
           'application/json': components['schemas']['StartBookExportResponseDto'];
         };
+      };
+    };
+  };
+  BooksController_cancelPageExport: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description ID of the book */
+        id: string;
+        /** @description ID of the page */
+        pageId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Export cancelled successfully */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

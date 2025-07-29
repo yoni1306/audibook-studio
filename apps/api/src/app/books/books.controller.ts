@@ -170,6 +170,86 @@ export class BooksController {
     }
   }
 
+  @Get(':id/completed-paragraphs')
+  @ApiOperation({ 
+    summary: 'Get completed paragraphs for a book', 
+    description: 'Retrieve all completed paragraphs for a book, organized by page. Used for export preview and content verification.' 
+  })
+  @ApiParam({ name: 'id', description: 'Book ID' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Completed paragraphs retrieved successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        bookId: { type: 'string' },
+        bookTitle: { type: 'string' },
+        pages: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              pageId: { type: 'string' },
+              pageNumber: { type: 'number' },
+              completedParagraphs: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    content: { type: 'string' },
+                    orderIndex: { type: 'number' },
+                    audioStatus: { type: 'string' },
+                    audioDuration: { type: 'number', nullable: true }
+                  }
+                }
+              }
+            }
+          }
+        },
+        totalCompletedParagraphs: { type: 'number' },
+        timestamp: { type: 'string' }
+      }
+    }
+  })
+  @ApiResponse({ status: 404, description: 'Book not found' })
+  async getCompletedParagraphs(@Param('id') bookId: string) {
+    try {
+      this.logger.log(`🔍 [API] Getting completed paragraphs for book: ${bookId}`);
+      
+      const result = await this.booksService.getCompletedParagraphs(bookId);
+      
+      if (!result) {
+        this.logger.log(`📚 [API] Book not found with ID: ${bookId}`);
+        throw new NotFoundException({
+          error: 'Not Found',
+          message: `Book with ID ${bookId} not found`,
+          statusCode: 404,
+          timestamp: new Date().toISOString(),
+        });
+      }
+      
+      this.logger.log(`✅ [API] Retrieved completed paragraphs for book ${bookId}: ${result.totalCompletedParagraphs} paragraphs across ${result.pages.length} pages`);
+      
+      return {
+        ...result,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      
+      this.logger.error(`💥 [API] Error getting completed paragraphs for book ${bookId}: ${error.message}`, error.stack);
+      throw new InternalServerErrorException({
+        error: 'Internal Server Error',
+        message: 'Failed to retrieve completed paragraphs',
+        statusCode: 500,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
   @Patch('paragraphs/:paragraphId')
   @ApiOperation({ summary: 'Update paragraph content', description: 'Update the content of a specific paragraph and optionally generate audio' })
   @ApiParam({ name: 'paragraphId', description: 'Paragraph ID' })

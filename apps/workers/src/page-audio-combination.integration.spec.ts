@@ -17,6 +17,7 @@ describe('Page Audio Combination - System Integration Test', () => {
   let helloMp3Path: string;
   let worldMp3Path: string;
   let outputFile: string;
+  const activeCommands: ffmpeg.FfmpegCommand[] = [];
 
   beforeAll(async () => {
     // Paths to the real audio files provided by the user
@@ -44,6 +45,19 @@ describe('Page Audio Combination - System Integration Test', () => {
   });
 
   afterAll(async () => {
+    // Kill any active FFmpeg processes
+    activeCommands.forEach(command => {
+      try {
+        command.kill('SIGKILL');
+      } catch {
+        // Ignore errors when killing already finished processes
+      }
+    });
+    activeCommands.length = 0;
+
+    // Wait a bit for processes to fully terminate
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     // Clean up temporary files
     if (tempDir) {
       try {
@@ -66,6 +80,7 @@ describe('Page Audio Combination - System Integration Test', () => {
       // Use the EXACT same logic as the worker's audio combination
       await new Promise<void>((resolve, reject) => {
         let command = ffmpeg();
+        activeCommands.push(command);
         
         // Add all input files (same as worker)
         [helloMp3Path, worldMp3Path].forEach(file => {
@@ -108,6 +123,7 @@ describe('Page Audio Combination - System Integration Test', () => {
       // Use the worker logic to combine files
       await new Promise<void>((resolve, reject) => {
         let command = ffmpeg();
+        activeCommands.push(command);
         
         [helloMp3Path, worldMp3Path].forEach(file => {
           command = command.input(file);

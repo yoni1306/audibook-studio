@@ -557,7 +557,7 @@ const worker = new Worker(
       maxRetriesPerRequest: null, // BullMQ requirement
       lazyConnect: true,
       connectTimeout: 60000,
-      commandTimeout: 10000, // Reduced timeout for faster shutdown
+      commandTimeout: 30000, // Increased timeout for long-running operations
       disconnectTimeout: 5000, // Add disconnect timeout
     } : {
       // Fallback for local development
@@ -569,7 +569,7 @@ const worker = new Worker(
       maxRetriesPerRequest: null, // BullMQ requirement
       lazyConnect: true,
       connectTimeout: 60000,
-      commandTimeout: 10000, // Reduced timeout for faster shutdown
+      commandTimeout: 30000, // Increased timeout for long-running operations
       disconnectTimeout: 5000, // Add disconnect timeout
     },
     concurrency: parseInt(process.env['WORKER_CONCURRENCY'], 10) || 1,
