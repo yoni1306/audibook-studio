@@ -30,6 +30,7 @@ import {
   withCorrelationId,
   generateCorrelationId,
 } from '@audibook/correlation';
+import { metricsClient } from './metrics-client';
 
 // Set service name for logging
 process.env['SERVICE_NAME'] = 'audibook-worker';
@@ -201,6 +202,21 @@ const worker = new Worker(
 
               // Update book status to READY
               await updateBookStatus(job.data.bookId, BookStatus.READY);
+              
+              // Record EPUB parsing metrics
+              await metricsClient.recordEpubParsed(
+                job.data.bookId,
+                Date.now() - startTime,
+                true,
+                undefined,
+                {
+                  parsingMethod,
+                  totalPages: result.pages.length,
+                  totalParagraphs: result.metadata.totalParagraphs,
+                  averageParagraphsPerPage: result.metadata.averageParagraphsPerPage
+                }
+              );
+              
               logger.info('Book processing completed', {
                 bookId: job.data.bookId,
                 totalDuration: Date.now() - startTime,
@@ -228,6 +244,15 @@ const worker = new Worker(
                 stack: error.stack,
                 duration: Date.now() - startTime,
               });
+
+              // Record EPUB parsing failure metrics
+              await metricsClient.recordEpubParsed(
+                job.data.bookId,
+                Date.now() - startTime,
+                false,
+                error.message,
+                { parsingMethod }
+              );
 
               // Update book status to ERROR
               await updateBookStatus(job.data.bookId, BookStatus.ERROR);
@@ -315,6 +340,19 @@ const worker = new Worker(
                 audioStatus: AudioStatus.READY,
               });
 
+              // Record audio generation metrics
+              await metricsClient.recordAudioGeneration(
+                job.data.bookId,
+                Date.now() - startTime,
+                true,
+                undefined,
+                {
+                  paragraphId: job.data.paragraphId,
+                  audioDuration: result.duration,
+                  contentLength: paragraph.content.length
+                }
+              );
+              
               logger.info('Audio generation completed successfully', {
                 paragraphId: job.data.paragraphId,
                 totalDuration: Date.now() - startTime,
@@ -344,6 +382,18 @@ const worker = new Worker(
                 stack: error.stack,
                 duration: Date.now() - startTime,
               });
+
+              // Record audio generation failure metrics
+              await metricsClient.recordAudioGeneration(
+                job.data.bookId,
+                Date.now() - startTime,
+                false,
+                error.message,
+                {
+                  paragraphId: job.data.paragraphId,
+                  contentLength: job.data.content?.length
+                }
+              );
 
               // Mark as ERROR
               await updateParagraphAudioStatus(

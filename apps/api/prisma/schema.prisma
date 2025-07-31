@@ -17,6 +17,8 @@ model Book {
   status          BookStatus        @default(PROCESSING)
   pages           Page[]            // Pages detected from EPUB
   textCorrections TextCorrection[]  // All text corrections for this book
+  metricEvents    MetricEvent[]     // Metric events for this book
+  bookMetrics     BookMetrics?      // Aggregated metrics for this book
   // Enhanced metadata fields
   totalPages      Int?              // Total number of pages detected
   totalParagraphs Int?              // Total number of paragraphs
@@ -124,4 +126,51 @@ enum FixType {
   dialogue_marking  // Adding quotation marks and dialogue indicators
   expansion         // Expanding numbers, currency, and acronyms into readable form
   default          // Default/unclassified text correction when no specific type matches
+}
+
+enum EventType {
+  TEXT_EDIT
+  AUDIO_GENERATION
+  BULK_FIX_APPLIED
+  BULK_FIX_SUGGESTED
+  PARAGRAPH_COMPLETED
+  BOOK_UPLOADED
+  EPUB_PARSED
+  CORRECTION_RECORDED
+}
+
+model MetricEvent {
+  id           String    @id @default(uuid())
+  bookId       String
+  book         Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  eventType    EventType
+  eventData    Json?     // Additional event-specific data
+  duration     Int?      // Duration in milliseconds
+  success      Boolean   @default(true)
+  errorMessage String?
+  timestamp    DateTime  @default(now())
+
+  @@index([bookId, eventType, timestamp])
+  @@index([eventType, timestamp])
+  @@index([timestamp])
+  @@map("metric_events")
+}
+
+model BookMetrics {
+  id                   String   @id @default(uuid())
+  bookId               String   @unique
+  book                 Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  totalTextEdits       Int      @default(0)
+  totalAudioGenerated  Int      @default(0)
+  totalBulkFixes       Int      @default(0)
+  totalCorrections     Int      @default(0)
+  avgProcessingTime    Float?
+  completionPercentage Float    @default(0)
+  lastActivity         DateTime @default(now())
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([lastActivity])
+  @@index([completionPercentage])
+  @@map("book_metrics")
 }

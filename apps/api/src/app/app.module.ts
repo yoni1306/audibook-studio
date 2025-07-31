@@ -7,6 +7,7 @@ import { S3Module } from './s3/s3.module';
 import { QueueModule } from './queue/queue.module';
 import { BooksModule } from './books/books.module';
 import { LogsModule } from './logs/logs.module';
+import { MetricsModule } from './metrics/metrics.module';
 import { CorrelationModule } from './middleware/correlation.module';
 import { CorrelationIdMiddleware } from './middleware/correlation.middleware';
 
@@ -22,6 +23,7 @@ import { CorrelationIdMiddleware } from './middleware/correlation.middleware';
     QueueModule,
     BooksModule,
     LogsModule,
+    MetricsModule,
     CorrelationModule,
   ],
   controllers: [AppController],

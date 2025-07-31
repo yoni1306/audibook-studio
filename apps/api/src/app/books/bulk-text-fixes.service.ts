@@ -4,6 +4,7 @@ import { TextFixesService, WordChange } from './text-fixes.service';
 import { FixType } from '@prisma/client';
 import { FixTypeHandlerRegistry } from './fix-type-handlers/fix-type-handler-registry';
 import { TextCorrectionRepository } from './text-correction.repository';
+import { MetricsService } from '../metrics/metrics.service';
 
 export interface BulkFixSuggestion {
   originalWord: string;
@@ -42,7 +43,8 @@ export class BulkTextFixesService {
     private prisma: PrismaService,
     private textFixesService: TextFixesService,
     private fixTypeHandlerRegistry: FixTypeHandlerRegistry,
-    private textCorrectionRepository: TextCorrectionRepository
+    private textCorrectionRepository: TextCorrectionRepository,
+    private metricsService: MetricsService
   ) {}
 
   // Common sentence terminators including multilingual punctuation
@@ -502,6 +504,19 @@ export class BulkTextFixesService {
         totalWordsFixed,
         updatedParagraphs,
       };
+
+      // Record bulk fix metrics
+      await this.metricsService.recordEvent({
+        bookId,
+        eventType: 'BULK_FIX_APPLIED',
+        eventData: {
+          totalParagraphsUpdated: result.totalParagraphsUpdated,
+          totalWordsFixed: result.totalWordsFixed,
+          fixesApplied: fixes.length,
+          paragraphsProcessed: paragraphFixes.size
+        },
+        success: true
+      });
 
       this.logger.log(`🎉 Bulk fixes completed successfully!`);
       this.logger.log(
