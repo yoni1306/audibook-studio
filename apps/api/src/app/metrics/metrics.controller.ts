@@ -1,7 +1,7 @@
 import { Controller, Post, Body, Get, Query, Logger } from '@nestjs/common';
 import { MetricsService, CreateMetricEventDto } from './metrics.service';
 
-@Controller('api/metrics')
+@Controller('metrics')
 export class MetricsController {
   private readonly logger = new Logger(MetricsController.name);
 

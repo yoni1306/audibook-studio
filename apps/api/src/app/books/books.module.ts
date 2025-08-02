@@ -9,6 +9,7 @@ import { TextCorrectionRepository } from './text-correction.repository';
 import { TextFixesController } from './text-fixes.controller';
 import { QueueModule } from '../queue/queue.module';
 import { S3Module } from '../s3/s3.module';
+import { MetricsModule } from '../metrics/metrics.module';
 import { FixTypeHandlerRegistry } from './fix-type-handlers/fix-type-handler-registry';
 import { VowelizationHandler } from './fix-type-handlers/vowelization-handler';
 import { DisambiguationHandler } from './fix-type-handlers/disambiguation-handler';
@@ -18,7 +19,7 @@ import { DialogueMarkingHandler } from './fix-type-handlers/dialogue-marking-han
 import { ExpansionHandler } from './fix-type-handlers/expansion-handler';
 
 @Module({
-  imports: [QueueModule, forwardRef(() => S3Module)],
+  imports: [QueueModule, forwardRef(() => S3Module), MetricsModule],
   controllers: [BooksController, TextFixesController],
   providers: [
     BooksService,
