@@ -5,7 +5,7 @@ import { QueueService } from '../queue/queue.service';
 import { TextFixesService } from './text-fixes.service';
 import { BulkTextFixesService } from './bulk-text-fixes.service';
 import { S3Service } from '../s3/s3.service';
-import { BookStatus } from '@prisma/client';
+import { BookStatus, FixType } from '@prisma/client';
 
 describe('BooksService', () => {
   let service: BooksService;
@@ -519,6 +519,78 @@ describe('BooksService', () => {
         newContent
       );
       expect(result).toEqual({ ...updatedParagraph, textChanges, bulkSuggestions: [] });
+    });
+
+    it('should record text corrections even when user intends to "skip all" suggestions (demonstrates bug)', async () => {
+      // This test demonstrates the current bug: when a user clicks "Skip All",
+      // the frontend still calls updateParagraph, which triggers processParagraphUpdate,
+      // which records text corrections in the database even though the user intended to skip them.
+      
+      const originalContent = 'שלום עולם';
+      const updatedContent = 'שָׁלוֹם עולם'; // Hebrew with niqqud corrections
+      
+      const existingParagraph = {
+        ...mockParagraph,
+        content: originalContent,
+      };
+      
+      const updatedParagraph = {
+        ...mockParagraph,
+        content: updatedContent,
+        page: {
+          ...mockPage,
+          book: mockBook,
+        },
+        textCorrections: [],
+      };
+      
+      // Mock text changes that would be detected
+      const mockTextChanges = [
+        {
+          originalWord: 'שלום',
+          correctedWord: 'שָׁלוֹם',
+          position: 0,
+          fixType: FixType.vowelization,
+        },
+      ];
+      
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(existingParagraph);
+      (prismaService.paragraph.update as jest.Mock).mockResolvedValue(updatedParagraph);
+      (textFixesService.processParagraphUpdate as jest.Mock).mockResolvedValue(mockTextChanges);
+      
+      // Simulate the "skip all" scenario - user edits paragraph but intends to skip bulk suggestions
+      const result = await service.updateParagraph(paragraphId, updatedContent, false);
+      
+      // Verify that updateParagraph was called (this is expected)
+      expect(prismaService.paragraph.update).toHaveBeenCalledWith({
+        where: { id: paragraphId },
+        data: { content: updatedContent },
+        include: {
+          page: {
+            include: {
+              book: true,
+            },
+          },
+          textCorrections: {
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+          },
+        },
+      });
+      
+      // BUG: This is the problem! processParagraphUpdate is called even when user intends to "skip all"
+      // This method calls saveTextFixes which records corrections in the database
+      expect(textFixesService.processParagraphUpdate).toHaveBeenCalledWith(
+        paragraphId,
+        originalContent,
+        updatedContent
+      );
+      
+      // The result includes textChanges, which means corrections were processed and will be recorded
+      expect(result.textChanges).toEqual(mockTextChanges);
+      
+      // TODO: In the fix, we should add a parameter to updateParagraph like "recordCorrections: boolean"
+      // When user clicks "Skip All", this should be false, preventing processParagraphUpdate from being called
     });
 
     it('should throw error when paragraph not found', async () => {

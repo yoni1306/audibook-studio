@@ -554,7 +554,7 @@ export default function BookDetailPage() {
   };
 
   const handleSkipBulkFix = () => {
-    logger.info('handleSkipBulkFix called', {
+    logger.info('handleSkipBulkFix called - applying only original edit and generating audio if requested', {
       pendingBulkFix: pendingBulkFix ? {
         paragraphId: pendingBulkFix.paragraphId,
         audioRequested: pendingBulkFix.audioRequested,
@@ -568,51 +568,57 @@ export default function BookDetailPage() {
       return;
     }
     
-    // Apply the original edit when skipping bulk fixes
-    if (pendingBulkFix) {
-      // If audio was requested, update the status to GENERATING for visual feedback
-      if (pendingBulkFix.audioRequested && book) {
-        logger.info('Setting audio status to GENERATING for paragraph', pendingBulkFix.paragraphId);
-        const updatedBook = {
-          ...book,
-          paragraphs: book.paragraphs.map(p => 
-            p.id === pendingBulkFix.paragraphId 
-              ? { ...p, audioStatus: 'GENERATING' as const }
-              : p
-          )
-        };
-        setBook(updatedBook);
-      }
-      
-      // Make the API call to save the original content
-      const apiParams = {
-        content: pendingBulkFix.content,
-        generateAudio: pendingBulkFix.audioRequested,
+    // IMPROVED FLOW: When user clicks "Skip All", we call updateParagraph with:
+    // 1. Only the original edit content (no bulk suggestions applied)
+    // 2. Audio generation if requested
+    // Since the content is already saved in the database from the initial edit,
+    // this won't trigger new text correction recording but will generate audio if needed.
+    
+    logger.info('Skipping bulk suggestions - applying only original edit with audio generation if requested');
+    
+    // If audio was requested, update UI to show generating status
+    if (pendingBulkFix.audioRequested && book) {
+      logger.info('Setting audio status to GENERATING for paragraph', pendingBulkFix.paragraphId);
+      const updatedBook = {
+        ...book,
+        paragraphs: book.paragraphs.map(p => 
+          p.id === pendingBulkFix.paragraphId 
+            ? { ...p, audioStatus: 'GENERATING' as const }
+            : p
+        )
       };
-      
-      logger.info('Making API call to updateParagraph', {
-        paragraphId: pendingBulkFix.paragraphId,
-        generateAudio: pendingBulkFix.audioRequested
-      });
-      
-      apiClient.books.updateParagraph(pendingBulkFix.paragraphId, apiParams)
-      .then(({ error }: { error?: string }) => {
-        logger.info('API call completed', { error });
-        if (!error) {
-          // If audio was requested, start polling for completion
-          if (pendingBulkFix.audioRequested) {
-            startAudioPolling(pendingBulkFix.paragraphId);
-          } else {
-            // No audio requested, just refresh immediately
-            fetchBook();
-          }
-        }
-      })
-      .catch((error: Error) => {
-        logger.error('Error applying original edit:', error);
-      });
+      setBook(updatedBook);
     }
     
+    // Call updateParagraph with the original edit content and audio generation if requested
+    const apiParams = {
+      content: pendingBulkFix.content, // Original edit content (no bulk suggestions)
+      generateAudio: pendingBulkFix.audioRequested, // Generate audio if requested
+    };
+    
+    logger.info('Making API call to updateParagraph with original edit only', {
+      paragraphId: pendingBulkFix.paragraphId,
+      generateAudio: pendingBulkFix.audioRequested
+    });
+    
+    apiClient.books.updateParagraph(pendingBulkFix.paragraphId, apiParams)
+    .then(({ error }: { error?: string }) => {
+      logger.info('Skip all API call completed', { error });
+      if (!error) {
+        // If audio was requested, start polling for completion
+        if (pendingBulkFix.audioRequested) {
+          startAudioPolling(pendingBulkFix.paragraphId);
+        } else {
+          // No audio requested, just refresh to show the updated content
+          fetchBook();
+        }
+      }
+    })
+    .catch((error: Error) => {
+      logger.error('Error in skip all operation:', error);
+    });
+    
+    // Clean up state
     setShowBulkFixModal(false);
     setPendingBulkFix(null);
     setEditingId(null); // Hide save buttons bar so audio player is visible
