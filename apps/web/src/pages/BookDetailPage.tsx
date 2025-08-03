@@ -591,9 +591,11 @@ export default function BookDetailPage() {
     }
     
     // Call updateParagraph with the original edit content and audio generation if requested
+    // IMPORTANT: Set recordTextCorrections to false to prevent recording unwanted corrections
     const apiParams = {
       content: pendingBulkFix.content, // Original edit content (no bulk suggestions)
       generateAudio: pendingBulkFix.audioRequested, // Generate audio if requested
+      recordTextCorrections: false, // Don't record text corrections when skipping all suggestions
     };
     
     logger.info('Making API call to updateParagraph with original edit only', {

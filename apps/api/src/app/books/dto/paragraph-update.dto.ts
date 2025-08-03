@@ -111,6 +111,11 @@ export class UpdateParagraphRequestDto {
   @IsOptional()
   @IsBoolean()
   generateAudio?: boolean;
+
+  @ApiProperty({ description: 'Whether to record text corrections for this update', required: false, default: true })
+  @IsOptional()
+  @IsBoolean()
+  recordTextCorrections?: boolean;
 }
 
 export class SuggestedFixDto {

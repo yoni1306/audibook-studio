@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { FixType } from '@prisma/client';
 import { FixTypeHandlerRegistry } from './fix-type-handlers/fix-type-handler-registry';
+import * as diff from 'diff';
 
 export interface WordChange {
   originalWord: string;
@@ -21,14 +22,10 @@ export class TextFixesService {
 
   /**
    * Analyzes differences between original and fixed text to identify word changes
+   * Uses Myers diff algorithm for robust text comparison
    */
   analyzeTextChanges(originalText: string, correctedText: string): WordChange[] {
-    // Split texts into words while preserving position information
-    const originalWords = this.tokenizeText(originalText);
-    const correctedWords = this.tokenizeText(correctedText);
-    
-    // Use a simple diff algorithm to find changes
-    return this.computeWordDiff(originalWords, correctedWords);
+    return this.computeRobustWordDiff(originalText, correctedText);
   }
 
   /**
@@ -36,8 +33,6 @@ export class TextFixesService {
    */
   private tokenizeText(text: string): Array<{ word: string; position: number }> {
     const words: Array<{ word: string; position: number }> = [];
-    // Match words by excluding common punctuation marks
-    // This approach is more reliable and avoids Unicode range issues
     const wordRegex = /[^\s.,;:!?()[\]{}""''`~@#$%^&*+=|\\/<>]+/g;
     let match;
     let position = 0;
@@ -53,55 +48,139 @@ export class TextFixesService {
   }
 
   /**
-   * Simple word-level diff algorithm
+   * Robust word-level diff algorithm using Myers algorithm
+   * Handles insertions, deletions, and modifications correctly
    */
-  private computeWordDiff(
-    original: Array<{ word: string; position: number }>,
-    corrected: Array<{ word: string; position: number }>
-  ): WordChange[] {
+  private computeRobustWordDiff(originalText: string, correctedText: string): WordChange[] {
     const changes: WordChange[] = [];
-    const maxLength = Math.max(original.length, corrected.length);
     
-    for (let i = 0; i < maxLength; i++) {
-      const originalWord = original[i]?.word;
-      const correctedWord = corrected[i]?.word;
+    if (!originalText || !correctedText || typeof originalText !== 'string' || typeof correctedText !== 'string') {
+      return changes;
+    }
+    
+    const originalWords = this.extractWords(originalText);
+    const correctedWords = this.extractWords(correctedText);
+    const wordDiffs = diff.diffArrays(originalWords, correctedWords);
+    
+    let wordPosition = 0;
+    let i = 0;
+    
+    while (i < wordDiffs.length) {
+      const part = wordDiffs[i];
       
-      // Word was changed
-      if (originalWord && correctedWord && originalWord !== correctedWord) {
-        this.logger.debug(`Creating WordChange: "${originalWord}" → "${correctedWord}"`);
+      if (!part.added && !part.removed) {
+        const wordCount = part.count || 0;
+        wordPosition += wordCount;
+        i++;
         
-        // Classify the fix type for this change
-        const classification = this.fixTypeRegistry.classifyCorrection(originalWord, correctedWord);
-        const fixType = classification.fixType;
+      } else if (part.removed) {
+        const nextPart = wordDiffs[i + 1];
         
-        changes.push({
-          originalWord,
-          correctedWord,
-          position: original[i].position,
-          fixType
-        });
+        if (nextPart && nextPart.added) {
+          const originalWordsInPart = part.value || [];
+          const correctedWordsInPart = nextPart.value || [];
+          
+          if (originalWordsInPart.length === 1 && correctedWordsInPart.length > 1) {
+            // Word split case: one word becomes multiple words
+            const originalWord = originalWordsInPart[0];
+            const fullCorrectedPhrase = correctedWordsInPart.join(' ');
+            
+            try {
+              const classification = this.fixTypeRegistry.classifyCorrection(originalWord, fullCorrectedPhrase);
+              
+              changes.push({
+                originalWord,
+                correctedWord: fullCorrectedPhrase,
+                position: wordPosition,
+                fixType: classification.fixType
+              });
+            } catch (error) {
+              this.logger.warn(`Failed to classify word split: ${originalWord} → ${fullCorrectedPhrase}`, error);
+            }
+            
+          } else if (originalWordsInPart.length > 1 && correctedWordsInPart.length === 1) {
+            // Word merge case: multiple words become one word
+            const fullOriginalPhrase = originalWordsInPart.join(' ');
+            const correctedWord = correctedWordsInPart[0];
+            
+            try {
+              const classification = this.fixTypeRegistry.classifyCorrection(fullOriginalPhrase, correctedWord);
+              
+              changes.push({
+                originalWord: fullOriginalPhrase,
+                correctedWord,
+                position: wordPosition,
+                fixType: classification.fixType
+              });
+            } catch (error) {
+              this.logger.warn(`Failed to classify word merge: ${fullOriginalPhrase} → ${correctedWord}`, error);
+            }
+            
+          } else {
+            // Handle word substitutions
+            const minLength = Math.min(originalWordsInPart.length, correctedWordsInPart.length);
+            
+            for (let j = 0; j < minLength; j++) {
+              const originalWord = originalWordsInPart[j];
+              const correctedWord = correctedWordsInPart[j];
+              
+              if (originalWord && correctedWord && originalWord !== correctedWord) {
+                try {
+                  const classification = this.fixTypeRegistry.classifyCorrection(originalWord, correctedWord);
+                  
+                  changes.push({
+                    originalWord,
+                    correctedWord,
+                    position: wordPosition + j,
+                    fixType: classification.fixType
+                  });
+                } catch (error) {
+                  this.logger.warn(`Failed to classify correction: ${originalWord} → ${correctedWord}`, error);
+                }
+              }
+            }
+          }
+          
+          wordPosition += Math.max(originalWordsInPart.length, correctedWordsInPart.length);
+          i += 2;
+          
+        } else {
+          const removedWords = part.value || [];
+          wordPosition += removedWords.length;
+          i++;
+        }
+        
+      } else if (part.added) {
+        i++;
+        
+      } else {
+        i++;
       }
     }
     
     return changes;
   }
-
+  
   /**
-   * Classifies the type of change made using the modular fix type handler system
+   * Extract words from text, filtering out empty strings and whitespace
    */
-  private classifyChange(originalWord: string, correctedWord: string): string {
-    this.logger.debug(`Classifying change: "${originalWord}" → "${correctedWord}"`);
-    
-    const result = this.fixTypeRegistry.classifyCorrection(originalWord, correctedWord);
-    
-    this.logger.debug(`Successfully classified as ${result.fixType} (confidence: ${result.confidence}): ${result.reason}`);
-    
-    if (result.debugInfo.allMatches.length > 1) {
-      this.logger.debug(`Multiple handlers matched: ${result.debugInfo.allMatches.map(m => `${m.fixType}(${m.confidence})`).join(', ')}`);
+  private extractWords(text: string): string[] {
+    if (!text || typeof text !== 'string') {
+      return [];
     }
     
-    return result.fixType;
+    const wordRegex = /[^\s.,;:!?()[\]{}""''`~@#$%^&*+=|\\/<>]+/g;
+    const matches = text.match(wordRegex);
+    if (!matches) {
+      return [];
+    }
+    
+    return matches.filter(word => word.trim().length > 0);
   }
+
+
+
+
 
   /**
    * Extract sentence context around a word in the text
@@ -150,7 +229,6 @@ export class TextFixesService {
     changes: WordChange[]
   ): Promise<void> {
     if (changes.length === 0) {
-      this.logger.log(`No text changes detected for paragraph ${paragraphId}`);
       return;
     }
 
