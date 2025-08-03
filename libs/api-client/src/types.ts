@@ -793,6 +793,11 @@ export interface components {
        * @default false
        */
       generateAudio: boolean;
+      /**
+       * @description Whether to record text corrections for this update
+       * @default true
+       */
+      recordTextCorrections: boolean;
     };
     TextChange: {
       /** @description Original word that was changed */

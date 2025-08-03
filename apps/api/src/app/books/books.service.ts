@@ -59,7 +59,7 @@ export class BooksService {
     });
   }
 
-  async updateParagraph(paragraphId: string, content: string, generateAudio = false): Promise<UpdateParagraphResponseDto> {
+  async updateParagraph(paragraphId: string, content: string, generateAudio = false, recordTextCorrections = true): Promise<UpdateParagraphResponseDto> {
     this.logger.log(`Attempting to update paragraph with ID: ${paragraphId}`);
 
     // First, get the existing paragraph to track changes
@@ -72,10 +72,10 @@ export class BooksService {
       throw new Error(`Paragraph not found with ID: ${paragraphId}`);
     }
 
-    // Track text changes if content is different
+    // Track text changes if content is different AND recordTextCorrections is true
     let textChanges = [];
   
-    if (existingParagraph.content !== content) {
+    if (existingParagraph.content !== content && recordTextCorrections) {
       this.logger.log(`Tracking text changes for paragraph ${paragraphId}`);
       textChanges = await this.textFixesService.processParagraphUpdate(
         paragraphId,
@@ -86,6 +86,8 @@ export class BooksService {
       this.logger.log(
         `Detected ${textChanges.length} text changes for paragraph ${paragraphId}`
       );
+    } else if (existingParagraph.content !== content && !recordTextCorrections) {
+      this.logger.log(`Skipping text correction recording for paragraph ${paragraphId} (recordTextCorrections=false)`);
     }
 
     // Update the paragraph

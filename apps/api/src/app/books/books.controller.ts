@@ -267,7 +267,9 @@ export class BooksController {
       
       // Pass the generateAudio flag to the service, default to false if not specified
       const generateAudio = body.generateAudio !== undefined ? body.generateAudio : false;
-      const result = await this.booksService.updateParagraph(paragraphId, body.content, generateAudio);
+      // Pass the recordTextCorrections flag to the service, default to true if not specified
+      const recordTextCorrections = body.recordTextCorrections !== undefined ? body.recordTextCorrections : true;
+      const result = await this.booksService.updateParagraph(paragraphId, body.content, generateAudio, recordTextCorrections);
       
       // BooksService already handles bulk suggestions, so just return the result
       return result;
