@@ -10,6 +10,7 @@ import CorrectionsPage from './pages/CorrectionsPage';
 import UploadPage from './pages/UploadPage';
 import QueuePage from './pages/QueuePage';
 import TextFixesPage from './pages/TextFixesPage';
+import AnalyticsPage from './pages/AnalyticsPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 function App() {
@@ -25,6 +26,7 @@ function App() {
         <Route path="/upload" element={<UploadPage />} />
         <Route path="/queue" element={<QueuePage />} />
         <Route path="/text-fixes" element={<TextFixesPage />} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Layout>

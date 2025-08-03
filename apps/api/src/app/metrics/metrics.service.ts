@@ -595,4 +595,37 @@ export class MetricsService {
       throw new Error('Failed to update book metrics');
     }
   }
+
+  /**
+   * Get recent metric events for activity feed
+   */
+  async getRecentEvents(limit = 10): Promise<any[]> {
+    try {
+      const events = await this.prisma.metricEvent.findMany({
+        orderBy: {
+          timestamp: 'desc'
+        },
+        take: limit,
+        include: {
+          book: {
+            select: {
+              title: true
+            }
+          }
+        }
+      });
+
+      return events.map(event => ({
+        id: event.id,
+        eventType: event.eventType,
+        bookId: event.bookId,
+        bookTitle: event.book?.title,
+        timestamp: event.timestamp.toISOString(),
+        metadata: event.eventData
+      }));
+    } catch (error) {
+      this.logger.error(`Failed to get recent events: ${error.message}`);
+      return [];
+    }
+  }
 }

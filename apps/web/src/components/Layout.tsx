@@ -15,6 +15,7 @@ function Navigation() {
     { href: '/upload', label: 'Upload', icon: '📤' },
     { href: '/export', label: 'Export', icon: '🎵' },
     { href: '/queue', label: 'Queue', icon: '⏳' },
+    { href: '/analytics', label: 'Analytics', icon: '📊' },
   ];
 
   return (

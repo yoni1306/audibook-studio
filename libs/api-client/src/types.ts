@@ -845,7 +845,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/metrics/events': {
+  '/metrics/events': {
     parameters: {
       query?: never;
       header?: never;
@@ -861,7 +861,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/metrics/books/{bookId}': {
+  '/metrics/books/{bookId}': {
     parameters: {
       query?: never;
       header?: never;
@@ -877,7 +877,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/metrics/global': {
+  '/metrics/global': {
     parameters: {
       query?: never;
       header?: never;

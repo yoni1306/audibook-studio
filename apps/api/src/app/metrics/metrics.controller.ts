@@ -36,4 +36,12 @@ export class MetricsController {
 
     return this.metricsService.getGlobalMetrics(timeRange);
   }
+
+  @Get('events/recent')
+  async getRecentEvents(
+    @Query('limit') limit?: string
+  ) {
+    const eventLimit = limit ? parseInt(limit, 10) : 10;
+    return this.metricsService.getRecentEvents(eventLimit);
+  }
 }

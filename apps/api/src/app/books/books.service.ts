@@ -6,6 +6,7 @@ import { TextFixesService } from './text-fixes.service';
 import { UpdateParagraphResponseDto, BulkFixSuggestion as BulkFixSuggestionDto } from './dto/paragraph-update.dto';
 import { S3Service } from '../s3/s3.service';
 import { BulkTextFixesService, BulkFixSuggestion as ServiceBulkFixSuggestion } from './bulk-text-fixes.service';
+import { MetricsService } from '../metrics/metrics.service';
 
 @Injectable()
 export class BooksService {
@@ -38,7 +39,8 @@ export class BooksService {
     private queueService: QueueService,
     private textFixesService: TextFixesService,
     private s3Service: S3Service,
-    private bulkTextFixesService: BulkTextFixesService
+    private bulkTextFixesService: BulkTextFixesService,
+    private metricsService: MetricsService
   ) {}
 
   async createBook(data: { title: string; author?: string; s3Key: string }) {
@@ -122,6 +124,32 @@ export class BooksService {
       this.logger.log(
         `Updated paragraph ${paragraphId}, tracked ${textChanges.length} changes, audio generation skipped`
       );
+    }
+
+    // Record metrics for text edits
+    if (textChanges.length > 0) {
+      try {
+        await this.metricsService.recordEvent({
+          eventType: 'TEXT_EDIT',
+          bookId: paragraph.page.bookId,
+          eventData: {
+            paragraphId,
+            pageNumber: paragraph.page.pageNumber,
+            pageId: paragraph.pageId,
+            changesCount: textChanges.length,
+            editedContent: content.substring(0, 200) + (content.length > 200 ? '...' : ''), // First 200 chars of edited text
+            textChanges: textChanges.map(change => ({
+              originalWord: change.originalWord,
+              correctedWord: change.correctedWord,
+              position: change.position
+            }))
+          }
+        });
+        this.logger.log(`📊 Recorded text_edit metric for paragraph ${paragraphId} with ${textChanges.length} changes`);
+      } catch (error) {
+        this.logger.error(`Failed to record text_edit metric: ${error.message}`);
+        // Don't fail the operation if metrics recording fails
+      }
     }
 
     // Generate bulk fix suggestions after saving the text (only if there were text changes)
