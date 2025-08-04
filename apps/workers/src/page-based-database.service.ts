@@ -1,4 +1,4 @@
-import { BookStatus, AudioStatus } from '@prisma/client';
+import { AudioStatus } from '@prisma/client';
 import { createLogger } from '@audibook/logger';
 import { ParsedPage } from './text-processing/page-based-epub-parser';
 import { prisma } from './database.service';
@@ -29,20 +29,53 @@ export async function savePages(
 
     // Use transaction to ensure data consistency
     await prisma.$transaction(async (tx) => {
-      // First, delete any existing pages for this book to avoid unique constraint violations
-      logger.debug(`Clearing existing pages for book ${bookId}`);
+      // First, delete any existing data for this book to avoid unique constraint violations
+      logger.debug(`Clearing existing data for book ${bookId}`);
       await tx.paragraph.deleteMany({
         where: { bookId }
       });
       await tx.page.deleteMany({
         where: { bookId }
       });
-      logger.debug(`Existing pages cleared for book ${bookId}`);
+      // Also clear original book data if it exists
+      await tx.originalParagraph.deleteMany({
+        where: { originalBookId: bookId }
+      });
+      await tx.originalPage.deleteMany({
+        where: { originalBookId: bookId }
+      });
+      await tx.originalBook.deleteMany({
+        where: { bookId }
+      });
+      logger.debug(`Existing data cleared for book ${bookId}`);
+
+      // Get book details for creating original book record
+      const book = await tx.book.findUnique({
+        where: { id: bookId },
+        select: { title: true, author: true, language: true, s3Key: true }
+      });
+
+      if (!book) {
+        throw new Error(`Book ${bookId} not found`);
+      }
+
+      // Create original book record
+      const originalBook = await tx.originalBook.create({
+        data: {
+          bookId,
+          title: book.title,
+          author: book.author,
+          language: book.language,
+          s3Key: book.s3Key,
+        },
+      });
+
+      logger.debug(`Created original book record for ${bookId}`);
 
       for (const page of pages) {
         logger.debug(`Saving page ${page.pageNumber} with ${page.paragraphs.length} paragraphs`);
 
-        // Create the page
+        // Create the current page
         const createdPage = await tx.page.create({
           data: {
             bookId,
@@ -55,14 +88,42 @@ export async function savePages(
           },
         });
 
+        // Create the original page
+        const originalPage = await tx.originalPage.create({
+          data: {
+            originalBookId: originalBook.id,
+            pageNumber: page.pageNumber,
+            sourceChapter: page.sourceChapter,
+            startPosition: page.startPosition,
+            endPosition: page.endPosition,
+            pageBreakInfo: page.pageBreakInfo ? JSON.stringify(page.pageBreakInfo) : null,
+          },
+        });
+
         // Create paragraphs for this page
         if (page.paragraphs.length > 0) {
+          // First create original paragraphs
+          const originalParagraphs = await Promise.all(
+            page.paragraphs.map(async (p) => {
+              return await tx.originalParagraph.create({
+                data: {
+                  originalPageId: originalPage.id,
+                  originalBookId: originalBook.id,
+                  orderIndex: p.orderIndex,
+                  content: p.content,
+                },
+              });
+            })
+          );
+
+          // Then create current paragraphs that reference the original ones
           await tx.paragraph.createMany({
-            data: page.paragraphs.map((p) => ({
+            data: page.paragraphs.map((p, index) => ({
               pageId: createdPage.id,
               bookId,
               orderIndex: p.orderIndex,
               content: p.content,
+              originalParagraphId: originalParagraphs[index].id,
             })),
             skipDuplicates: true,
           });

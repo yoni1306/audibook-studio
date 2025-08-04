@@ -102,6 +102,11 @@ export class BooksService {
             book: true,
           },
         },
+        originalParagraph: {
+          select: {
+            content: true,
+          },
+        },
         textCorrections: {
           orderBy: { createdAt: 'desc' },
           take: 10, // Include recent fixes
@@ -142,6 +147,7 @@ export class BooksService {
 
     return {
       ...paragraph,
+      originalContent: paragraph.originalParagraph?.content,
       textChanges,
       textCorrections: paragraph.textCorrections,
       bulkSuggestions: mappedBulkSuggestions, // Include bulk fix suggestions in the response

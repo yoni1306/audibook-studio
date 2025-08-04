@@ -88,6 +88,20 @@ export class UpdateParagraphResponseDto {
   @ApiProperty({ description: 'Updated paragraph content' })
   content: string;
 
+  @ApiProperty({
+    description: 'Original paragraph content from the original book',
+    example: 'זה הטקסט המקורי של הפסקה לפני כל שינוי',
+    required: false,
+  })
+  originalContent?: string;
+
+  @ApiProperty({
+    description: 'Reference ID to the original paragraph in the original book',
+    example: 'uuid-of-original-paragraph',
+    required: false,
+  })
+  originalParagraphId?: string;
+
   @ApiProperty({ description: 'Book ID this paragraph belongs to' })
   bookId: string;
 

@@ -47,6 +47,8 @@
     "prisma:migrate:deploy": "cd apps/api && dotenv -e ../../.env.local -- npx prisma migrate deploy",
     "prisma:migrate:status": "cd apps/api && dotenv -e ../../.env.local -- npx prisma migrate status",
     "prisma:migrate:reset": "cd apps/api && dotenv -e ../../.env.local -- npx prisma migrate reset",
+    "prisma:rollback": "./scripts/rollback-migration.sh",
+    "prisma:rollback:list": "echo 'Available rollback scripts:' && ls -la apps/api/prisma/rollback-migrations/",
     "// Reset & Cleanup": "",
     "reset:db": "pnpm prisma:push:reset && pnpm prisma:push",
     "reset:queue": "docker exec audibook-studio-redis-1 redis-cli FLUSHALL",
