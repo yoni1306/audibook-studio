@@ -247,6 +247,11 @@ describe('BooksService', () => {
               book: true,
             },
           },
+          originalParagraph: {
+            select: {
+              content: true,
+            },
+          },
           textCorrections: {
             orderBy: { createdAt: 'desc' },
             take: 10,
@@ -569,6 +574,11 @@ describe('BooksService', () => {
           page: {
             include: {
               book: true,
+            },
+          },
+          originalParagraph: {
+            select: {
+              content: true,
             },
           },
           textCorrections: {
