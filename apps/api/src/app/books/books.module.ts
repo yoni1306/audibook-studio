@@ -7,6 +7,7 @@ import { BulkTextFixesService } from './bulk-text-fixes.service';
 import { CorrectionLearningService } from './correction-learning.service';
 import { TextCorrectionRepository } from './text-correction.repository';
 import { TextFixesController } from './text-fixes.controller';
+import { BooksMergeController } from './books-merge.controller';
 import { QueueModule } from '../queue/queue.module';
 import { S3Module } from '../s3/s3.module';
 import { FixTypeHandlerRegistry } from './fix-type-handlers/fix-type-handler-registry';
@@ -19,7 +20,7 @@ import { ExpansionHandler } from './fix-type-handlers/expansion-handler';
 
 @Module({
   imports: [QueueModule, forwardRef(() => S3Module)],
-  controllers: [BooksController, TextFixesController],
+  controllers: [BooksController, TextFixesController, BooksMergeController],
   providers: [
     BooksService,
     BooksExportService,

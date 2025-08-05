@@ -108,6 +108,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/books/fix-types': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get fix types
+     * @description Get all available fix types for filtering corrections
+     */
+    get: operations['BooksController_getFixTypes'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/books/{id}': {
     parameters: {
       query?: never;
@@ -281,26 +301,6 @@ export interface paths {
      * @description Get correction learning system statistics
      */
     get: operations['BooksController_getLearningStats'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/books/fix-types': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Get fix types
-     * @description Get all available fix types for filtering corrections
-     */
-    get: operations['BooksController_getFixTypes'];
     put?: never;
     post?: never;
     delete?: never;
@@ -785,6 +785,12 @@ export interface components {
       /** @description Response timestamp */
       timestamp: string;
     };
+    GetFixTypesResponseDto: {
+      /** @description Available fix types for filtering */
+      fixTypes: string[];
+      /** @description Response timestamp */
+      timestamp?: string;
+    };
     UpdateParagraphRequestDto: {
       /** @description New paragraph content */
       content: string;
@@ -843,6 +849,16 @@ export interface components {
       id: string;
       /** @description Updated paragraph content */
       content: string;
+      /**
+       * @description Original paragraph content from the original book
+       * @example זה הטקסט המקורי של הפסקה לפני כל שינוי
+       */
+      originalContent?: string;
+      /**
+       * @description Reference ID to the original paragraph in the original book
+       * @example uuid-of-original-paragraph
+       */
+      originalParagraphId?: string;
       /** @description Book ID this paragraph belongs to */
       bookId: string;
       /** @description Text changes made */
@@ -912,12 +928,6 @@ export interface components {
       /** @description Total number of suggestions returned */
       totalSuggestions: number;
       /** @description Timestamp when suggestions were generated */
-      timestamp?: string;
-    };
-    GetFixTypesResponseDto: {
-      /** @description Available fix types for filtering */
-      fixTypes: string[];
-      /** @description Response timestamp */
       timestamp?: string;
     };
     FiltersDto: {
@@ -1418,6 +1428,26 @@ export interface operations {
       };
     };
   };
+  BooksController_getFixTypes: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Fix types retrieved successfully */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GetFixTypesResponseDto'];
+        };
+      };
+    };
+  };
   BooksController_getBook: {
     parameters: {
       query?: {
@@ -1713,26 +1743,6 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas'];
-        };
-      };
-    };
-  };
-  BooksController_getFixTypes: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Fix types retrieved successfully */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['GetFixTypesResponseDto'];
         };
       };
     };
