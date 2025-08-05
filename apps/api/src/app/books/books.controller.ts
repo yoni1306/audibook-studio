@@ -129,6 +129,36 @@ export class BooksController {
     }
   }
 
+  /**
+   * Get available fix types for filtering
+   */
+  @Get('fix-types')
+  @ApiOperation({ summary: 'Get fix types', description: 'Get all available fix types for filtering corrections' })
+  @ApiResponse({ status: 200, description: 'Fix types retrieved successfully', type: GetFixTypesResponseDto })
+  async getFixTypes(): Promise<GetFixTypesResponseDto> {
+    this.logger.log('Getting available fix types');
+    
+    try {
+      // Return all available FixType enum values
+      const fixTypes = Object.values(FixType);
+      
+      this.logger.log(`Found ${fixTypes.length} fix types`);
+      
+      return {
+        fixTypes,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      this.logger.error(`Error getting fix types: ${error.message}`, error.stack);
+      throw new InternalServerErrorException({
+        error: 'Internal Server Error',
+        message: 'Failed to get fix types',
+        statusCode: 500,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get a book by ID', description: 'Retrieve a specific book with all its pages and paragraphs' })
   @ApiParam({ name: 'id', description: 'Book ID' })
@@ -524,36 +554,6 @@ export class BooksController {
       throw new InternalServerErrorException({
         error: 'Internal Server Error',
         message: 'Failed to get learning statistics',
-        statusCode: 500,
-        timestamp: new Date().toISOString(),
-      });
-    }
-  }
-
-  /**
-   * Get available fix types for filtering
-   */
-  @Get('fix-types')
-  @ApiOperation({ summary: 'Get fix types', description: 'Get all available fix types for filtering corrections' })
-  @ApiResponse({ status: 200, description: 'Fix types retrieved successfully', type: GetFixTypesResponseDto })
-  async getFixTypes(): Promise<GetFixTypesResponseDto> {
-    this.logger.log('Getting available fix types');
-    
-    try {
-      // Return all available FixType enum values
-      const fixTypes = Object.values(FixType);
-      
-      this.logger.log(`Found ${fixTypes.length} fix types`);
-      
-      return {
-        fixTypes,
-        timestamp: new Date().toISOString(),
-      };
-    } catch (error) {
-      this.logger.error(`Error getting fix types: ${error.message}`, error.stack);
-      throw new InternalServerErrorException({
-        error: 'Internal Server Error',
-        message: 'Failed to get fix types',
         statusCode: 500,
         timestamp: new Date().toISOString(),
       });

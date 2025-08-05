@@ -83,7 +83,6 @@ class BookMerger {
               paragraphs: {
                 orderBy: { orderIndex: 'asc' },
               },
-              originalParagraphs: true,
             },
             orderBy: { pageNumber: 'asc' },
           },
@@ -97,7 +96,6 @@ class BookMerger {
               paragraphs: {
                 orderBy: { orderIndex: 'asc' },
               },
-              originalParagraphs: true,
             },
             orderBy: { pageNumber: 'asc' },
           },
@@ -118,14 +116,26 @@ class BookMerger {
       throw new Error(`Page count mismatch: Old book has ${oldBook.pages.length} pages, new book has ${newBook.pages.length} pages`);
     }
 
-    // Check if old book already has original paragraphs
-    const oldBookOriginalParagraphs = oldBook.pages.reduce((total, page) => total + page.originalParagraphs.length, 0);
+    // Check if old book already has original paragraphs by querying directly
+    const oldBookOriginalParagraphs = await this.prisma.originalParagraph.count({
+      where: {
+        page: {
+          bookId: oldBook.id,
+        },
+      },
+    });
     if (oldBookOriginalParagraphs > 0) {
       console.warn(`⚠️  Old book already has ${oldBookOriginalParagraphs} original paragraphs. This merge may create duplicates.`);
     }
 
-    // Check if new book has original paragraphs
-    const newBookOriginalParagraphs = newBook.pages.reduce((total, page) => total + page.originalParagraphs.length, 0);
+    // Check if new book has original paragraphs by querying directly
+    const newBookOriginalParagraphs = await this.prisma.originalParagraph.count({
+      where: {
+        page: {
+          bookId: newBook.id,
+        },
+      },
+    });
     if (newBookOriginalParagraphs === 0) {
       throw new Error('New book has no original paragraphs to transfer');
     }
@@ -328,7 +338,7 @@ async function main() {
 }
 
 // Run if called directly
-if (require.main === module) {
+if (process.argv[1] && process.argv[1].endsWith('merge-book-original-paragraphs.ts')) {
   main();
 }
 
