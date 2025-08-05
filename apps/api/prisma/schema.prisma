@@ -17,7 +17,6 @@ model Book {
   status          BookStatus        @default(PROCESSING)
   pages           Page[]            // Pages detected from EPUB
   textCorrections TextCorrection[]  // All text corrections for this book
-  originalBook    OriginalBook?     // Reference to original book data
   // Enhanced metadata fields
   totalPages      Int?              // Total number of pages detected
   totalParagraphs Int?              // Total number of paragraphs
@@ -28,71 +27,35 @@ model Book {
   @@map("books")
 }
 
-model OriginalBook {
-  id              String            @id @default(uuid())
-  bookId          String            @unique // Reference to the current book
-  book            Book              @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  title           String            // Original title before any modifications
-  author          String?           // Original author before any modifications
-  language        String            @default("he")
-  s3Key           String            // S3 key for the original EPUB file
-  originalPages   OriginalPage[]    // Original pages structure
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-
-  @@map("original_books")
-}
-
-model OriginalPage {
-  id                String              @id @default(uuid())
-  originalBookId    String
-  originalBook      OriginalBook        @relation(fields: [originalBookId], references: [id], onDelete: Cascade)
-  pageNumber        Int                 // Original page number
-  sourceChapter     Int                 // Original chapter number from EPUB
-  startPosition     Int                 // Start position in original chapter content
-  endPosition       Int                 // End position in original chapter content
-  pageBreakInfo     Json?               // Information about how this page was detected
-  originalParagraphs OriginalParagraph[] // Original paragraphs within this page
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-
-  @@unique([originalBookId, pageNumber])
-  @@index([originalBookId])
-  @@map("original_pages")
-}
-
 model OriginalParagraph {
-  id                String        @id @default(uuid())
-  originalPageId    String
-  originalPage      OriginalPage  @relation(fields: [originalPageId], references: [id], onDelete: Cascade)
-  originalBookId    String        // Direct reference for easier querying
-  orderIndex        Int           // Order within the original page
-  content           String        @db.Text // Original paragraph content
-  paragraphs        Paragraph[]   // Current paragraphs that reference this original
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  id          String        @id @default(uuid())
+  pageId      String        // Reference to the page this original paragraph belongs to
+  page        Page          @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  content     String        @db.Text // Original paragraph content
+  paragraphs  Paragraph[]   // Current paragraphs that reference this original
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
-  @@unique([originalPageId, orderIndex])
-  @@index([originalPageId])
-  @@index([originalBookId])
+  @@index([pageId])
   @@map("original_paragraphs")
 }
 
 model Page {
-  id            String      @id @default(uuid())
-  bookId        String
-  book          Book        @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  pageNumber    Int         // Sequential page number in the book
-  sourceChapter Int         // Original chapter number from EPUB (for reference)
-  startPosition Int         // Start position in original chapter content
-  endPosition   Int         // End position in original chapter content
-  pageBreakInfo Json?       // Information about how this page was detected
-  paragraphs    Paragraph[] // Paragraphs within this page
-  audioS3Key    String?     // S3 key for generated audio of entire page
-  audioStatus   AudioStatus @default(PENDING)
-  audioDuration Float?      // Duration in seconds for the entire page
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id                 String              @id @default(uuid())
+  bookId             String
+  book               Book                @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  pageNumber         Int                 // Sequential page number in the book
+  sourceChapter      Int                 // Original chapter number from EPUB (for reference)
+  startPosition      Int                 // Start position in original chapter content
+  endPosition        Int                 // End position in original chapter content
+  pageBreakInfo      Json?               // Information about how this page was detected
+  paragraphs         Paragraph[]         // Paragraphs within this page
+  originalParagraphs OriginalParagraph[] // Original paragraphs for this page
+  audioS3Key         String?             // S3 key for generated audio of entire page
+  audioStatus        AudioStatus         @default(PENDING)
+  audioDuration      Float?              // Duration in seconds for the entire page
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   @@unique([bookId, pageNumber])
   @@index([bookId])

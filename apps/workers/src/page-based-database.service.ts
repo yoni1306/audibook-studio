@@ -37,45 +37,12 @@ export async function savePages(
       await tx.page.deleteMany({
         where: { bookId }
       });
-      // Also clear original book data if it exists
-      await tx.originalParagraph.deleteMany({
-        where: { originalBookId: bookId }
-      });
-      await tx.originalPage.deleteMany({
-        where: { originalBookId: bookId }
-      });
-      await tx.originalBook.deleteMany({
-        where: { bookId }
-      });
       logger.debug(`Existing data cleared for book ${bookId}`);
-
-      // Get book details for creating original book record
-      const book = await tx.book.findUnique({
-        where: { id: bookId },
-        select: { title: true, author: true, language: true, s3Key: true }
-      });
-
-      if (!book) {
-        throw new Error(`Book ${bookId} not found`);
-      }
-
-      // Create original book record
-      const originalBook = await tx.originalBook.create({
-        data: {
-          bookId,
-          title: book.title,
-          author: book.author,
-          language: book.language,
-          s3Key: book.s3Key,
-        },
-      });
-
-      logger.debug(`Created original book record for ${bookId}`);
 
       for (const page of pages) {
         logger.debug(`Saving page ${page.pageNumber} with ${page.paragraphs.length} paragraphs`);
 
-        // Create the current page
+        // Create the page
         const createdPage = await tx.page.create({
           data: {
             bookId,
@@ -88,43 +55,33 @@ export async function savePages(
           },
         });
 
-        // Create the original page
-        const originalPage = await tx.originalPage.create({
-          data: {
-            originalBookId: originalBook.id,
-            pageNumber: page.pageNumber,
-            sourceChapter: page.sourceChapter,
-            startPosition: page.startPosition,
-            endPosition: page.endPosition,
-            pageBreakInfo: page.pageBreakInfo ? JSON.stringify(page.pageBreakInfo) : null,
-          },
-        });
-
         // Create paragraphs for this page
         if (page.paragraphs.length > 0) {
-          // First create original paragraphs
-          const originalParagraphs = await Promise.all(
+          // First create original paragraphs and then current paragraphs that reference them
+          const paragraphsWithOriginals = await Promise.all(
             page.paragraphs.map(async (p) => {
-              return await tx.originalParagraph.create({
+              // Create original paragraph
+              const originalParagraph = await tx.originalParagraph.create({
                 data: {
-                  originalPageId: originalPage.id,
-                  originalBookId: originalBook.id,
-                  orderIndex: p.orderIndex,
+                  pageId: createdPage.id,
                   content: p.content,
                 },
               });
+
+              // Return data for current paragraph creation
+              return {
+                pageId: createdPage.id,
+                bookId,
+                orderIndex: p.orderIndex,
+                content: p.content,
+                originalParagraphId: originalParagraph.id,
+              };
             })
           );
 
-          // Then create current paragraphs that reference the original ones
+          // Create current paragraphs
           await tx.paragraph.createMany({
-            data: page.paragraphs.map((p, index) => ({
-              pageId: createdPage.id,
-              bookId,
-              orderIndex: p.orderIndex,
-              content: p.content,
-              originalParagraphId: originalParagraphs[index].id,
-            })),
+            data: paragraphsWithOriginals,
             skipDuplicates: true,
           });
         }
