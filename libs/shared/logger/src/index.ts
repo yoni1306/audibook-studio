@@ -18,16 +18,16 @@ function getServiceName(): string {
   const processTitle = process.title || '';
   const cwd = process.cwd();
   
-  // If running from workers directory or process mentions workers
-  if (cwd.includes('/workers') || processTitle.includes('workers') || 
-      process.argv.some(arg => arg.includes('workers'))) {
-    return 'audibook-worker';
+  // Check for API context first (more specific)
+  if (cwd.includes('/apps/api') || processTitle.includes('api') ||
+      process.argv.some(arg => arg.includes('/apps/api'))) {
+    return process.env['API_SERVICE_NAME'] || 'audibook-api';
   }
   
-  // Check for API context
-  if (cwd.includes('/api') || processTitle.includes('api') ||
-      process.argv.some(arg => arg.includes('api'))) {
-    return process.env['API_SERVICE_NAME'] || 'audibook-api';
+  // Check for workers context (more specific path matching)
+  if (cwd.includes('/apps/workers') || processTitle.includes('workers') || 
+      process.argv.some(arg => arg.includes('/apps/workers'))) {
+    return 'audibook-worker';
   }
   
   // Check for web context  

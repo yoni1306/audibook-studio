@@ -711,4 +711,87 @@ describe('BooksController', () => {
       errorSpy.mockRestore();
     });
   });
+
+  describe('getFixTypes', () => {
+    it('should return all available fix types successfully', async () => {
+      const result = await controller.getFixTypes();
+
+      expect(result).toHaveProperty('fixTypes');
+      expect(result).toHaveProperty('timestamp');
+      expect(Array.isArray(result.fixTypes)).toBe(true);
+      expect(result.fixTypes.length).toBeGreaterThan(0);
+      
+      // Verify all expected FixType enum values are included
+      const expectedFixTypes = Object.values(FixType);
+      expect(result.fixTypes).toEqual(expectedFixTypes);
+      
+      // Verify specific fix types are present
+      expect(result.fixTypes).toContain(FixType.vowelization);
+      expect(result.fixTypes).toContain(FixType.disambiguation);
+      expect(result.fixTypes).toContain(FixType.punctuation);
+      expect(result.fixTypes).toContain(FixType.sentence_break);
+      expect(result.fixTypes).toContain(FixType.dialogue_marking);
+      expect(result.fixTypes).toContain(FixType.expansion);
+      expect(result.fixTypes).toContain(FixType.default);
+      
+      // Verify timestamp format
+      expect(result.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    });
+
+    it('should log the correct messages', async () => {
+      const logSpy = jest.spyOn(controller['logger'], 'log');
+      
+      await controller.getFixTypes();
+      
+      expect(logSpy).toHaveBeenCalledWith('Getting available fix types');
+      expect(logSpy).toHaveBeenCalledWith(`Found ${Object.values(FixType).length} fix types`);
+      
+      logSpy.mockRestore();
+    });
+
+    it('should handle errors and throw InternalServerErrorException', async () => {
+      const logSpy = jest.spyOn(controller['logger'], 'log');
+      const errorSpy = jest.spyOn(controller['logger'], 'error');
+      
+      // Mock Object.values to throw an error
+      const originalObjectValues = Object.values;
+      Object.values = jest.fn().mockImplementation(() => {
+        throw new Error('Test error');
+      });
+      
+      await expect(controller.getFixTypes()).rejects.toThrow('Failed to get fix types');
+      
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Error getting fix types: Test error',
+        expect.any(String)
+      );
+      
+      // Restore original Object.values
+      Object.values = originalObjectValues;
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it('should return consistent results on multiple calls', async () => {
+      const result1 = await controller.getFixTypes();
+      const result2 = await controller.getFixTypes();
+      
+      expect(result1.fixTypes).toEqual(result2.fixTypes);
+      expect(result1.fixTypes.length).toBe(result2.fixTypes.length);
+    });
+
+    it('should return fix types in expected format', async () => {
+      const result = await controller.getFixTypes();
+      
+      // Each fix type should be a string
+      result.fixTypes.forEach(fixType => {
+        expect(typeof fixType).toBe('string');
+        expect(fixType.length).toBeGreaterThan(0);
+      });
+      
+      // Should not contain duplicates
+      const uniqueFixTypes = [...new Set(result.fixTypes)];
+      expect(uniqueFixTypes.length).toBe(result.fixTypes.length);
+    });
+  });
 });
