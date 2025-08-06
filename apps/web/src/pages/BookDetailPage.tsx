@@ -12,6 +12,8 @@ import AudioStats from '../components/book/AudioStats';
 import BulkFixNotification from '../components/book/BulkFixNotification';
 import ParagraphComponent from '../components/book/ParagraphComponent';
 import BulkFixModal from '../components/book/BulkFixModal';
+import SuccessModal from '../components/ui/SuccessModal';
+import ErrorModal from '../components/ui/ErrorModal';
 
 export default function BookDetailPage() {
   const { id: bookId } = useParams<{ id: string }>();
@@ -32,11 +34,21 @@ export default function BookDetailPage() {
     audioRequested: boolean;
   } | null>(null);
   const [completedFilter, setCompletedFilter] = useState<'all' | 'completed' | 'incomplete'>('all');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState({ title: '', message: '' });
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState({ title: '', message: '', showRetry: false, onRetry: undefined as (() => void) | undefined });
 
   const isInitialLoad = useRef(true);
 
   // Create a logger instance for this component
   const logger = useMemo(() => createLogger('BookDetailPage'), []);
+
+  // Helper function to show error modal
+  const showError = useCallback((title: string, message: string, showRetry = false, onRetry?: () => void) => {
+    setErrorMessage({ title, message, showRetry, onRetry });
+    setShowErrorModal(true);
+  }, []);
 
   // Filter paragraphs based on completion status
   const filteredParagraphs = useMemo(() => {
@@ -179,12 +191,23 @@ export default function BookDetailPage() {
         if (error && typeof error === 'object' && 'message' in error && 
             typeof (error as any).message === 'string' && (error as any).message.includes('Paragraph not found')) {
           logger.warn('Paragraph not found - likely due to database reset. Refreshing book data...');
-          alert('This paragraph no longer exists (possibly due to a database reset). Refreshing the page...');
-          await fetchBook(); // Refresh the book data
-          setEditingId(null);
-          setEditContent('');
+          showError(
+            'Paragraph No Longer Exists',
+            'This paragraph was removed (possibly due to a database reset). The page will refresh to show current data.',
+            true,
+            async () => {
+              await fetchBook();
+              setEditingId(null);
+              setEditContent('');
+            }
+          );
         } else {
-          alert('Failed to save changes');
+          showError(
+            'Failed to Save Changes',
+            'There was an issue saving your paragraph changes. Please try again.',
+            true,
+            () => saveEdit(paragraphId)
+          );
         }
       }
     } catch (error) {
@@ -194,17 +217,32 @@ export default function BookDetailPage() {
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (errorMessage.includes('Paragraph not found')) {
         logger.warn('Paragraph not found in catch block - likely due to database reset. Refreshing book data...');
-        alert('This paragraph no longer exists (possibly due to a database reset). Refreshing the page...');
-        try {
-          await fetchBook(); // Refresh the book data
-          setEditingId(null);
-          setEditContent('');
-        } catch (refreshError) {
-          logger.error('Error refreshing book data:', refreshError);
-          alert('Error refreshing book data. Please reload the page manually.');
-        }
+        showError(
+          'Paragraph No Longer Exists',
+          'This paragraph was removed (possibly due to a database reset). The page will refresh to show the current data.',
+          true,
+          async () => {
+            try {
+              await fetchBook();
+              setEditingId(null);
+              setEditContent('');
+            } catch (refreshError) {
+              logger.error('Error refreshing book data:', refreshError);
+              showError(
+                'Refresh Failed',
+                'Unable to refresh the book data. Please reload the page manually.',
+                false
+              );
+            }
+          }
+        );
       } else {
-        alert('Error saving changes');
+        showError(
+          'Error Saving Changes',
+          'An unexpected error occurred while saving your changes. Please try again.',
+          true,
+          () => saveEdit(paragraphId)
+        );
       }
     } finally {
       setSaving(false);
@@ -348,12 +386,23 @@ export default function BookDetailPage() {
         if (error && typeof error === 'object' && 'message' in error && 
             typeof (error as any).message === 'string' && (error as any).message.includes('Paragraph not found')) {
           logger.warn('Paragraph not found - likely due to database reset. Refreshing book data...');
-          alert('This paragraph no longer exists (possibly due to a database reset). Refreshing the page...');
-          await fetchBook(); // Refresh the book data
-          setEditingId(null);
-          setEditContent('');
+          showError(
+            'Paragraph No Longer Exists',
+            'This paragraph was removed (possibly due to a database reset). The page will refresh to show current data.',
+            true,
+            async () => {
+              await fetchBook();
+              setEditingId(null);
+              setEditContent('');
+            }
+          );
         } else {
-          alert('Failed to save changes and generate audio');
+          showError(
+            'Failed to Save and Generate Audio',
+            'There was an issue saving your changes and generating audio. Please try again.',
+            true,
+            () => saveAndGenerateAudio(paragraphId)
+          );
           
           // If there was an error, revert the status back
           if (book) {
@@ -376,17 +425,32 @@ export default function BookDetailPage() {
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (errorMessage.includes('Paragraph not found')) {
         logger.warn('Paragraph not found in catch block - likely due to database reset. Refreshing book data...');
-        alert('This paragraph no longer exists (possibly due to a database reset). Refreshing the page...');
-        try {
-          await fetchBook(); // Refresh the book data
-          setEditingId(null);
-          setEditContent('');
-        } catch (refreshError) {
-          logger.error('Error refreshing book data:', refreshError);
-          alert('Error refreshing book data. Please reload the page manually.');
-        }
+        showError(
+          'Paragraph No Longer Exists',
+          'This paragraph was removed (possibly due to a database reset). The page will refresh to show current data.',
+          true,
+          async () => {
+            try {
+              await fetchBook();
+              setEditingId(null);
+              setEditContent('');
+            } catch (refreshError) {
+              logger.error('Error refreshing book data:', refreshError);
+              showError(
+                'Refresh Failed',
+                'Unable to refresh the book data. Please reload the page manually.',
+                false
+              );
+            }
+          }
+        );
       } else {
-        alert('Error saving changes and generating audio');
+        showError(
+          'Error Saving and Generating Audio',
+          'An unexpected error occurred while saving your changes and generating audio. Please try again.',
+          true,
+          () => saveAndGenerateAudio(paragraphId)
+        );
         
         // If there was an error, revert the status back
         if (book) {
@@ -430,11 +494,21 @@ export default function BookDetailPage() {
         logger.info(`Successfully updated paragraph ${paragraphId} completed status to ${completed}`);
       } else {
         logger.error('Error updating paragraph completed status:', error);
-        alert('Failed to update paragraph status');
+        showError(
+          'Failed to Update Status',
+          'There was an issue updating the paragraph completion status. Please try again.',
+          true,
+          () => toggleParagraphCompleted(paragraphId, completed)
+        );
       }
     } catch (error) {
       logger.error('Error updating paragraph completed status:', error);
-      alert('Error updating paragraph status');
+      showError(
+        'Error Updating Status',
+        'An unexpected error occurred while updating the paragraph status. Please try again.',
+        true,
+        () => toggleParagraphCompleted(paragraphId, completed)
+      );
     }
   };
 
@@ -470,10 +544,13 @@ export default function BookDetailPage() {
     }
 
     // Show success message based on whether audio was requested
+    const title = 'Text Fixes Applied Successfully! ✨';
     const message = pendingBulkFix?.audioRequested 
-      ? 'Successfully applied text fixes. Audio will only be regenerated for the paragraph you originally edited.'
-      : 'Successfully applied text fixes.';
-    alert(message);
+      ? 'All text corrections have been applied throughout your book. Audio will only be regenerated for the paragraph you originally edited.'
+      : 'All text corrections have been applied throughout your book.';
+    
+    setSuccessMessage({ title, message });
+    setShowSuccessModal(true);
 
     // Refresh the book data
     fetchBook();
@@ -831,6 +908,27 @@ export default function BookDetailPage() {
           onSkipAll={handleSkipBulkFix}
         />
       )}
+
+      {/* Success Modal */}
+      <SuccessModal
+        isOpen={showSuccessModal}
+        onClose={() => setShowSuccessModal(false)}
+        title={successMessage.title}
+        message={successMessage.message}
+        icon="🎉"
+        autoCloseMs={4000}
+      />
+
+      {/* Error Modal */}
+      <ErrorModal
+        isOpen={showErrorModal}
+        onClose={() => setShowErrorModal(false)}
+        title={errorMessage.title}
+        message={errorMessage.message}
+        icon="⚠️"
+        showRetryButton={errorMessage.showRetry}
+        onRetry={errorMessage.onRetry}
+      />
     </div>
   );
 }

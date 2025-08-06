@@ -249,6 +249,7 @@ Options:
   --help                 Show this help message
         `);
         process.exit(0);
+        break;
       default:
         console.error(`Unknown option: ${args[i]}`);
         process.exit(1);

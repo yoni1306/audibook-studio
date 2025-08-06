@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Typography, Button, IconButton, CircularProgress } from '@mui/material';
 import { ArrowBack, Download } from '@mui/icons-material';
-import { BookExportStatus } from '../../../../../../libs/api-client/src/index';
+import { BookExportStatus } from '@audibook/api-client';
 
 interface BookExportHeaderProps {
   bookId: string;

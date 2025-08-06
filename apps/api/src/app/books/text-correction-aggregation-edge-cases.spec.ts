@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { TextCorrectionRepository, CreateTextCorrectionData } from './text-correction.repository';
+import { TextCorrectionRepository } from './text-correction.repository';
 import { PrismaService } from '../prisma/prisma.service';
 import { FixType } from '@prisma/client';
 

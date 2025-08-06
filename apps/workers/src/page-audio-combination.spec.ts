@@ -246,8 +246,8 @@ describe('Page Audio Combination Worker', () => {
         .audioBitrate('128k')
         .audioFrequency(22050)
         .audioChannels(1)
-        .on('start', () => {})
-        .on('progress', () => {})
+        .on('start', () => { /* FFmpeg started */ })
+        .on('progress', () => { /* FFmpeg progress */ })
         .on('end', () => resolve(outputPath))
         .on('error', (err: Error) => reject(err))
         .save(outputPath);
