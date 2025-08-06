@@ -34,6 +34,7 @@ export default function BookDetailPage() {
     audioRequested: boolean;
   } | null>(null);
   const [completedFilter, setCompletedFilter] = useState<'all' | 'completed' | 'incomplete'>('all');
+  const [pageNumberFilter, setPageNumberFilter] = useState<string>('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState({ title: '', message: '' });
   const [showErrorModal, setShowErrorModal] = useState(false);
@@ -50,20 +51,36 @@ export default function BookDetailPage() {
     setShowErrorModal(true);
   }, []);
 
-  // Filter paragraphs based on completion status
+  // Filter paragraphs based on completion status and page number
   const filteredParagraphs = useMemo(() => {
     if (!book) return [];
     
+    let paragraphs = book.paragraphs;
+    
+    // Filter by completion status
     switch (completedFilter) {
       case 'completed':
-        return book.paragraphs.filter(p => p.completed);
+        paragraphs = paragraphs.filter(p => p.completed);
+        break;
       case 'incomplete':
-        return book.paragraphs.filter(p => !p.completed);
+        paragraphs = paragraphs.filter(p => !p.completed);
+        break;
       case 'all':
       default:
-        return book.paragraphs;
+        // No filtering needed
+        break;
     }
-  }, [book, completedFilter]);
+    
+    // Filter by page number if specified
+    if (pageNumberFilter.trim()) {
+      const pageNum = parseInt(pageNumberFilter.trim(), 10);
+      if (!isNaN(pageNum)) {
+        paragraphs = paragraphs.filter(p => p.pageNumber === pageNum);
+      }
+    }
+    
+    return paragraphs;
+  }, [book, completedFilter, pageNumberFilter]);
 
   // Add correlation ID generator for frontend
   function generateCorrelationId() {
@@ -849,6 +866,51 @@ export default function BookDetailPage() {
             <option value="completed">Completed ({book.paragraphs.filter(p => p.completed).length})</option>
             <option value="incomplete">Incomplete ({book.paragraphs.filter(p => !p.completed).length})</option>
           </select>
+          
+          {/* Page Number Filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
+            <label style={{ 
+              fontSize: 'var(--font-size-sm)', 
+              fontWeight: 'var(--font-weight-medium)',
+              color: 'var(--color-text-secondary)',
+              whiteSpace: 'nowrap'
+            }}>
+              Page:
+            </label>
+            <input
+              type="number"
+              value={pageNumberFilter}
+              onChange={(e) => setPageNumberFilter(e.target.value)}
+              placeholder="All pages"
+              min="1"
+              style={{
+                padding: 'var(--spacing-2) var(--spacing-3)',
+                borderRadius: 'var(--border-radius-sm)',
+                border: '1px solid var(--color-border-subtle)',
+                backgroundColor: 'var(--color-surface-primary)',
+                color: 'var(--color-text-primary)',
+                fontSize: 'var(--font-size-sm)',
+                width: '100px'
+              }}
+            />
+            {pageNumberFilter && (
+              <button
+                onClick={() => setPageNumberFilter('')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--color-text-tertiary)',
+                  cursor: 'pointer',
+                  fontSize: 'var(--font-size-sm)',
+                  padding: '2px'
+                }}
+                title="Clear page filter"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          
           <span style={{ 
             fontSize: 'var(--font-size-xs)', 
             color: 'var(--color-text-tertiary)'
