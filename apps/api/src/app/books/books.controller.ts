@@ -311,6 +311,41 @@ export class BooksController {
     }
   }
 
+  @Post('paragraphs/:paragraphId/revert')
+  @ApiOperation({ summary: 'Revert paragraph to original content', description: 'Revert a paragraph back to its original content from the source book' })
+  @ApiParam({ name: 'paragraphId', description: 'Paragraph ID' })
+  @ApiResponse({ status: 200, description: 'Paragraph reverted successfully', type: UpdateParagraphResponseDto })
+  @ApiBody({
+    description: 'Revert options',
+    schema: {
+      type: 'object',
+      properties: {
+        generateAudio: {
+          type: 'boolean',
+          description: 'Whether to generate audio after reverting',
+          default: false
+        }
+      }
+    }
+  })
+  async revertParagraph(
+    @Param('paragraphId') paragraphId: string,
+    @Body() body: { generateAudio?: boolean } = {}
+  ): Promise<UpdateParagraphResponseDto> {
+    try {
+      const result = await this.booksService.revertParagraph(paragraphId, body.generateAudio || false);
+      return result;
+    } catch (error) {
+      if (error.message.includes('not found')) {
+        throw new NotFoundException(error.message);
+      }
+      if (error.message.includes('No original content')) {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
+    }
+  }
+
   // New endpoint for applying bulk fixes
   @Post('bulk-fixes')
   @ApiOperation({ summary: 'Apply bulk text fixes', description: 'Apply multiple text fixes to a book' })

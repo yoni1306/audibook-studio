@@ -21,6 +21,7 @@ describe('BooksController', () => {
 
   const mockBooksService = {
     getCompletedParagraphs: jest.fn(),
+    revertParagraph: jest.fn(),
     // Add other mock methods as needed
   };
 
@@ -792,6 +793,84 @@ describe('BooksController', () => {
       // Should not contain duplicates
       const uniqueFixTypes = [...new Set(result.fixTypes)];
       expect(uniqueFixTypes.length).toBe(result.fixTypes.length);
+    });
+  });
+
+  describe('revertParagraph', () => {
+    const paragraphId = 'test-paragraph-id';
+    const mockRevertResult = {
+      id: paragraphId,
+      content: 'Original paragraph content',
+      orderIndex: 1,
+      pageId: 'page-1',
+      audioS3Key: null,
+      audioStatus: 'PENDING',
+      audioDuration: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      textChanges: [{
+        id: 'change-1',
+        originalWord: 'modified',
+        correctedWord: 'original',
+        fixType: 'REVERT',
+        sentenceContext: 'This is the original content',
+        paragraphId: paragraphId,
+        bookId: 'book-1',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }]
+    };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should successfully revert paragraph to original content', async () => {
+      mockBooksService.revertParagraph.mockResolvedValue(mockRevertResult);
+
+      const result = await controller.revertParagraph(paragraphId, {});
+
+      expect(mockBooksService.revertParagraph).toHaveBeenCalledWith(paragraphId, false);
+      expect(result).toEqual(mockRevertResult);
+    });
+
+    it('should revert paragraph with audio generation when requested', async () => {
+      mockBooksService.revertParagraph.mockResolvedValue(mockRevertResult);
+
+      const result = await controller.revertParagraph(paragraphId, { generateAudio: true });
+
+      expect(mockBooksService.revertParagraph).toHaveBeenCalledWith(paragraphId, true);
+      expect(result).toEqual(mockRevertResult);
+    });
+
+    it('should handle paragraph not found error', async () => {
+      const errorMessage = 'Paragraph not found';
+      mockBooksService.revertParagraph.mockRejectedValue(new Error(errorMessage));
+
+      await expect(controller.revertParagraph(paragraphId, {})).rejects.toThrow(errorMessage);
+      expect(mockBooksService.revertParagraph).toHaveBeenCalledWith(paragraphId, false);
+    });
+
+    it('should handle no original content error', async () => {
+      const errorMessage = 'No original content available for this paragraph';
+      mockBooksService.revertParagraph.mockRejectedValue(new Error(errorMessage));
+
+      await expect(controller.revertParagraph(paragraphId, {})).rejects.toThrow(errorMessage);
+    });
+
+    it('should default generateAudio to false when not provided', async () => {
+      mockBooksService.revertParagraph.mockResolvedValue(mockRevertResult);
+
+      await controller.revertParagraph(paragraphId);
+
+      expect(mockBooksService.revertParagraph).toHaveBeenCalledWith(paragraphId, false);
+    });
+
+    it('should handle service errors gracefully', async () => {
+      const serviceError = new Error('Database connection failed');
+      mockBooksService.revertParagraph.mockRejectedValue(serviceError);
+
+      await expect(controller.revertParagraph(paragraphId, {})).rejects.toThrow('Database connection failed');
     });
   });
 });

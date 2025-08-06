@@ -14,6 +14,7 @@ import ParagraphComponent from '../components/book/ParagraphComponent';
 import BulkFixModal from '../components/book/BulkFixModal';
 import SuccessModal from '../components/ui/SuccessModal';
 import ErrorModal from '../components/ui/ErrorModal';
+import RevertParagraphConfirmDialog from '../components/RevertParagraphConfirmDialog';
 
 export default function BookDetailPage() {
   const { id: bookId } = useParams<{ id: string }>();
@@ -39,6 +40,8 @@ export default function BookDetailPage() {
   const [successMessage, setSuccessMessage] = useState({ title: '', message: '' });
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState({ title: '', message: '', showRetry: false, onRetry: undefined as (() => void) | undefined });
+  const [showRevertConfirmModal, setShowRevertConfirmModal] = useState(false);
+  const [pendingRevert, setPendingRevert] = useState<{ paragraphId: string; generateAudio: boolean } | null>(null);
 
   const isInitialLoad = useRef(true);
 
@@ -49,6 +52,11 @@ export default function BookDetailPage() {
   const showError = useCallback((title: string, message: string, showRetry = false, onRetry?: () => void) => {
     setErrorMessage({ title, message, showRetry, onRetry });
     setShowErrorModal(true);
+  }, []);
+
+  const showSuccess = useCallback((title: string, message: string) => {
+    setSuccessMessage({ title, message });
+    setShowSuccessModal(true);
   }, []);
 
   // Filter paragraphs based on completion status and page number
@@ -529,6 +537,84 @@ export default function BookDetailPage() {
     }
   };
 
+  const revertToOriginal = (paragraphId: string, generateAudio = false) => {
+    // Show confirmation modal instead of directly reverting
+    setPendingRevert({ paragraphId, generateAudio });
+    setShowRevertConfirmModal(true);
+  };
+
+  const confirmRevert = async () => {
+    if (!pendingRevert) return;
+    
+    const { paragraphId, generateAudio } = pendingRevert;
+    
+    try {
+      logger.info(`Reverting paragraph ${paragraphId} to original content`);
+      setSaving(true);
+      
+      // Use API client to revert paragraph
+      const { data, error } = await apiClient.books.revertParagraph(paragraphId, { generateAudio });
+      
+      if (!error && data) {
+        // Update the local state with the reverted content
+        if (book) {
+          const updatedBook = {
+            ...book,
+            paragraphs: book.paragraphs.map(p => 
+              p.id === paragraphId 
+                ? { ...p, content: data.content }
+                : p
+            )
+          };
+          setBook(updatedBook);
+        }
+        
+        // Clear editing state
+        setEditingId(null);
+        setEditContent('');
+        
+        // Show success message
+        showSuccess(
+          'Paragraph Reverted',
+          'The paragraph has been successfully reverted to its original content.'
+        );
+        
+        // If audio was requested, start polling for completion
+        if (generateAudio) {
+          startAudioPolling(paragraphId);
+        }
+        
+        logger.info(`Successfully reverted paragraph ${paragraphId} to original content`);
+      } else {
+        logger.error('Error reverting paragraph:', error);
+        showError(
+          'Failed to Revert',
+          error || 'There was an issue reverting the paragraph to its original content. Please try again.',
+          true,
+          () => confirmRevert()
+        );
+      }
+    } catch (error) {
+      logger.error('Error reverting paragraph:', error);
+      showError(
+        'Error Reverting Paragraph',
+        'An unexpected error occurred while reverting the paragraph. Please try again.',
+        true,
+        () => confirmRevert()
+      );
+    } finally {
+      setSaving(false);
+      // Close confirmation modal
+      setShowRevertConfirmModal(false);
+      setPendingRevert(null);
+    }
+  };
+
+  const cancelRevert = () => {
+    setShowRevertConfirmModal(false);
+    setPendingRevert(null);
+  };
+
   const handleBulkFixComplete = async () => {
     logger.info('Bulk fix completed');
 
@@ -955,6 +1041,7 @@ export default function BookDetailPage() {
               onGenerateAudio={() => generateAudioForParagraph(paragraph.id, paragraph.content)}
               onSaveAndGenerateAudio={() => saveAndGenerateAudio(paragraph.id)}
               onToggleCompleted={toggleParagraphCompleted}
+              onRevertToOriginal={revertToOriginal}
             />
           ))}
         </div>
@@ -991,6 +1078,21 @@ export default function BookDetailPage() {
         showRetryButton={errorMessage.showRetry}
         onRetry={errorMessage.onRetry}
       />
+
+      {/* Revert Confirmation Dialog */}
+      {showRevertConfirmModal && pendingRevert && (() => {
+        const paragraph = book?.paragraphs?.find(p => p.id === pendingRevert.paragraphId);
+        return (
+          <RevertParagraphConfirmDialog
+            isOpen={showRevertConfirmModal}
+            paragraphContent={paragraph?.content || ''}
+            originalContent={paragraph?.originalContent || ''}
+            onConfirm={confirmRevert}
+            onCancel={cancelRevert}
+            isReverting={saving}
+          />
+        );
+      })()}
     </div>
   );
 }

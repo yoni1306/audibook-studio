@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BookStatus } from '@prisma/client';
 import { QueueService } from '../queue/queue.service';
-import { TextFixesService } from './text-fixes.service';
+import { TextFixesService, WordChange } from './text-fixes.service';
 import { UpdateParagraphResponseDto, BulkFixSuggestion as BulkFixSuggestionDto } from './dto/paragraph-update.dto';
 import { S3Service } from '../s3/s3.service';
 import { BulkTextFixesService, BulkFixSuggestion as ServiceBulkFixSuggestion } from './bulk-text-fixes.service';
@@ -116,6 +116,12 @@ export class BooksService {
 
     // Queue audio generation only if requested
     if (generateAudio) {
+      // Update paragraph with audio generation timestamp
+      await this.prisma.paragraph.update({
+        where: { id: paragraphId },
+        data: { audioGeneratedAt: new Date() }
+      });
+      
       await this.queueService.addAudioGenerationJob({
         paragraphId: paragraph.id,
         bookId: paragraph.page.bookId,
@@ -154,6 +160,149 @@ export class BooksService {
     } as UpdateParagraphResponseDto;
   }
 
+  async revertParagraph(paragraphId: string, generateAudio = false): Promise<UpdateParagraphResponseDto> {
+    this.logger.log(`Attempting to revert paragraph with ID: ${paragraphId}`);
+
+    // First, get the existing paragraph with its original content
+    const existingParagraph = await this.prisma.paragraph.findUnique({
+      where: { id: paragraphId },
+      include: {
+        originalParagraph: {
+          select: {
+            content: true,
+          },
+        },
+        page: {
+          include: {
+            book: true,
+          },
+        },
+      },
+    });
+
+    if (!existingParagraph) {
+      this.logger.error(`Paragraph not found with ID: ${paragraphId}`);
+      throw new Error(`Paragraph not found with ID: ${paragraphId}`);
+    }
+
+    if (!existingParagraph.originalParagraph?.content) {
+      this.logger.error(`No original content found for paragraph: ${paragraphId}`);
+      throw new Error(`No original content available for paragraph: ${paragraphId}`);
+    }
+
+    const originalContent = existingParagraph.originalParagraph.content;
+    
+    // Check if paragraph is already at original content
+    if (existingParagraph.content === originalContent) {
+      this.logger.log(`Paragraph ${paragraphId} is already at original content`);
+      
+      // Still return the paragraph data for consistency
+      const paragraph = await this.prisma.paragraph.findUnique({
+        where: { id: paragraphId },
+        include: {
+          page: {
+            include: {
+              book: true,
+            },
+          },
+          originalParagraph: {
+            select: {
+              content: true,
+            },
+          },
+          textCorrections: {
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+          },
+        },
+      });
+
+      if (!paragraph) {
+        throw new Error(`Failed to retrieve paragraph data: ${paragraphId}`);
+      }
+
+      return {
+        ...paragraph,
+        originalContent: paragraph.originalParagraph?.content,
+        textChanges: [],
+        textCorrections: paragraph.textCorrections,
+        bulkSuggestions: [],
+      } as UpdateParagraphResponseDto;
+    }
+
+    // For reverts, we don't analyze text changes since this is not a text fixing action
+    // Reverting is simply undoing changes, not making corrections
+    const textChanges: WordChange[] = []; // Empty array since no text corrections should be recorded
+  
+    this.logger.log(
+      `Reverting paragraph ${paragraphId} to original content (no text corrections recorded for revert action)`
+    );
+
+    // Clear all text correction records for this paragraph since we're starting fresh
+    const deletedCorrections = await this.prisma.textCorrection.deleteMany({
+      where: { paragraphId }
+    });
+    
+    this.logger.log(
+      `Cleared ${deletedCorrections.count} text correction records for paragraph ${paragraphId}`
+    );
+
+    // Update the paragraph to original content
+    const paragraph = await this.prisma.paragraph.update({
+      where: { id: paragraphId },
+      data: {
+        content: originalContent,
+      },
+      include: {
+        page: {
+          include: {
+            book: true,
+          },
+        },
+        originalParagraph: {
+          select: {
+            content: true,
+          },
+        },
+        textCorrections: {
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+        },
+      },
+    });
+
+    // Queue audio generation if requested
+    if (generateAudio) {
+      // Update paragraph with audio generation timestamp
+      await this.prisma.paragraph.update({
+        where: { id: paragraphId },
+        data: { audioGeneratedAt: new Date() }
+      });
+      
+      await this.queueService.addAudioGenerationJob({
+        paragraphId: paragraph.id,
+        bookId: paragraph.page.bookId,
+        content: paragraph.content,
+      });
+      
+      this.logger.log(
+        `Reverted paragraph ${paragraphId} to original content and queued audio generation`
+      );
+    } else {
+      this.logger.log(
+        `Reverted paragraph ${paragraphId} to original content, audio generation skipped`
+      );
+    }
+
+    return {
+      ...paragraph,
+      originalContent: paragraph.originalParagraph?.content,
+      textChanges,
+      textCorrections: paragraph.textCorrections,
+      bulkSuggestions: [], // No bulk suggestions for reverts
+    } as UpdateParagraphResponseDto;
+  }
+
   async getBook(id: string, completedFilter?: 'all' | 'completed' | 'incomplete') {
     const book = await this.prisma.book.findUnique({
       where: { id },
@@ -164,6 +313,11 @@ export class BooksService {
             paragraphs: {
               orderBy: { orderIndex: 'asc' },
               include: {
+                originalParagraph: {
+                  select: {
+                    content: true,
+                  },
+                },
                 textCorrections: {
                   orderBy: { createdAt: 'desc' },
                   take: 5, // Include recent fixes for each paragraph
@@ -185,6 +339,7 @@ export class BooksService {
         ...paragraph,
         pageNumber: page.pageNumber,
         pageId: page.id,
+        originalContent: paragraph.originalParagraph?.content,
       }))
     );
 

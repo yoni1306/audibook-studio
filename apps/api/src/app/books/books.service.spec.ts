@@ -73,6 +73,7 @@ describe('BooksService', () => {
       },
       textCorrection: {
         findMany: jest.fn(),
+        deleteMany: jest.fn(),
       },
     };
 
@@ -642,6 +643,11 @@ describe('BooksService', () => {
               paragraphs: {
                 orderBy: { orderIndex: 'asc' },
                 include: {
+                  originalParagraph: {
+                    select: {
+                      content: true,
+                    },
+                  },
                   textCorrections: {
                     orderBy: { createdAt: 'desc' },
                     take: 5,
@@ -1410,6 +1416,586 @@ describe('BooksService', () => {
       expect(logSpy).toHaveBeenCalledWith(`📚 Book not found: ${mockBookId}`);
       
       logSpy.mockRestore();
+    });
+  });
+
+  describe('revertParagraph', () => {
+    const paragraphId = 'test-paragraph-id';
+    const originalContent = 'This is the original paragraph content';
+    const modifiedContent = 'This is the modified paragraph content';
+    
+    const mockOriginalParagraph = {
+      content: originalContent
+    };
+    
+    const mockExistingParagraph = {
+      id: paragraphId,
+      content: modifiedContent,
+      orderIndex: 1,
+      pageId: 'page-1',
+      audioS3Key: null,
+      audioStatus: 'PENDING',
+      audioDuration: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      originalParagraph: mockOriginalParagraph,
+      page: {
+        bookId: 'book-1',
+        book: {
+          id: 'book-1',
+          title: 'Test Book'
+        }
+      }
+    };
+    
+    const mockUpdatedParagraph = {
+      ...mockExistingParagraph,
+      content: originalContent,
+      updatedAt: new Date(),
+      page: {
+        ...mockExistingParagraph.page,
+        bookId: 'book-1'
+      }
+    };
+    
+    const mockTextChanges = [{
+      id: 'change-1',
+      originalWord: 'modified',
+      correctedWord: 'original',
+      fixType: 'REVERT',
+      sentenceContext: originalContent,
+      paragraphId: paragraphId,
+      bookId: 'book-1',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }];
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should successfully revert paragraph to original content', async () => {
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(mockExistingParagraph);
+      (prismaService.textCorrection.deleteMany as jest.Mock).mockResolvedValue({ count: 2 });
+      (textFixesService.processParagraphUpdate as jest.Mock).mockResolvedValue(mockTextChanges);
+      (prismaService.paragraph.update as jest.Mock).mockResolvedValue(mockUpdatedParagraph);
+
+      const result = await service.revertParagraph(paragraphId, false);
+
+      expect(prismaService.paragraph.findUnique).toHaveBeenCalledWith({
+        where: { id: paragraphId },
+        include: {
+          originalParagraph: { select: { content: true } },
+          page: { include: { book: true } }
+        }
+      });
+      
+      // Verify that text correction processing is NOT called for revert
+      expect(textFixesService.processParagraphUpdate).not.toHaveBeenCalled();
+      
+      // Verify that text corrections are cleared
+      expect(prismaService.textCorrection.deleteMany).toHaveBeenCalledWith({
+        where: { paragraphId }
+      });
+      
+      expect(prismaService.paragraph.update).toHaveBeenCalledWith({
+        where: { id: paragraphId },
+        data: { content: originalContent },
+        include: {
+          page: {
+            include: {
+              book: true,
+            },
+          },
+          originalParagraph: {
+            select: {
+              content: true,
+            },
+          },
+          textCorrections: {
+            orderBy: { createdAt: 'desc' },
+            take: 10
+          }
+        }
+      });
+      
+      expect(queueService.addAudioGenerationJob).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        ...mockUpdatedParagraph,
+        originalContent: originalContent,
+        textChanges: [], // Empty array for revert
+        textCorrections: undefined,
+        bulkSuggestions: []
+      });
+    });
+
+    it('should revert paragraph and queue audio generation when requested', async () => {
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(mockExistingParagraph);
+      (prismaService.textCorrection.deleteMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (textFixesService.processParagraphUpdate as jest.Mock).mockResolvedValue(mockTextChanges);
+      (prismaService.paragraph.update as jest.Mock).mockResolvedValue(mockUpdatedParagraph);
+
+      const result = await service.revertParagraph(paragraphId, true);
+
+      expect(queueService.addAudioGenerationJob).toHaveBeenCalledWith({
+        paragraphId: paragraphId,
+        bookId: 'book-1',
+        content: originalContent
+      });
+      
+      // Verify that text correction processing is NOT called for revert
+      expect(textFixesService.processParagraphUpdate).not.toHaveBeenCalled();
+      
+      // Verify that text corrections are cleared
+      expect(prismaService.textCorrection.deleteMany).toHaveBeenCalledWith({
+        where: { paragraphId }
+      });
+      
+      expect(result).toEqual({
+        ...mockUpdatedParagraph,
+        originalContent: originalContent,
+        textChanges: [], // Empty array for revert
+        textCorrections: undefined,
+        bulkSuggestions: []
+      });
+    });
+
+    it('should throw error when paragraph not found', async () => {
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.revertParagraph(paragraphId, false))
+        .rejects
+        .toThrow(`Paragraph not found with ID: ${paragraphId}`);
+        
+      expect(textFixesService.processParagraphUpdate).not.toHaveBeenCalled();
+      expect(prismaService.paragraph.update).not.toHaveBeenCalled();
+      expect(queueService.addAudioGenerationJob).not.toHaveBeenCalled();
+    });
+
+    it('should throw error when original content not available', async () => {
+      const paragraphWithoutOriginal = {
+        ...mockExistingParagraph,
+        originalParagraph: null
+      };
+      
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(paragraphWithoutOriginal);
+
+      await expect(service.revertParagraph(paragraphId, false))
+        .rejects
+        .toThrow(`No original content available for paragraph: ${paragraphId}`);
+        
+      expect(textFixesService.processParagraphUpdate).not.toHaveBeenCalled();
+      expect(prismaService.paragraph.update).not.toHaveBeenCalled();
+    });
+
+    it('should throw error when original content is empty', async () => {
+      const paragraphWithEmptyOriginal = {
+        ...mockExistingParagraph,
+        originalParagraph: { content: '' }
+      };
+      
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(paragraphWithEmptyOriginal);
+
+      await expect(service.revertParagraph(paragraphId, false))
+        .rejects
+        .toThrow(`No original content available for paragraph: ${paragraphId}`);
+    });
+
+    it('should return early when content is already at original state', async () => {
+      const paragraphAlreadyOriginal = {
+        ...mockExistingParagraph,
+        content: originalContent // Same as original
+      };
+      
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(paragraphAlreadyOriginal);
+
+      const result = await service.revertParagraph(paragraphId, false);
+
+      expect(result).toEqual({
+        ...paragraphAlreadyOriginal,
+        originalContent: originalContent,
+        textChanges: [],
+        textCorrections: undefined,
+        bulkSuggestions: []
+      });
+      
+      expect(textFixesService.processParagraphUpdate).not.toHaveBeenCalled();
+      expect(prismaService.paragraph.update).not.toHaveBeenCalled();
+      expect(queueService.addAudioGenerationJob).not.toHaveBeenCalled();
+    });
+
+    it('should handle database update errors gracefully', async () => {
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(mockExistingParagraph);
+      (prismaService.textCorrection.deleteMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prismaService.paragraph.update as jest.Mock).mockRejectedValue(
+        new Error('Database update failed')
+      );
+
+      await expect(service.revertParagraph(paragraphId, false))
+        .rejects
+        .toThrow('Database update failed');
+        
+      expect(queueService.addAudioGenerationJob).not.toHaveBeenCalled();
+    });
+
+    it('should handle queue service errors gracefully when audio generation requested', async () => {
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(mockExistingParagraph);
+      (prismaService.textCorrection.deleteMany as jest.Mock).mockResolvedValue({ count: 3 });
+      (prismaService.paragraph.update as jest.Mock).mockResolvedValue(mockUpdatedParagraph);
+      (queueService.addAudioGenerationJob as jest.Mock).mockRejectedValue(
+        new Error('Queue service error')
+      );
+
+      await expect(service.revertParagraph(paragraphId, true))
+        .rejects
+        .toThrow('Queue service error');
+    });
+
+    it('should handle paragraphs with special characters and unicode', async () => {
+      const unicodeOriginal = 'שלום עולם! This is a test with émojis 🎉 and numbers 123.';
+      const unicodeModified = 'שלום עולם! This is a modified test with émojis 🎉 and numbers 456.';
+      
+      const unicodeParagraph = {
+        ...mockExistingParagraph,
+        content: unicodeModified,
+        originalParagraph: { content: unicodeOriginal }
+      };
+      
+      const unicodeUpdated = {
+        ...unicodeParagraph,
+        content: unicodeOriginal
+      };
+      
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(unicodeParagraph);
+      (prismaService.textCorrection.deleteMany as jest.Mock).mockResolvedValue({ count: 4 });
+      (prismaService.paragraph.update as jest.Mock).mockResolvedValue(unicodeUpdated);
+
+      const result = await service.revertParagraph(paragraphId, false);
+
+      // Verify that text correction processing is NOT called for revert
+      expect(textFixesService.processParagraphUpdate).not.toHaveBeenCalled();
+      
+      // Verify that text corrections are cleared
+      expect(prismaService.textCorrection.deleteMany).toHaveBeenCalledWith({
+        where: { paragraphId }
+      });
+      
+      expect(prismaService.paragraph.update).toHaveBeenCalledWith({
+        where: { id: paragraphId },
+        data: { content: unicodeOriginal },
+        include: {
+          page: {
+            include: {
+              book: true,
+            },
+          },
+          originalParagraph: {
+            select: {
+              content: true,
+            },
+          },
+          textCorrections: {
+            orderBy: { createdAt: 'desc' },
+            take: 10
+          }
+        }
+      });
+      
+      expect(result.content).toBe(unicodeOriginal);
+    });
+  });
+
+  describe('Enhanced Revert Logic Tests', () => {
+    const paragraphId = 'test-paragraph-id';
+    const originalContent = 'This is the original paragraph content';
+    const modifiedContent = 'This is the modified paragraph content';
+    
+    const mockExistingParagraph = {
+      id: paragraphId,
+      content: modifiedContent,
+      orderIndex: 1,
+      pageId: 'page-1',
+      audioS3Key: null,
+      audioStatus: 'PENDING',
+      audioDuration: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      originalParagraph: {
+        content: originalContent
+      },
+      page: {
+        bookId: 'book-1',
+        book: {
+          id: 'book-1',
+          title: 'Test Book'
+        }
+      }
+    };
+    
+    const mockUpdatedParagraph = {
+      ...mockExistingParagraph,
+      content: originalContent,
+      textCorrections: [],
+      page: {
+        ...mockExistingParagraph.page,
+        bookId: 'book-1'
+      }
+    };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should NOT call textFixesService.processParagraphUpdate on revert', async () => {
+      // Setup mocks
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(mockExistingParagraph);
+      (prismaService.textCorrection.deleteMany as jest.Mock).mockResolvedValue({ count: 3 });
+      (prismaService.paragraph.update as jest.Mock).mockResolvedValue(mockUpdatedParagraph);
+
+      await service.revertParagraph(paragraphId, false);
+
+      // Critical test: textFixesService.processParagraphUpdate should NOT be called
+      expect(textFixesService.processParagraphUpdate).not.toHaveBeenCalled();
+    });
+
+    it('should clear all text correction records when reverting', async () => {
+      // Setup mocks
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(mockExistingParagraph);
+      (prismaService.textCorrection.deleteMany as jest.Mock).mockResolvedValue({ count: 5 });
+      (prismaService.paragraph.update as jest.Mock).mockResolvedValue(mockUpdatedParagraph);
+
+      await service.revertParagraph(paragraphId, false);
+
+      // Verify text corrections are cleared
+      expect(prismaService.textCorrection.deleteMany).toHaveBeenCalledWith({
+        where: { paragraphId }
+      });
+    });
+
+    it('should log the number of cleared text correction records', async () => {
+      const logSpy = jest.spyOn(service['logger'], 'log');
+      const deletedCount = 7;
+      
+      // Setup mocks
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(mockExistingParagraph);
+      (prismaService.textCorrection.deleteMany as jest.Mock).mockResolvedValue({ count: deletedCount });
+      (prismaService.paragraph.update as jest.Mock).mockResolvedValue(mockUpdatedParagraph);
+
+      await service.revertParagraph(paragraphId, false);
+
+      // Verify logging
+      expect(logSpy).toHaveBeenCalledWith(
+        `Cleared ${deletedCount} text correction records for paragraph ${paragraphId}`
+      );
+    });
+
+    it('should return empty textChanges array for revert action', async () => {
+      // Setup mocks
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(mockExistingParagraph);
+      (prismaService.textCorrection.deleteMany as jest.Mock).mockResolvedValue({ count: 2 });
+      (prismaService.paragraph.update as jest.Mock).mockResolvedValue(mockUpdatedParagraph);
+
+      const result = await service.revertParagraph(paragraphId, false);
+
+      // Verify empty textChanges (no corrections recorded for revert)
+      expect(result.textChanges).toEqual([]);
+    });
+
+    it('should clear corrections even when zero records exist', async () => {
+      // Setup mocks
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(mockExistingParagraph);
+      (prismaService.textCorrection.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prismaService.paragraph.update as jest.Mock).mockResolvedValue(mockUpdatedParagraph);
+
+      await service.revertParagraph(paragraphId, false);
+
+      // Should still attempt to clear corrections
+      expect(prismaService.textCorrection.deleteMany).toHaveBeenCalledWith({
+        where: { paragraphId }
+      });
+    });
+
+    it('should set audioGeneratedAt when reverting with audio generation', async () => {
+      const mockDate = new Date('2025-01-01T12:00:00Z');
+      jest.spyOn(global, 'Date').mockImplementation(() => mockDate as any);
+      
+      // Setup mocks
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(mockExistingParagraph);
+      (prismaService.textCorrection.deleteMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prismaService.paragraph.update as jest.Mock)
+        .mockResolvedValueOnce(mockUpdatedParagraph) // First call for content update
+        .mockResolvedValueOnce({ ...mockUpdatedParagraph, audioGeneratedAt: mockDate }); // Second call for timestamp
+
+      await service.revertParagraph(paragraphId, true);
+
+      // Verify audioGeneratedAt is set when generating audio
+      expect(prismaService.paragraph.update).toHaveBeenCalledWith({
+        where: { id: paragraphId },
+        data: { audioGeneratedAt: mockDate }
+      });
+      
+      // Verify audio generation is queued
+      expect(queueService.addAudioGenerationJob).toHaveBeenCalledWith({
+        paragraphId: mockUpdatedParagraph.id,
+        bookId: mockUpdatedParagraph.page.bookId,
+        content: mockUpdatedParagraph.content
+      });
+      
+      jest.restoreAllMocks();
+    });
+  });
+
+  describe('Audio Timestamp Logic Tests', () => {
+    const paragraphId = 'test-paragraph-id';
+    const originalContent = 'Original paragraph content';
+    const newContent = 'Updated paragraph content';
+    
+    const mockExistingParagraph = {
+      id: paragraphId,
+      content: originalContent,
+      orderIndex: 1,
+      pageId: 'page-1',
+      audioS3Key: null,
+      audioStatus: 'PENDING',
+      audioDuration: null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    
+    const mockUpdatedParagraph = {
+      ...mockExistingParagraph,
+      content: newContent,
+      page: {
+        bookId: 'book-1',
+        book: {
+          id: 'book-1',
+          title: 'Test Book'
+        }
+      },
+      originalParagraph: {
+        content: originalContent
+      },
+      textCorrections: []
+    };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should set audioGeneratedAt when updating paragraph with audio generation', async () => {
+      const mockDate = new Date('2025-01-01T12:00:00Z');
+      jest.spyOn(global, 'Date').mockImplementation(() => mockDate as any);
+      
+      // Setup mocks
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(mockExistingParagraph);
+      (textFixesService.processParagraphUpdate as jest.Mock).mockResolvedValue([]);
+      (bulkTextFixesService.findSimilarFixesInBook as jest.Mock).mockResolvedValue([]);
+      (prismaService.paragraph.update as jest.Mock)
+        .mockResolvedValueOnce(mockUpdatedParagraph) // First call for content update
+        .mockResolvedValueOnce({ ...mockUpdatedParagraph, audioGeneratedAt: mockDate }); // Second call for timestamp
+
+      await service.updateParagraph(paragraphId, newContent, true, true);
+
+      // Verify audioGeneratedAt is set when generating audio
+      expect(prismaService.paragraph.update).toHaveBeenCalledWith({
+        where: { id: paragraphId },
+        data: { audioGeneratedAt: mockDate }
+      });
+      
+      // Verify audio generation is queued
+      expect(queueService.addAudioGenerationJob).toHaveBeenCalledWith({
+        paragraphId: mockUpdatedParagraph.id,
+        bookId: mockUpdatedParagraph.page.bookId,
+        content: mockUpdatedParagraph.content
+      });
+      
+      jest.restoreAllMocks();
+    });
+
+    it('should NOT set audioGeneratedAt when updating paragraph without audio generation', async () => {
+      // Setup mocks
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(mockExistingParagraph);
+      (textFixesService.processParagraphUpdate as jest.Mock).mockResolvedValue([]);
+      (bulkTextFixesService.findSimilarFixesInBook as jest.Mock).mockResolvedValue([]);
+      (prismaService.paragraph.update as jest.Mock).mockResolvedValue(mockUpdatedParagraph);
+
+      await service.updateParagraph(paragraphId, newContent, false, true);
+
+      // Verify audioGeneratedAt is NOT set when not generating audio
+      expect(prismaService.paragraph.update).toHaveBeenCalledTimes(1);
+      expect(prismaService.paragraph.update).toHaveBeenCalledWith({
+        where: { id: paragraphId },
+        data: { content: newContent },
+        include: expect.any(Object)
+      });
+      
+      // Verify audio generation is NOT queued
+      expect(queueService.addAudioGenerationJob).not.toHaveBeenCalled();
+    });
+
+    it('should preserve existing audioGeneratedAt when updating without audio generation', async () => {
+      const existingTimestamp = new Date('2024-12-01T10:00:00Z');
+      const paragraphWithAudio = {
+        ...mockExistingParagraph,
+        audioGeneratedAt: existingTimestamp,
+        audioS3Key: 'audio/test.mp3',
+        audioStatus: 'READY'
+      };
+      
+      const updatedWithPreservedTimestamp = {
+        ...mockUpdatedParagraph,
+        audioGeneratedAt: existingTimestamp
+      };
+      
+      // Setup mocks
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(paragraphWithAudio);
+      (textFixesService.processParagraphUpdate as jest.Mock).mockResolvedValue([]);
+      (bulkTextFixesService.findSimilarFixesInBook as jest.Mock).mockResolvedValue([]);
+      (prismaService.paragraph.update as jest.Mock).mockResolvedValue(updatedWithPreservedTimestamp);
+
+      await service.updateParagraph(paragraphId, newContent, false, true);
+
+      // Verify existing audioGeneratedAt is preserved in the returned paragraph
+      // The DTO doesn't include audioGeneratedAt, but we can verify the mock was called correctly
+      expect(prismaService.paragraph.update).toHaveBeenCalledWith({
+        where: { id: paragraphId },
+        data: { content: newContent },
+        include: expect.any(Object)
+      });
+      
+      // Verify only content update was called (no timestamp update)
+      expect(prismaService.paragraph.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('should update audioGeneratedAt when regenerating audio for existing audio paragraph', async () => {
+      const oldTimestamp = new Date('2024-12-01T10:00:00Z');
+      const newTimestamp = new Date('2025-01-01T12:00:00Z');
+      jest.spyOn(global, 'Date').mockImplementation(() => newTimestamp as any);
+      
+      const paragraphWithOldAudio = {
+        ...mockExistingParagraph,
+        audioGeneratedAt: oldTimestamp,
+        audioS3Key: 'audio/test.mp3',
+        audioStatus: 'READY'
+      };
+      
+      // Setup mocks
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(paragraphWithOldAudio);
+      (textFixesService.processParagraphUpdate as jest.Mock).mockResolvedValue([]);
+      (bulkTextFixesService.findSimilarFixesInBook as jest.Mock).mockResolvedValue([]);
+      (prismaService.paragraph.update as jest.Mock)
+        .mockResolvedValueOnce(mockUpdatedParagraph)
+        .mockResolvedValueOnce({ ...mockUpdatedParagraph, audioGeneratedAt: newTimestamp });
+
+      await service.updateParagraph(paragraphId, newContent, true, true);
+
+      // Verify audioGeneratedAt is updated to new timestamp
+      expect(prismaService.paragraph.update).toHaveBeenCalledWith({
+        where: { id: paragraphId },
+        data: { audioGeneratedAt: newTimestamp }
+      });
+      
+      jest.restoreAllMocks();
     });
   });
 });
