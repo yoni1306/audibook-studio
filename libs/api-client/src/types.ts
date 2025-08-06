@@ -192,6 +192,26 @@ export interface paths {
     patch: operations['BooksController_updateParagraph'];
     trace?: never;
   };
+  '/books/paragraphs/{paragraphId}/revert': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Revert paragraph to original content
+     * @description Revert a paragraph back to its original content from the source book
+     */
+    post: operations['BooksController_revertParagraph'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/books/bulk-fixes': {
     parameters: {
       query?: never;
@@ -1578,6 +1598,40 @@ export interface operations {
     };
     responses: {
       /** @description Paragraph updated successfully */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UpdateParagraphResponseDto'];
+        };
+      };
+    };
+  };
+  BooksController_revertParagraph: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Paragraph ID */
+        paragraphId: string;
+      };
+      cookie?: never;
+    };
+    /** @description Revert options */
+    requestBody: {
+      content: {
+        'application/json': {
+          /**
+           * @description Whether to generate audio after reverting
+           * @default false
+           */
+          generateAudio?: boolean;
+        };
+      };
+    };
+    responses: {
+      /** @description Paragraph reverted successfully */
       200: {
         headers: {
           [name: string]: unknown;

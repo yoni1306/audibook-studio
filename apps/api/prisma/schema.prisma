@@ -78,6 +78,7 @@ model Paragraph {
   audioS3Key          String?            // S3 key for generated audio of this paragraph
   audioStatus         AudioStatus        @default(PENDING)
   audioDuration       Float?             // Duration in seconds for this paragraph
+  audioGeneratedAt    DateTime?          // Timestamp when audio was successfully generated
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 

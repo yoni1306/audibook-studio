@@ -15,6 +15,7 @@ interface ParagraphComponentProps {
   onGenerateAudio: () => void;
   onSaveAndGenerateAudio: () => void;
   onToggleCompleted: (paragraphId: string, completed: boolean) => void;
+  onRevertToOriginal: (paragraphId: string, generateAudio?: boolean) => void;
 }
 
 export default function ParagraphComponent({
@@ -29,6 +30,7 @@ export default function ParagraphComponent({
   onGenerateAudio,
   onSaveAndGenerateAudio,
   onToggleCompleted,
+  onRevertToOriginal,
 }: ParagraphComponentProps) {
   const getAudioStatusIcon = (status: string) => {
     switch (status) {
@@ -43,6 +45,18 @@ export default function ParagraphComponent({
       default:
         return '❓';
     }
+  };
+
+  // Check if audio is out of sync based on timestamps
+  const isAudioOutOfSync = () => {
+    if (!paragraph.audioS3Key || !paragraph.audioGeneratedAt) {
+      return false; // No audio or no timestamp, can't be out of sync
+    }
+    
+    const audioGenerated = new Date(paragraph.audioGeneratedAt);
+    const lastUpdated = new Date(paragraph.updatedAt);
+    
+    return lastUpdated > audioGenerated;
   };
 
   return (
@@ -78,7 +92,21 @@ export default function ParagraphComponent({
           border: '1px solid var(--color-gray-200)'
         }}
       >
-        <span style={{ fontSize: 'var(--font-size-sm)' }}>{getAudioStatusIcon(paragraph.audioStatus)}</span>
+        <span style={{ fontSize: 'var(--font-size-sm)' }}>
+          {getAudioStatusIcon(paragraph.audioStatus)}
+          {isAudioOutOfSync() && (
+            <span 
+              style={{ 
+                marginLeft: '4px',
+                fontSize: 'var(--font-size-xs)',
+                color: 'var(--color-warning-600)'
+              }}
+              title="Audio was generated before the last text update"
+            >
+              ⚠️
+            </span>
+          )}
+        </span>
         <span style={{ fontWeight: '500' }}>
           📖 Page {paragraph.pageNumber} | Paragraph {formatParagraphNumber(paragraph.orderIndex, true)}
         </span>
@@ -146,6 +174,8 @@ export default function ParagraphComponent({
         })()
         }
       </div>
+
+
 
       {isEditing ? (
         <div style={{ marginTop: 'var(--spacing-6)' }}>
@@ -279,6 +309,39 @@ export default function ParagraphComponent({
             >
               ❌ Cancel
             </button>
+            
+            {/* Revert to Original Button - only show if original content exists and is different */}
+            {(paragraph as any).originalContent && (paragraph as any).originalContent !== editContent && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRevertToOriginal(paragraph.id, false);
+                }}
+                disabled={saving}
+                className="button button-secondary"
+                style={{
+                  cursor: saving ? 'not-allowed' : 'pointer',
+                  minWidth: '140px',
+                  height: '44px',
+                  fontSize: 'var(--font-size-sm)',
+                  fontWeight: '600',
+                  color: 'var(--color-orange-700)',
+                  backgroundColor: 'var(--color-orange-50)',
+                  border: '1px solid var(--color-orange-300)',
+                  borderRadius: 'var(--radius-md)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 'var(--spacing-2)',
+                  transition: 'all 0.2s ease',
+                  opacity: saving ? 0.7 : 1,
+                  boxShadow: saving ? 'none' : '0 2px 4px rgba(0, 0, 0, 0.1)',
+                }}
+                title="Revert to original content from the source book"
+              >
+                ↩️ Revert to Original
+              </button>
+            )}
           </div>
         </div>
       ) : (
@@ -308,6 +371,54 @@ export default function ParagraphComponent({
             )}
           </div>
           
+          {/* Revert to Original Button - show for modified paragraphs */}
+          {(paragraph as any).originalContent && (paragraph as any).originalContent !== paragraph.content && (
+            <div style={{ 
+              marginTop: 'var(--spacing-3)',
+              display: 'flex',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRevertToOriginal(paragraph.id, false);
+                }}
+                disabled={saving}
+                style={{
+                  cursor: saving ? 'not-allowed' : 'pointer',
+                  padding: 'var(--spacing-2) var(--spacing-3)',
+                  fontSize: 'var(--font-size-sm)',
+                  fontWeight: '600',
+                  color: 'var(--color-orange-700)',
+                  backgroundColor: 'var(--color-orange-50)',
+                  border: '1px solid var(--color-orange-300)',
+                  borderRadius: 'var(--radius-md)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--spacing-2)',
+                  transition: 'all 0.2s ease',
+                  opacity: saving ? 0.7 : 1,
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+                }}
+                onMouseEnter={(e) => {
+                  if (!saving) {
+                    e.currentTarget.style.backgroundColor = 'var(--color-orange-100)';
+                    e.currentTarget.style.borderColor = 'var(--color-orange-400)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!saving) {
+                    e.currentTarget.style.backgroundColor = 'var(--color-orange-50)';
+                    e.currentTarget.style.borderColor = 'var(--color-orange-300)';
+                  }
+                }}
+                title="Revert to original content from the source book"
+              >
+                ↩️ Revert to Original
+              </button>
+            </div>
+          )}
+          
           {/* Audio Section */}
           <div style={{ marginTop: 'var(--spacing-4)' }}>
             {paragraph.audioStatus === 'READY' ? (
@@ -317,17 +428,38 @@ export default function ParagraphComponent({
                 border: '1px solid var(--color-green-200)'
               }}>
                 <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 'var(--spacing-2)',
-                  marginBottom: 'var(--spacing-3)',
-                  fontSize: 'var(--font-size-sm)',
-                  color: 'var(--color-green-700)',
-                  fontWeight: '500'
+                  marginBottom: 'var(--spacing-3)'
                 }}>
-                  <span>🎵</span>
-                  <span>Audio Available</span>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--spacing-2)',
+                    fontSize: 'var(--font-size-sm)',
+                    color: 'var(--color-green-700)',
+                    fontWeight: '500'
+                  }}>
+                    <span>🎵</span>
+                    <span>Audio Available</span>
+                  </div>
+                  
+                  {/* Sync Warning Subtitle */}
+                  {isAudioOutOfSync() && (
+                    <div style={{
+                      fontSize: 'var(--font-size-xs)',
+                      color: 'var(--color-warning-600)',
+                      fontWeight: '500',
+                      marginTop: 'var(--spacing-1)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 'var(--spacing-1)'
+                    }}>
+                      <span>⚠️</span>
+                      <span>Audio might be out of sync - text was modified after generation</span>
+                    </div>
+                  )}
                 </div>
+                
+
                 <audio
                   controls
                   style={{ 

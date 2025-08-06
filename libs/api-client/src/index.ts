@@ -81,7 +81,9 @@ export interface Paragraph {
   audioStatus: string;
   audioS3Key: string | null;
   audioDuration: number | null;
+  audioGeneratedAt: string | null;
   completed: boolean;
+  updatedAt: string;
 }
 
 // Base book interface
@@ -320,6 +322,11 @@ export function createApiClient(baseUrl: string) {
       setParagraphCompleted: (bookId: string, paragraphId: string, data: { completed: boolean }) =>
         client.PATCH('/books/{bookId}/paragraphs/{paragraphId}/completed', {
           params: { path: { bookId, paragraphId } },
+          body: data,
+        }),
+      revertParagraph: (paragraphId: string, data: { generateAudio?: boolean }) =>
+        client.POST('/books/paragraphs/{paragraphId}/revert' as any, {
+          params: { path: { paragraphId } },
           body: data,
         }),
       // Correction Learning API

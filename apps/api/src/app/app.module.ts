@@ -9,6 +9,7 @@ import { BooksModule } from './books/books.module';
 import { LogsModule } from './logs/logs.module';
 import { CorrelationModule } from './middleware/correlation.module';
 import { CorrelationIdMiddleware } from './middleware/correlation.middleware';
+import { StartupModule } from './startup/startup.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { CorrelationIdMiddleware } from './middleware/correlation.middleware';
     BooksModule,
     LogsModule,
     CorrelationModule,
+    StartupModule,
   ],
   controllers: [AppController],
 })
