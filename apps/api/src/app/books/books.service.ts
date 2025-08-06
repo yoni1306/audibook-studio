@@ -194,40 +194,9 @@ export class BooksService {
     
     // Check if paragraph is already at original content
     if (existingParagraph.content === originalContent) {
-      this.logger.log(`Paragraph ${paragraphId} is already at original content`);
-      
-      // Still return the paragraph data for consistency
-      const paragraph = await this.prisma.paragraph.findUnique({
-        where: { id: paragraphId },
-        include: {
-          page: {
-            include: {
-              book: true,
-            },
-          },
-          originalParagraph: {
-            select: {
-              content: true,
-            },
-          },
-          textCorrections: {
-            orderBy: { createdAt: 'desc' },
-            take: 10,
-          },
-        },
-      });
-
-      if (!paragraph) {
-        throw new Error(`Failed to retrieve paragraph data: ${paragraphId}`);
-      }
-
-      return {
-        ...paragraph,
-        originalContent: paragraph.originalParagraph?.content,
-        textChanges: [],
-        textCorrections: paragraph.textCorrections,
-        bulkSuggestions: [],
-      } as UpdateParagraphResponseDto;
+      this.logger.log(`Paragraph ${paragraphId} is already at original content, but still clearing text corrections`);
+    } else {
+      this.logger.log(`Reverting paragraph ${paragraphId} content to original`);
     }
 
     // For reverts, we don't analyze text changes since this is not a text fixing action
@@ -239,6 +208,10 @@ export class BooksService {
     );
 
     // Clear all text correction records for this paragraph since we're starting fresh
+    this.logger.log(
+      `About to clear text correction records for paragraph ${paragraphId}`
+    );
+    
     const deletedCorrections = await this.prisma.textCorrection.deleteMany({
       where: { paragraphId }
     });
@@ -264,10 +237,7 @@ export class BooksService {
             content: true,
           },
         },
-        textCorrections: {
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        },
+        // Don't include textCorrections since we just deleted them all
       },
     });
 
@@ -298,7 +268,7 @@ export class BooksService {
       ...paragraph,
       originalContent: paragraph.originalParagraph?.content,
       textChanges,
-      textCorrections: paragraph.textCorrections,
+      textFixes: [], // Empty array since we just deleted all corrections
       bulkSuggestions: [], // No bulk suggestions for reverts
     } as UpdateParagraphResponseDto;
   }

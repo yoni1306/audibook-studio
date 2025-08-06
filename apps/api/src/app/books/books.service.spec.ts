@@ -1512,10 +1512,7 @@ describe('BooksService', () => {
               content: true,
             },
           },
-          textCorrections: {
-            orderBy: { createdAt: 'desc' },
-            take: 10
-          }
+          // textCorrections removed after deletion
         }
       });
       
@@ -1524,7 +1521,7 @@ describe('BooksService', () => {
         ...mockUpdatedParagraph,
         originalContent: originalContent,
         textChanges: [], // Empty array for revert
-        textCorrections: undefined,
+        textFixes: [], // Empty array after deletion
         bulkSuggestions: []
       });
     });
@@ -1555,7 +1552,7 @@ describe('BooksService', () => {
         ...mockUpdatedParagraph,
         originalContent: originalContent,
         textChanges: [], // Empty array for revert
-        textCorrections: undefined,
+        textFixes: [], // Empty array after deletion
         bulkSuggestions: []
       });
     });
@@ -1601,26 +1598,33 @@ describe('BooksService', () => {
         .toThrow(`No original content available for paragraph: ${paragraphId}`);
     });
 
-    it('should return early when content is already at original state', async () => {
+    it('should still clear text corrections when content is already at original state', async () => {
       const paragraphAlreadyOriginal = {
         ...mockExistingParagraph,
         content: originalContent // Same as original
       };
       
       (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(paragraphAlreadyOriginal);
+      (prismaService.textCorrection.deleteMany as jest.Mock).mockResolvedValue({ count: 2 });
+      (prismaService.paragraph.update as jest.Mock).mockResolvedValue(mockUpdatedParagraph);
 
       const result = await service.revertParagraph(paragraphId, false);
 
+      // CRITICAL: Even when content is already original, we must still clear text corrections
+      expect(prismaService.textCorrection.deleteMany).toHaveBeenCalledWith({
+        where: { paragraphId }
+      });
+      expect(prismaService.paragraph.update).toHaveBeenCalled();
+      
       expect(result).toEqual({
-        ...paragraphAlreadyOriginal,
+        ...mockUpdatedParagraph,
         originalContent: originalContent,
         textChanges: [],
-        textCorrections: undefined,
+        textFixes: [], // Empty array after deletion
         bulkSuggestions: []
       });
       
       expect(textFixesService.processParagraphUpdate).not.toHaveBeenCalled();
-      expect(prismaService.paragraph.update).not.toHaveBeenCalled();
       expect(queueService.addAudioGenerationJob).not.toHaveBeenCalled();
     });
 
@@ -1694,10 +1698,7 @@ describe('BooksService', () => {
               content: true,
             },
           },
-          textCorrections: {
-            orderBy: { createdAt: 'desc' },
-            take: 10
-          }
+          // textCorrections removed after deletion
         }
       });
       
