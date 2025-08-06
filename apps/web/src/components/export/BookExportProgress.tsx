@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, CardContent, Typography, LinearProgress } from '@mui/material';
-import { BookExportStatus } from '../../../../../../libs/api-client/src/index';
+import { BookExportStatus } from '@audibook/api-client';
 
 interface BookExportProgressProps {
   exportStatus: BookExportStatus;

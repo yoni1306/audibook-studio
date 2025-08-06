@@ -3,6 +3,7 @@ import { useApiClient } from '../../../hooks/useApiClient';
 import { formatParagraphNumber } from '../../utils/paragraphUtils';
 import { BulkFixSuggestion } from '@audibook/api-client';
 import { createLogger } from '../../utils/logger';
+import ErrorModal from '../ui/ErrorModal';
 
 const logger = createLogger('BulkFixModal');
 
@@ -25,6 +26,8 @@ export default function BulkFixModal({
   const [selectedFixes, setSelectedFixes] = useState<{[key: string]: string[]}>({});
   const [applying, setApplying] = useState(false);
   const [expandedWord, setExpandedWord] = useState<string | null>(null);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState({ title: '', message: '' });
   
   // Handle modal opening and initialization
   useEffect(() => {
@@ -114,7 +117,11 @@ export default function BulkFixModal({
       onClose();
     } catch (error) {
       logger.error('Error applying bulk fixes:', error);
-      alert(`Error applying fixes: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setErrorMessage({
+        title: 'Error Applying Fixes',
+        message: `There was an issue applying the bulk fixes: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`
+      });
+      setShowErrorModal(true);
     } finally {
       setApplying(false);
     }
@@ -508,25 +515,10 @@ export default function BulkFixModal({
             <button
               onClick={onSkipAll || onClose}
               disabled={applying}
-              className="button button-secondary"
+              className="btn btn-secondary"
               style={{
-                cursor: applying ? 'not-allowed' : 'pointer',
-                minWidth: '140px',
-                height: '44px',
-                padding: 'var(--spacing-2) var(--spacing-4)',
-                fontSize: 'var(--font-size-sm)',
-                fontWeight: '600',
-                color: 'var(--color-gray-700)',
-                backgroundColor: 'white',
-                border: '1px solid var(--color-gray-300)',
-                borderRadius: 'var(--radius-md)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 'var(--spacing-2)',
-                transition: 'all 0.2s ease',
-                opacity: applying ? 0.7 : 1,
-                boxShadow: applying ? 'none' : '0 2px 4px rgba(0, 0, 0, 0.1)'
+                position: 'relative',
+                zIndex: 1001
               }}
             >
               ❌ Skip All Suggestions
@@ -534,27 +526,10 @@ export default function BulkFixModal({
             <button
               onClick={handleApply}
               disabled={applying || getTotalSelected() === 0}
-              className="button button-primary"
+              className="btn btn-primary"
               style={{
-                cursor: (applying || getTotalSelected() === 0) ? 'not-allowed' : 'pointer',
-                minWidth: '140px',
-                height: '44px',
-                padding: 'var(--spacing-2) var(--spacing-4)',
-                fontSize: 'var(--font-size-sm)',
-                fontWeight: '600',
-                color: 'white',
-                backgroundColor: getTotalSelected() === 0 
-                  ? 'var(--color-gray-400)' 
-                  : 'var(--color-primary-600)',
-                border: '1px solid transparent',
-                borderRadius: 'var(--radius-md)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 'var(--spacing-2)',
-                transition: 'all 0.2s ease',
-                opacity: (applying || getTotalSelected() === 0) ? 0.7 : 1,
-                boxShadow: (applying || getTotalSelected() === 0) ? 'none' : '0 2px 4px rgba(0, 0, 0, 0.1)'
+                position: 'relative',
+                zIndex: 1001
               }}
             >
               {applying ? (
@@ -575,6 +550,15 @@ export default function BulkFixModal({
           </div>
         </div>
       </div>
+
+      {/* Error Modal */}
+      <ErrorModal
+        isOpen={showErrorModal}
+        onClose={() => setShowErrorModal(false)}
+        title={errorMessage.title}
+        message={errorMessage.message}
+        icon="⚠️"
+      />
     </div>
   );
 }

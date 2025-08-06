@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { Typography, Button, CircularProgress, Alert } from '@mui/material';
 import { Refresh } from '@mui/icons-material';
 import { useApiClient } from '../../hooks/useApiClient';
-import { BookExportStatus } from '../../../../../libs/api-client/src/index';
+import { BookExportStatus } from '@audibook/api-client';
 import { BookExportHeader } from '../components/export/BookExportHeader';
 import { BookExportProgress } from '../components/export/BookExportProgress';
 import { PageExportCard } from '../components/export/PageExportCard';

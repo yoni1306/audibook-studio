@@ -9,7 +9,7 @@ import {
   Schedule,
   Warning
 } from '@mui/icons-material';
-import { PageExportStatus } from '../../../../../../libs/api-client/src/index';
+import { PageExportStatus } from '@audibook/api-client';
 
 interface PageExportCardProps {
   page: PageExportStatus;

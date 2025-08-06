@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect } from 'react';
 import {
   Box,
   Typography,
-  Collapse,
   IconButton,
   Table,
   TableBody,
@@ -22,7 +21,6 @@ import {
   GridRowParams,
   GridRenderCellParams,
 } from '@mui/x-data-grid';
-import { ExpandMore, ChevronRight } from '@mui/icons-material';
 import { useApiClient } from '../../../hooks/useApiClient';
 import { createLogger } from '../../utils/logger';
 

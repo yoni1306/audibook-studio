@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { getApiUrl } from '../utils/api';
 import { useApiClient } from '../../hooks/useApiClient';
-import { BookWithCounts, BookExportStatus, PageExportStatus } from '@audibook/api-client';
+import { BookWithCounts, PageExportStatus } from '@audibook/api-client';
 import { createLogger } from '../utils/logger';
+import ErrorModal from '../components/ui/ErrorModal';
 
 const logger = createLogger('ExportPage');
 
@@ -21,6 +22,8 @@ function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
   const [showParagraphs, setShowParagraphs] = useState(false);
   const [paragraphs, setParagraphs] = useState<any[]>([]);
   const [loadingParagraphs, setLoadingParagraphs] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState({ title: '', message: '' });
 
   const completionPercentage = page.totalParagraphsCount > 0 
     ? Math.round((page.completedParagraphsCount / page.totalParagraphsCount) * 100) 
@@ -54,24 +57,6 @@ function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
     }
   };
 
-
-
-  const handleDeleteAudio = async () => {
-    if (!hasAudio || !page.audioS3Key) return;
-    
-    try {
-      const { error } = await apiClient.books.deletePageAudio(bookId, page.id);
-      
-      if (error) {
-        console.error('Failed to delete audio:', error);
-        return;
-      }
-      
-      onStatusChange();
-    } catch (err) {
-      console.error('Failed to delete audio:', err);
-    }
-  };
 
 
 
@@ -110,7 +95,11 @@ function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
     if (page.audioStatus !== 'GENERATING') {
       console.log('Cannot cancel export: page is not currently generating. Current status:', page.audioStatus);
       // Show user feedback for why cancellation isn't possible
-      alert(`Cannot cancel export. Page status is '${page.audioStatus}'. Only pages with status 'GENERATING' can be cancelled.`);
+      setErrorMessage({
+        title: 'Cannot Cancel Export',
+        message: `Page status is '${page.audioStatus}'. Only pages with status 'GENERATING' can be cancelled.`
+      });
+      setShowErrorModal(true);
       return;
     }
     
@@ -490,29 +479,7 @@ function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
           </div>
         )}
 
-        {/* Delete button - hidden for now */}
-        {false && hasAudio && (
-          <button
-            onClick={handleDeleteAudio}
-            style={{
-              padding: '8px 12px',
-              backgroundColor: 'var(--color-red-500)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '12px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}
-          >
-            <span>🗑️</span>
-            <span>Delete</span>
-          </button>
-        )}
+
       </div>
 
       {/* Not ready message */}
@@ -533,6 +500,15 @@ function PageCard({ page, bookId, apiClient, onStatusChange }: PageCardProps) {
           <span>No completed paragraphs - cannot export</span>
         </div>
       )}
+
+      {/* Error Modal */}
+      <ErrorModal
+        isOpen={showErrorModal}
+        onClose={() => setShowErrorModal(false)}
+        title={errorMessage.title}
+        message={errorMessage.message}
+        icon="⚠️"
+      />
     </div>
   );
 }

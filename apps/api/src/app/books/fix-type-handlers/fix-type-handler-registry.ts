@@ -124,7 +124,7 @@ export class FixTypeHandlerRegistry {
   /**
    * Validate that we have exactly one matching handler
    */
-  private validateMatches(matches: FixTypeMatch[], originalWord: string, correctedWord: string): {
+  private validateMatches(matches: FixTypeMatch[]): {
     isValid: boolean;
     error?: string;
   } {
