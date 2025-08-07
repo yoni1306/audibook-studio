@@ -87,6 +87,7 @@ describe('BooksService', () => {
       getBookFixes: jest.fn(),
       getFixesStatistics: jest.fn(),
       findSimilarFixes: jest.fn(),
+      analyzeTextChanges: jest.fn(),
     };
 
     const mockS3Service = {
@@ -1997,6 +1998,591 @@ describe('BooksService', () => {
       });
       
       jest.restoreAllMocks();
+    });
+  });
+
+  describe('getParagraphDiff', () => {
+    const paragraphId = 'test-paragraph-id';
+    const originalContent = 'This is the original text from the book.';
+    const currentContent = 'This is the modified text from the book.';
+    
+    const mockParagraph = {
+      id: paragraphId,
+      content: currentContent,
+      originalParagraph: {
+        content: originalContent
+      }
+    };
+
+    const mockWordChanges = [
+      {
+        originalWord: 'original',
+        correctedWord: 'modified',
+        position: 3,
+        fixType: 'word_replacement'
+      }
+    ];
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should successfully return diff data for a paragraph with changes', async () => {
+      // Arrange
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(mockParagraph);
+      (textFixesService.analyzeTextChanges as jest.Mock).mockReturnValue(mockWordChanges);
+
+      // Act
+      const result = await service.getParagraphDiff(paragraphId);
+
+      // Assert
+      expect(prismaService.paragraph.findUnique).toHaveBeenCalledWith({
+        where: { id: paragraphId },
+        include: {
+          originalParagraph: {
+            select: {
+              content: true,
+            },
+          },
+        },
+      });
+
+      expect(textFixesService.analyzeTextChanges).toHaveBeenCalledWith(
+        originalContent,
+        currentContent
+      );
+
+      expect(result).toEqual({
+        changes: mockWordChanges,
+        originalContent,
+        currentContent,
+        tokenDiff: expect.any(Array), // New tokenDiff field
+      });
+    });
+
+    it('should return empty changes array when content is identical', async () => {
+      // Arrange
+      const identicalContent = 'Same content in both versions.';
+      const paragraphWithSameContent = {
+        ...mockParagraph,
+        content: identicalContent,
+        originalParagraph: {
+          content: identicalContent
+        }
+      };
+      
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(paragraphWithSameContent);
+      (textFixesService.analyzeTextChanges as jest.Mock).mockReturnValue([]);
+
+      // Act
+      const result = await service.getParagraphDiff(paragraphId);
+
+      // Assert
+      expect(textFixesService.analyzeTextChanges).toHaveBeenCalledWith(
+        identicalContent,
+        identicalContent
+      );
+
+      expect(result).toEqual({
+        changes: [],
+        originalContent: identicalContent,
+        currentContent: identicalContent,
+        tokenDiff: expect.any(Array), // New tokenDiff field
+      });
+    });
+
+    it('should correctly handle Hebrew text with duplicate words and deletions', async () => {
+      const paragraphId = 'test-paragraph-hebrew';
+      const originalContent = 'אנשים צועקים כל העת שהם רוצים ליצור עתיד טוב יותר. העתיד הוא תהום חסרת עניין. העבר לעומתו מלא חיים, מתגרה בנו בלי די, מאתגר ומעליב. בה בעת, מפתה אותנו לשנות או להרוס אותו. הסיבה היחידה שאנשים רוצים להיות אדוני העתיד היא על מנת לשנות את העבר. - מילן קונדרה פרולוג';
+      const currentContent = 'העתיד הוא תהום חסרת עניין. העבר לעומתו מלא חיים, מתגרה בנו בלי די, מאתגר ומעליב. בה בעת, מפתה אותנו לשנות או להרוס אותו. הסיבה היחידה שאנשים רוצים להיות אדוני העתיד היא על מנת לשנות את העבר. - מילן קונדרה פרולוג';
+
+      // Mock the paragraph with original content
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue({
+        id: paragraphId,
+        content: currentContent,
+        originalParagraph: {
+          content: originalContent,
+        },
+      });
+
+      // Mock empty changes (no word modifications, just deletions)
+      (textFixesService.analyzeTextChanges as jest.Mock).mockReturnValue([]);
+
+      const result = await service.getParagraphDiff(paragraphId);
+
+      // Verify the result structure
+      expect(result).toHaveProperty('changes');
+      expect(result).toHaveProperty('originalContent', originalContent);
+      expect(result).toHaveProperty('currentContent', currentContent);
+      expect(result).toHaveProperty('tokenDiff');
+      expect(Array.isArray(result.tokenDiff)).toBe(true);
+
+      // Verify that the first occurrence of "רוצים" is marked as removed
+      const tokenDiff = result.tokenDiff;
+      const rotzimTokens = tokenDiff.filter(token => token.text === 'רוצים');
+      
+      // Should have two occurrences: one removed, one unchanged
+      expect(rotzimTokens).toHaveLength(2);
+      expect(rotzimTokens[0].type).toBe('removed'); // First occurrence should be removed
+      expect(rotzimTokens[1].type).toBe('unchanged'); // Second occurrence should be unchanged
+
+      // Verify that deleted sentence words are marked as removed
+      const deletedWords = ['אנשים', 'צועקים', 'כל', 'העת', 'שהם', 'ליצור', 'עתיד', 'טוב', 'יותר.'];
+      deletedWords.forEach(word => {
+        const wordTokens = tokenDiff.filter(token => token.text === word);
+        expect(wordTokens.length).toBeGreaterThan(0);
+        expect(wordTokens[0].type).toBe('removed');
+      });
+    });
+
+    it('should handle complex Hebrew text differences', async () => {
+      // Arrange
+      const hebrewOriginal = 'שלום עולם! זה טקסט בעברית.';
+      const hebrewCurrent = 'שלום עולם! זה טקסט מתוקן בעברית.';
+      const hebrewParagraph = {
+        ...mockParagraph,
+        content: hebrewCurrent,
+        originalParagraph: {
+          content: hebrewOriginal
+        }
+      };
+      
+      const hebrewChanges = [
+        {
+          originalWord: 'טקסט',
+          correctedWord: 'טקסט מתוקן',
+          position: 2,
+          fixType: 'word_addition'
+        }
+      ];
+      
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(hebrewParagraph);
+      (textFixesService.analyzeTextChanges as jest.Mock).mockReturnValue(hebrewChanges);
+
+      // Act
+      const result = await service.getParagraphDiff(paragraphId);
+
+      // Assert
+      expect(textFixesService.analyzeTextChanges).toHaveBeenCalledWith(
+        hebrewOriginal,
+        hebrewCurrent
+      );
+
+      expect(result.changes).toEqual(hebrewChanges);
+      expect(result.originalContent).toBe(hebrewOriginal);
+      expect(result.currentContent).toBe(hebrewCurrent);
+    });
+
+    it('should handle multiple word changes in a single paragraph', async () => {
+      // Arrange
+      const multiChangeOriginal = 'The quick brown fox jumps over the lazy dog.';
+      const multiChangeCurrent = 'The fast red fox leaps over the sleepy cat.';
+      const multiChangeParagraph = {
+        ...mockParagraph,
+        content: multiChangeCurrent,
+        originalParagraph: {
+          content: multiChangeOriginal
+        }
+      };
+      
+      const multipleChanges = [
+        {
+          originalWord: 'quick',
+          correctedWord: 'fast',
+          position: 1,
+          fixType: 'word_replacement'
+        },
+        {
+          originalWord: 'brown',
+          correctedWord: 'red',
+          position: 2,
+          fixType: 'word_replacement'
+        },
+        {
+          originalWord: 'jumps',
+          correctedWord: 'leaps',
+          position: 4,
+          fixType: 'word_replacement'
+        },
+        {
+          originalWord: 'lazy',
+          correctedWord: 'sleepy',
+          position: 7,
+          fixType: 'word_replacement'
+        },
+        {
+          originalWord: 'dog',
+          correctedWord: 'cat',
+          position: 8,
+          fixType: 'word_replacement'
+        }
+      ];
+      
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(multiChangeParagraph);
+      (textFixesService.analyzeTextChanges as jest.Mock).mockReturnValue(multipleChanges);
+
+      // Act
+      const result = await service.getParagraphDiff(paragraphId);
+
+      // Assert
+      expect(result.changes).toHaveLength(5);
+      expect(result.changes).toEqual(multipleChanges);
+    });
+
+    it('should throw error when paragraph is not found', async () => {
+      // Arrange
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(null);
+
+      // Act & Assert
+      await expect(service.getParagraphDiff(paragraphId))
+        .rejects
+        .toThrow(`Paragraph not found with ID: ${paragraphId}`);
+
+      expect(prismaService.paragraph.findUnique).toHaveBeenCalledWith({
+        where: { id: paragraphId },
+        include: {
+          originalParagraph: {
+            select: {
+              content: true,
+            },
+          },
+        },
+      });
+
+      expect(textFixesService.analyzeTextChanges).not.toHaveBeenCalled();
+    });
+
+    it('should throw error when original content is not available', async () => {
+      // Arrange
+      const paragraphWithoutOriginal = {
+        ...mockParagraph,
+        originalParagraph: null
+      };
+      
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(paragraphWithoutOriginal);
+
+      // Act & Assert
+      await expect(service.getParagraphDiff(paragraphId))
+        .rejects
+        .toThrow(`No original content available for paragraph ${paragraphId}`);
+
+      expect(textFixesService.analyzeTextChanges).not.toHaveBeenCalled();
+    });
+
+    it('should throw error when original content is empty', async () => {
+      // Arrange
+      const paragraphWithEmptyOriginal = {
+        ...mockParagraph,
+        originalParagraph: {
+          content: null
+        }
+      };
+      
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(paragraphWithEmptyOriginal);
+
+      // Act & Assert
+      await expect(service.getParagraphDiff(paragraphId))
+        .rejects
+        .toThrow(`No original content available for paragraph ${paragraphId}`);
+
+      expect(textFixesService.analyzeTextChanges).not.toHaveBeenCalled();
+    });
+
+    it('should handle edge case with empty current content', async () => {
+      // Arrange
+      const paragraphWithEmptyContent = {
+        ...mockParagraph,
+        content: ''
+      };
+      
+      const deletionChanges = [
+        {
+          originalWord: 'This',
+          correctedWord: '',
+          position: 0,
+          fixType: 'word_deletion'
+        }
+      ];
+      
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(paragraphWithEmptyContent);
+      (textFixesService.analyzeTextChanges as jest.Mock).mockReturnValue(deletionChanges);
+
+      // Act
+      const result = await service.getParagraphDiff(paragraphId);
+
+      // Assert
+      expect(textFixesService.analyzeTextChanges).toHaveBeenCalledWith(
+        originalContent,
+        ''
+      );
+
+      expect(result.currentContent).toBe('');
+      expect(result.changes).toEqual(deletionChanges);
+    });
+
+    it('should generate accurate tokenDiff with proper token types', async () => {
+      // Arrange - Test specific token types in diff
+      const originalWithTypes = 'The quick brown fox jumps.';
+      const currentWithTypes = 'The fast red fox leaps gracefully.';
+      const paragraphWithTypes = {
+        ...mockParagraph,
+        content: currentWithTypes,
+        originalParagraph: {
+          content: originalWithTypes
+        }
+      };
+      
+      const typesChanges = [
+        {
+          originalWord: 'quick',
+          correctedWord: 'fast',
+          position: 1,
+          fixType: 'word_replacement'
+        },
+        {
+          originalWord: 'brown',
+          correctedWord: 'red',
+          position: 2,
+          fixType: 'word_replacement'
+        },
+        {
+          originalWord: 'jumps',
+          correctedWord: 'leaps',
+          position: 4,
+          fixType: 'word_replacement'
+        }
+      ];
+      
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(paragraphWithTypes);
+      (textFixesService.analyzeTextChanges as jest.Mock).mockReturnValue(typesChanges);
+
+      // Act
+      const result = await service.getParagraphDiff(paragraphId);
+
+      // Assert tokenDiff structure and types
+      expect(result.tokenDiff).toBeDefined();
+      expect(Array.isArray(result.tokenDiff)).toBe(true);
+      
+      // Check for different token types
+      const tokenTypes = result.tokenDiff.map(token => token.type);
+      expect(tokenTypes).toContain('unchanged'); // 'The', 'fox'
+      expect(tokenTypes).toContain('removed'); // 'quick', 'brown', 'jumps'
+      expect(tokenTypes).toContain('modified'); // 'fast', 'red', 'leaps'
+      expect(tokenTypes).toContain('added'); // 'gracefully'
+      
+      // Verify specific token properties
+      const unchangedTokens = result.tokenDiff.filter(t => t.type === 'unchanged');
+      expect(unchangedTokens.length).toBeGreaterThan(0);
+      unchangedTokens.forEach(token => {
+        expect(token).toHaveProperty('text');
+        expect(token).toHaveProperty('startPos');
+        expect(token).toHaveProperty('endPos');
+        expect(token.startPos).toBeLessThan(token.endPos);
+      });
+      
+      const modifiedTokens = result.tokenDiff.filter(t => t.type === 'modified');
+      modifiedTokens.forEach(token => {
+        expect(token).toHaveProperty('originalText');
+        expect(token).toHaveProperty('fixType');
+        expect(token).toHaveProperty('changeId');
+      });
+    });
+
+    it('should handle whitespace and punctuation correctly in tokenDiff', async () => {
+      // Arrange - Test whitespace handling
+      const originalWithSpaces = 'Hello,   world!   How are you?';
+      const currentWithSpaces = 'Hi, world! How are you doing?';
+      const paragraphWithSpaces = {
+        ...mockParagraph,
+        content: currentWithSpaces,
+        originalParagraph: {
+          content: originalWithSpaces
+        }
+      };
+      
+      const spacesChanges = [
+        {
+          originalWord: 'Hello,',
+          correctedWord: 'Hi,',
+          position: 0,
+          fixType: 'word_replacement'
+        }
+      ];
+      
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(paragraphWithSpaces);
+      (textFixesService.analyzeTextChanges as jest.Mock).mockReturnValue(spacesChanges);
+
+      // Act
+      const result = await service.getParagraphDiff(paragraphId);
+
+      // Assert whitespace preservation
+      const whitespaceTokens = result.tokenDiff.filter(token => /^\s+$/.test(token.text));
+      expect(whitespaceTokens.length).toBeGreaterThan(0);
+      
+      // Verify whitespace tokens have proper positions
+      whitespaceTokens.forEach(token => {
+        expect(token.startPos).toBeLessThan(token.endPos);
+        expect(token.endPos - token.startPos).toBe(token.text.length);
+      });
+    });
+
+    it('should handle edge content scenarios', async () => {
+      // Test scenario: content to empty (valid original content exists)
+      const contentToEmpty = {
+        original: 'Content to be removed',
+        current: '',
+        description: 'content to empty'
+      };
+      
+      const emptyCurrentParagraph = {
+        ...mockParagraph,
+        content: contentToEmpty.current,
+        originalParagraph: {
+          content: contentToEmpty.original
+        }
+      };
+      
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(emptyCurrentParagraph);
+      (textFixesService.analyzeTextChanges as jest.Mock).mockReturnValue([]);
+
+      // Act
+      const result = await service.getParagraphDiff(paragraphId);
+
+      // Assert
+      expect(result.tokenDiff).toBeDefined();
+      expect(Array.isArray(result.tokenDiff)).toBe(true);
+      expect(result.tokenDiff.length).toBeGreaterThan(0); // Should have removed tokens
+      
+      // Verify all tokens are marked as removed
+      const removedTokens = result.tokenDiff.filter(token => token.type === 'removed');
+      expect(removedTokens.length).toBeGreaterThan(0);
+    });
+
+    it('should throw error for missing original content', async () => {
+      // Test scenarios where original content is missing (should throw error)
+      const missingOriginalScenarios = [
+        {
+          originalParagraph: null,
+          description: 'no original paragraph'
+        },
+        {
+          originalParagraph: { content: null },
+          description: 'null original content'
+        },
+        {
+          originalParagraph: { content: '' },
+          description: 'empty original content'
+        }
+      ];
+      
+      for (const scenario of missingOriginalScenarios) {
+        const invalidParagraph = {
+          ...mockParagraph,
+          content: 'Some current content',
+          originalParagraph: scenario.originalParagraph
+        };
+        
+        (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(invalidParagraph);
+
+        // Act & Assert
+        await expect(service.getParagraphDiff(paragraphId))
+          .rejects
+          .toThrow(`No original content available for paragraph ${paragraphId}`);
+      }
+    });
+
+    it('should handle special characters and Unicode correctly', async () => {
+      // Arrange - Test Unicode and special characters
+      const originalUnicode = 'Café naïve résumé 🎉 emoji test ñ';
+      const currentUnicode = 'Coffee naive resume 🎊 emoji test n';
+      const unicodeParagraph = {
+        ...mockParagraph,
+        content: currentUnicode,
+        originalParagraph: {
+          content: originalUnicode
+        }
+      };
+      
+      const unicodeChanges = [
+        {
+          originalWord: 'Café',
+          correctedWord: 'Coffee',
+          position: 0,
+          fixType: 'word_replacement'
+        },
+        {
+          originalWord: 'naïve',
+          correctedWord: 'naive',
+          position: 1,
+          fixType: 'word_replacement'
+        }
+      ];
+      
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(unicodeParagraph);
+      (textFixesService.analyzeTextChanges as jest.Mock).mockReturnValue(unicodeChanges);
+
+      // Act
+      const result = await service.getParagraphDiff(paragraphId);
+
+      // Assert Unicode handling
+      expect(result.tokenDiff).toBeDefined();
+      const unicodeTokens = result.tokenDiff.filter(token => 
+        /[\u00C0-\u017F\u1E00-\u1EFF\u0100-\u024F\uD83C-\uDBFF\uDC00-\uDFFF]/u.test(token.text)
+      );
+      expect(unicodeTokens.length).toBeGreaterThan(0);
+      
+      // Verify position calculations are correct for Unicode
+      result.tokenDiff.forEach(token => {
+        expect(token.startPos).toBeLessThan(token.endPos);
+        expect(typeof token.startPos).toBe('number');
+        expect(typeof token.endPos).toBe('number');
+      });
+    });
+
+    it('should log appropriate messages during diff computation', async () => {
+      // Arrange
+      const loggerSpy = jest.spyOn(service['logger'], 'log');
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(mockParagraph);
+      (textFixesService.analyzeTextChanges as jest.Mock).mockReturnValue(mockWordChanges);
+
+      // Act
+      await service.getParagraphDiff(paragraphId);
+
+      // Assert
+      expect(loggerSpy).toHaveBeenCalledWith(
+        `Found ${mockWordChanges.length} changes between original and current content for paragraph ${paragraphId}`
+      );
+
+      loggerSpy.mockRestore();
+    });
+
+    it('should handle database errors gracefully', async () => {
+      // Arrange
+      const dbError = new Error('Database connection failed');
+      (prismaService.paragraph.findUnique as jest.Mock).mockRejectedValue(dbError);
+
+      // Act & Assert
+      await expect(service.getParagraphDiff(paragraphId))
+        .rejects
+        .toThrow('Database connection failed');
+    });
+
+    it('should handle textFixesService throwing an error', async () => {
+      // Arrange
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(mockParagraph);
+      (textFixesService.analyzeTextChanges as jest.Mock).mockImplementation(() => {
+        throw new Error('Text analysis failed');
+      });
+
+      // Act & Assert
+      await expect(service.getParagraphDiff(paragraphId))
+        .rejects
+        .toThrow('Text analysis failed');
+
+      expect(textFixesService.analyzeTextChanges).toHaveBeenCalledWith(
+        originalContent,
+        currentContent
+      );
     });
   });
 });

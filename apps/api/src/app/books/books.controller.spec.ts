@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { Logger, NotFoundException } from '@nestjs/common';
+import { Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { BooksController } from './books.controller';
 import { BooksService } from './books.service';
 import { BooksExportService } from './books-export.service';
@@ -22,6 +22,7 @@ describe('BooksController', () => {
   const mockBooksService = {
     getCompletedParagraphs: jest.fn(),
     revertParagraph: jest.fn(),
+    getParagraphDiff: jest.fn(),
     // Add other mock methods as needed
   };
 
@@ -871,6 +872,262 @@ describe('BooksController', () => {
       mockBooksService.revertParagraph.mockRejectedValue(serviceError);
 
       await expect(controller.revertParagraph(paragraphId, {})).rejects.toThrow('Database connection failed');
+    });
+  });
+
+  describe('getParagraphDiff', () => {
+    const paragraphId = 'test-paragraph-id';
+    const mockDiffResult = {
+      changes: [
+        {
+          originalWord: 'original',
+          correctedWord: 'modified',
+          position: 3,
+          fixType: 'word_replacement'
+        }
+      ],
+      originalContent: 'This is the original text from the book.',
+      currentContent: 'This is the modified text from the book.'
+    };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should successfully return diff data for a valid paragraph', async () => {
+      // Arrange
+      mockBooksService.getParagraphDiff.mockResolvedValue(mockDiffResult);
+
+      // Act
+      const result = await controller.getParagraphDiff(paragraphId);
+
+      // Assert
+      expect(mockBooksService.getParagraphDiff).toHaveBeenCalledWith(paragraphId);
+      expect(result).toEqual(mockDiffResult);
+    });
+
+    it('should return empty changes array when content is identical', async () => {
+      // Arrange
+      const noDiffResult = {
+        changes: [],
+        originalContent: 'Same content in both versions.',
+        currentContent: 'Same content in both versions.'
+      };
+      mockBooksService.getParagraphDiff.mockResolvedValue(noDiffResult);
+
+      // Act
+      const result = await controller.getParagraphDiff(paragraphId);
+
+      // Assert
+      expect(mockBooksService.getParagraphDiff).toHaveBeenCalledWith(paragraphId);
+      expect(result).toEqual(noDiffResult);
+      expect(result.changes).toHaveLength(0);
+    });
+
+    it('should handle Hebrew text differences correctly', async () => {
+      // Arrange
+      const hebrewDiffResult = {
+        changes: [
+          {
+            originalWord: 'טקסט',
+            correctedWord: 'טקסט מתוקן',
+            position: 2,
+            fixType: 'word_addition'
+          }
+        ],
+        originalContent: 'שלום עולם! זה טקסט בעברית.',
+        currentContent: 'שלום עולם! זה טקסט מתוקן בעברית.'
+      };
+      mockBooksService.getParagraphDiff.mockResolvedValue(hebrewDiffResult);
+
+      // Act
+      const result = await controller.getParagraphDiff(paragraphId);
+
+      // Assert
+      expect(mockBooksService.getParagraphDiff).toHaveBeenCalledWith(paragraphId);
+      expect(result).toEqual(hebrewDiffResult);
+      expect(result.changes[0].originalWord).toBe('טקסט');
+      expect(result.changes[0].correctedWord).toBe('טקסט מתוקן');
+    });
+
+    it('should handle multiple word changes in a single paragraph', async () => {
+      // Arrange
+      const multiChangeDiffResult = {
+        changes: [
+          {
+            originalWord: 'quick',
+            correctedWord: 'fast',
+            position: 1,
+            fixType: 'word_replacement'
+          },
+          {
+            originalWord: 'brown',
+            correctedWord: 'red',
+            position: 2,
+            fixType: 'word_replacement'
+          },
+          {
+            originalWord: 'dog',
+            correctedWord: 'cat',
+            position: 8,
+            fixType: 'word_replacement'
+          }
+        ],
+        originalContent: 'The quick brown fox jumps over the lazy dog.',
+        currentContent: 'The fast red fox jumps over the lazy cat.'
+      };
+      mockBooksService.getParagraphDiff.mockResolvedValue(multiChangeDiffResult);
+
+      // Act
+      const result = await controller.getParagraphDiff(paragraphId);
+
+      // Assert
+      expect(mockBooksService.getParagraphDiff).toHaveBeenCalledWith(paragraphId);
+      expect(result).toEqual(multiChangeDiffResult);
+      expect(result.changes).toHaveLength(3);
+    });
+
+    it('should throw NotFoundException when paragraph is not found', async () => {
+      // Arrange
+      const notFoundError = new Error('Paragraph not found with ID: test-paragraph-id');
+      mockBooksService.getParagraphDiff.mockRejectedValue(notFoundError);
+
+      // Act & Assert
+      await expect(controller.getParagraphDiff(paragraphId))
+        .rejects
+        .toThrow(NotFoundException);
+
+      expect(mockBooksService.getParagraphDiff).toHaveBeenCalledWith(paragraphId);
+    });
+
+    it('should throw BadRequestException when no original content is available', async () => {
+      // Arrange
+      const noOriginalError = new Error('No original content available for paragraph test-paragraph-id');
+      mockBooksService.getParagraphDiff.mockRejectedValue(noOriginalError);
+
+      // Act & Assert
+      await expect(controller.getParagraphDiff(paragraphId))
+        .rejects
+        .toThrow(BadRequestException);
+
+      expect(mockBooksService.getParagraphDiff).toHaveBeenCalledWith(paragraphId);
+    });
+
+    it('should handle service errors that do not match specific patterns', async () => {
+      // Arrange
+      const genericError = new Error('Database connection failed');
+      mockBooksService.getParagraphDiff.mockRejectedValue(genericError);
+
+      // Act & Assert
+      await expect(controller.getParagraphDiff(paragraphId))
+        .rejects
+        .toThrow('Database connection failed');
+
+      expect(mockBooksService.getParagraphDiff).toHaveBeenCalledWith(paragraphId);
+    });
+
+    it('should handle edge case with empty current content', async () => {
+      // Arrange
+      const emptyContentDiffResult = {
+        changes: [
+          {
+            originalWord: 'This',
+            correctedWord: '',
+            position: 0,
+            fixType: 'word_deletion'
+          }
+        ],
+        originalContent: 'This is some content.',
+        currentContent: ''
+      };
+      mockBooksService.getParagraphDiff.mockResolvedValue(emptyContentDiffResult);
+
+      // Act
+      const result = await controller.getParagraphDiff(paragraphId);
+
+      // Assert
+      expect(mockBooksService.getParagraphDiff).toHaveBeenCalledWith(paragraphId);
+      expect(result).toEqual(emptyContentDiffResult);
+      expect(result.currentContent).toBe('');
+      expect(result.changes[0].fixType).toBe('word_deletion');
+    });
+
+    it('should handle various fix types correctly', async () => {
+      // Arrange
+      const variousFixTypesDiffResult = {
+        changes: [
+          {
+            originalWord: 'שלום',
+            correctedWord: 'שָׁלוֹם',
+            position: 0,
+            fixType: 'vowelization'
+          },
+          {
+            originalWord: 'word',
+            correctedWord: 'words',
+            position: 2,
+            fixType: 'grammar'
+          },
+          {
+            originalWord: 'mispelled',
+            correctedWord: 'misspelled',
+            position: 4,
+            fixType: 'spelling'
+          }
+        ],
+        originalContent: 'שלום this word is mispelled.',
+        currentContent: 'שָׁלוֹם this words is misspelled.'
+      };
+      mockBooksService.getParagraphDiff.mockResolvedValue(variousFixTypesDiffResult);
+
+      // Act
+      const result = await controller.getParagraphDiff(paragraphId);
+
+      // Assert
+      expect(mockBooksService.getParagraphDiff).toHaveBeenCalledWith(paragraphId);
+      expect(result).toEqual(variousFixTypesDiffResult);
+      expect(result.changes).toHaveLength(3);
+      expect(result.changes[0].fixType).toBe('vowelization');
+      expect(result.changes[1].fixType).toBe('grammar');
+      expect(result.changes[2].fixType).toBe('spelling');
+    });
+
+    it('should handle very long paragraphs with many changes', async () => {
+      // Arrange
+      const longParagraphChanges = Array.from({ length: 50 }, (_, i) => ({
+        originalWord: `word${i}`,
+        correctedWord: `corrected${i}`,
+        position: i,
+        fixType: 'word_replacement'
+      }));
+      
+      const longDiffResult = {
+        changes: longParagraphChanges,
+        originalContent: 'Very long paragraph with many words...',
+        currentContent: 'Very long paragraph with many corrected words...'
+      };
+      mockBooksService.getParagraphDiff.mockResolvedValue(longDiffResult);
+
+      // Act
+      const result = await controller.getParagraphDiff(paragraphId);
+
+      // Assert
+      expect(mockBooksService.getParagraphDiff).toHaveBeenCalledWith(paragraphId);
+      expect(result).toEqual(longDiffResult);
+      expect(result.changes).toHaveLength(50);
+    });
+
+    it('should validate that paragraphId parameter is passed correctly', async () => {
+      // Arrange
+      const specificParagraphId = 'very-specific-paragraph-id-123';
+      mockBooksService.getParagraphDiff.mockResolvedValue(mockDiffResult);
+
+      // Act
+      await controller.getParagraphDiff(specificParagraphId);
+
+      // Assert
+      expect(mockBooksService.getParagraphDiff).toHaveBeenCalledWith(specificParagraphId);
+      expect(mockBooksService.getParagraphDiff).toHaveBeenCalledTimes(1);
     });
   });
 });

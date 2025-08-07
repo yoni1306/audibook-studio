@@ -1,7 +1,9 @@
+import React, { useState } from 'react';
 import type { Paragraph } from '@audibook/api-client';
 import { getApiUrl } from '../../utils/api';
 import { countWords, countCharacters, getTextDirection, getTextAlign } from '../../utils/text';
 import { formatParagraphNumber } from '../../utils/paragraphUtils';
+import ParagraphDiffView from './ParagraphDiffView';
 
 interface ParagraphComponentProps {
   paragraph: Paragraph;
@@ -32,6 +34,8 @@ export default function ParagraphComponent({
   onToggleCompleted,
   onRevertToOriginal,
 }: ParagraphComponentProps) {
+  const [showDiff, setShowDiff] = useState(false);
+
   const getAudioStatusIcon = (status: string) => {
     switch (status) {
       case 'READY':
@@ -310,6 +314,39 @@ export default function ParagraphComponent({
               ❌ Cancel
             </button>
             
+            {/* Show Diff Button - only show if original content exists and not editing */}
+            {(paragraph as any).originalContent && !isEditing && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowDiff(true);
+                }}
+                disabled={saving}
+                className="button button-secondary"
+                style={{
+                  cursor: saving ? 'not-allowed' : 'pointer',
+                  minWidth: '120px',
+                  height: '44px',
+                  fontSize: 'var(--font-size-sm)',
+                  fontWeight: '600',
+                  color: 'var(--color-blue-700)',
+                  backgroundColor: 'var(--color-blue-50)',
+                  border: '1px solid var(--color-blue-300)',
+                  borderRadius: 'var(--radius-md)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 'var(--spacing-2)',
+                  transition: 'all 0.2s ease',
+                  opacity: saving ? 0.7 : 1,
+                  boxShadow: saving ? 'none' : '0 2px 4px rgba(0, 0, 0, 0.1)',
+                }}
+                title="Show differences between current and original content"
+              >
+                📝 Show Diff
+              </button>
+            )}
+            
             {/* Revert to Original Button - only show if original content exists and is different */}
             {(paragraph as any).originalContent && (paragraph as any).originalContent !== editContent && (
               <button
@@ -371,13 +408,57 @@ export default function ParagraphComponent({
             )}
           </div>
           
-          {/* Revert to Original Button - show for modified paragraphs */}
+          {/* Diff and Revert Buttons - show for modified paragraphs */}
           {(paragraph as any).originalContent && (paragraph as any).originalContent !== paragraph.content && (
             <div style={{ 
               marginTop: 'var(--spacing-3)',
               display: 'flex',
-              justifyContent: 'flex-end'
+              justifyContent: 'flex-end',
+              gap: 'var(--spacing-2)'
             }}>
+              {/* Show Diff Button - only show when not editing */}
+              {!isEditing && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowDiff(true);
+                  }}
+                disabled={saving}
+                style={{
+                  cursor: saving ? 'not-allowed' : 'pointer',
+                  padding: 'var(--spacing-2) var(--spacing-3)',
+                  fontSize: 'var(--font-size-sm)',
+                  fontWeight: '600',
+                  color: 'var(--color-blue-700)',
+                  backgroundColor: 'var(--color-blue-50)',
+                  border: '1px solid var(--color-blue-300)',
+                  borderRadius: 'var(--radius-md)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--spacing-2)',
+                  transition: 'all 0.2s ease',
+                  opacity: saving ? 0.7 : 1,
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+                }}
+                onMouseEnter={(e) => {
+                  if (!saving) {
+                    e.currentTarget.style.backgroundColor = 'var(--color-blue-100)';
+                    e.currentTarget.style.borderColor = 'var(--color-blue-400)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!saving) {
+                    e.currentTarget.style.backgroundColor = 'var(--color-blue-50)';
+                    e.currentTarget.style.borderColor = 'var(--color-blue-300)';
+                  }
+                }}
+                title="Show differences between current and original content"
+                >
+                  📝 Show Diff
+                </button>
+              )}
+              
+              {/* Revert Button */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -625,6 +706,14 @@ export default function ParagraphComponent({
             )}
           </div>
         </>
+      )}
+      
+      {/* Diff Modal */}
+      {showDiff && (paragraph as any).originalContent && (
+        <ParagraphDiffView
+          paragraphId={paragraph.id}
+          onClose={() => setShowDiff(false)}
+        />
       )}
     </div>
   );
