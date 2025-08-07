@@ -212,6 +212,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/books/paragraphs/{paragraphId}/diff': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get paragraph diff
+     * @description Get the differences between current paragraph content and original content
+     */
+    get: operations['BooksController_getParagraphDiff'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/books/bulk-fixes': {
     parameters: {
       query?: never;
@@ -1638,6 +1658,38 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['UpdateParagraphResponseDto'];
+        };
+      };
+    };
+  };
+  BooksController_getParagraphDiff: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Paragraph ID */
+        paragraphId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Paragraph diff retrieved successfully */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            changes?: {
+              originalWord?: string;
+              correctedWord?: string;
+              position?: number;
+              fixType?: string;
+            }[];
+            originalContent?: string;
+            currentContent?: string;
+          };
         };
       };
     };

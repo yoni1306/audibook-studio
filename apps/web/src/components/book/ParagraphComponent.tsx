@@ -60,7 +60,12 @@ export default function ParagraphComponent({
     const audioGenerated = new Date(paragraph.audioGeneratedAt);
     const lastUpdated = new Date(paragraph.updatedAt);
     
-    return lastUpdated > audioGenerated;
+    // Add a 5-second tolerance window to account for timing issues
+    // when text update and audio generation happen as part of the same operation
+    const toleranceMs = 5 * 1000; // 5 seconds
+    const timeDifference = lastUpdated.getTime() - audioGenerated.getTime();
+    
+    return timeDifference > toleranceMs;
   };
 
   return (
@@ -314,8 +319,8 @@ export default function ParagraphComponent({
               ❌ Cancel
             </button>
             
-            {/* Show Diff Button - only show if original content exists and not editing */}
-            {(paragraph as any).originalContent && !isEditing && (
+            {/* Show Diff Button - TEMPORARILY HIDDEN DUE TO BUGGY BEHAVIOR */}
+            {/* {(paragraph as any).originalContent && !isEditing && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -345,10 +350,10 @@ export default function ParagraphComponent({
               >
                 📝 Show Diff
               </button>
-            )}
+            )} */}
             
-            {/* Revert to Original Button - only show if original content exists and is different */}
-            {(paragraph as any).originalContent && (paragraph as any).originalContent !== editContent && (
+            {/* Revert to Original Button - TEMPORARILY HIDDEN DUE TO BUGGY BEHAVIOR */}
+            {/* {(paragraph as any).originalContent && (paragraph as any).originalContent !== editContent && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -378,7 +383,7 @@ export default function ParagraphComponent({
               >
                 ↩️ Revert to Original
               </button>
-            )}
+            )} */}
           </div>
         </div>
       ) : (
@@ -416,8 +421,8 @@ export default function ParagraphComponent({
               justifyContent: 'flex-end',
               gap: 'var(--spacing-2)'
             }}>
-              {/* Show Diff Button - only show when not editing */}
-              {!isEditing && (
+              {/* Show Diff Button - TEMPORARILY HIDDEN DUE TO BUGGY BEHAVIOR */}
+              {/* {!isEditing && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -456,10 +461,10 @@ export default function ParagraphComponent({
                 >
                   📝 Show Diff
                 </button>
-              )}
+              )} */}
               
-              {/* Revert Button */}
-              <button
+              {/* Revert Button - TEMPORARILY HIDDEN DUE TO BUGGY BEHAVIOR */}
+              {/* <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onRevertToOriginal(paragraph.id, false);
@@ -496,7 +501,7 @@ export default function ParagraphComponent({
                 title="Revert to original content from the source book"
               >
                 ↩️ Revert to Original
-              </button>
+              </button> */}
             </div>
           )}
           
