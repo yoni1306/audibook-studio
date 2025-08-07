@@ -106,23 +106,23 @@ export default function ErrorModal({
               <button
                 onClick={onRetry}
                 style={{
-                  backgroundColor: 'var(--color-blue-600)',
+                  backgroundColor: '#2563eb',
                   color: 'white',
                   border: 'none',
-                  borderRadius: 'var(--radius-md)',
-                  padding: 'var(--spacing-3) var(--spacing-6)',
-                  fontSize: 'var(--font-size-sm)',
+                  borderRadius: '8px',
+                  padding: '12px 24px',
+                  fontSize: '14px',
                   fontWeight: '600',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease',
                   minWidth: '120px'
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--color-blue-700)';
+                  e.currentTarget.style.backgroundColor = '#1d4ed8';
                   e.currentTarget.style.transform = 'translateY(-1px)';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--color-blue-600)';
+                  e.currentTarget.style.backgroundColor = '#2563eb';
                   e.currentTarget.style.transform = 'translateY(0)';
                 }}
               >

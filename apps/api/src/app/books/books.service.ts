@@ -287,13 +287,24 @@ export class BooksService {
   async getParagraphDiff(paragraphId: string) {
     this.logger.log(`Getting diff for paragraph ${paragraphId}`);
 
-    // Fetch the paragraph with original content
+    // Fetch the paragraph with original content and additional debug info
     const paragraph = await this.prisma.paragraph.findUnique({
       where: { id: paragraphId },
-      include: {
+      select: {
+        id: true,
+        content: true,
+        orderIndex: true,
+        originalParagraphId: true,
         originalParagraph: {
           select: {
+            id: true,
             content: true,
+          },
+        },
+        page: {
+          select: {
+            id: true,
+            pageNumber: true,
           },
         },
       },
@@ -307,8 +318,28 @@ export class BooksService {
       throw new Error(`No original content available for paragraph ${paragraphId}`);
     }
 
+    // Debug logging to help identify paragraph drift issues
     const originalContent = paragraph.originalParagraph.content;
     const currentContent = paragraph.content;
+    
+    this.logger.log(`[DEBUG] Paragraph ${paragraphId} details:`);
+    this.logger.log(`[DEBUG] - Page: ${paragraph.page?.pageNumber || 'unknown'} (ID: ${paragraph.page?.id || 'unknown'})`);
+    this.logger.log(`[DEBUG] - Order Index: ${paragraph.orderIndex}`);
+    this.logger.log(`[DEBUG] - Original Paragraph ID: ${paragraph.originalParagraph.id}`);
+    this.logger.log(`[DEBUG] - Current content preview: "${currentContent.substring(0, 100)}${currentContent.length > 100 ? '...' : ''}"`);
+    this.logger.log(`[DEBUG] - Original content preview: "${originalContent.substring(0, 100)}${originalContent.length > 100 ? '...' : ''}"`);
+    this.logger.log(`[DEBUG] - Content lengths: current=${currentContent.length}, original=${originalContent.length}`);
+
+    // Check if content is identical - no need for diff computation
+    if (originalContent === currentContent) {
+      this.logger.log(`Content is identical for paragraph ${paragraphId}, returning empty diff`);
+      return {
+        changes: [],
+        originalContent,
+        currentContent,
+        tokenDiff: [], // No changes when content is identical
+      };
+    }
 
     // Use the existing text analysis service to compute the diff
     const changes = this.textFixesService.analyzeTextChanges(originalContent, currentContent);

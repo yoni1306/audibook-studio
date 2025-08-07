@@ -2038,10 +2038,21 @@ describe('BooksService', () => {
       // Assert
       expect(prismaService.paragraph.findUnique).toHaveBeenCalledWith({
         where: { id: paragraphId },
-        include: {
+        select: {
+          id: true,
+          content: true,
+          orderIndex: true,
+          originalParagraphId: true,
           originalParagraph: {
             select: {
+              id: true,
               content: true,
+            },
+          },
+          page: {
+            select: {
+              id: true,
+              pageNumber: true,
             },
           },
         },
@@ -2072,22 +2083,19 @@ describe('BooksService', () => {
       };
       
       (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(paragraphWithSameContent);
-      (textFixesService.analyzeTextChanges as jest.Mock).mockReturnValue([]);
+      // Note: We don't mock textFixesService.analyzeTextChanges because it shouldn't be called
 
       // Act
       const result = await service.getParagraphDiff(paragraphId);
 
-      // Assert
-      expect(textFixesService.analyzeTextChanges).toHaveBeenCalledWith(
-        identicalContent,
-        identicalContent
-      );
+      // Assert - textFixesService should NOT be called for identical content (optimization)
+      expect(textFixesService.analyzeTextChanges).not.toHaveBeenCalled();
 
       expect(result).toEqual({
         changes: [],
         originalContent: identicalContent,
         currentContent: identicalContent,
-        tokenDiff: expect.any(Array), // New tokenDiff field
+        tokenDiff: [], // Empty array for identical content
       });
     });
 
@@ -2240,10 +2248,21 @@ describe('BooksService', () => {
 
       expect(prismaService.paragraph.findUnique).toHaveBeenCalledWith({
         where: { id: paragraphId },
-        include: {
+        select: {
+          id: true,
+          content: true,
+          orderIndex: true,
+          originalParagraphId: true,
           originalParagraph: {
             select: {
+              id: true,
               content: true,
+            },
+          },
+          page: {
+            select: {
+              id: true,
+              pageNumber: true,
             },
           },
         },
@@ -2554,6 +2573,33 @@ describe('BooksService', () => {
       );
 
       loggerSpy.mockRestore();
+    });
+
+    it('should return empty diff when content is identical', async () => {
+      // Arrange - Test scenario after revert where content is identical
+      const identicalContent = 'This content is exactly the same in both original and current.';
+      const identicalParagraph = {
+        ...mockParagraph,
+        content: identicalContent,
+        originalParagraph: {
+          content: identicalContent
+        }
+      };
+      
+      (prismaService.paragraph.findUnique as jest.Mock).mockResolvedValue(identicalParagraph);
+      // Note: We don't need to mock textFixesService.analyzeTextChanges because it shouldn't be called
+
+      // Act
+      const result = await service.getParagraphDiff(paragraphId);
+
+      // Assert
+      expect(result.changes).toEqual([]);
+      expect(result.tokenDiff).toEqual([]);
+      expect(result.originalContent).toBe(identicalContent);
+      expect(result.currentContent).toBe(identicalContent);
+      
+      // Verify that textFixesService.analyzeTextChanges was NOT called for identical content
+      expect(textFixesService.analyzeTextChanges).not.toHaveBeenCalled();
     });
 
     it('should handle database errors gracefully', async () => {

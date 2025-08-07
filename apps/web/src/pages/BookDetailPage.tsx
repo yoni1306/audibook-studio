@@ -266,7 +266,16 @@ export default function BookDetailPage() {
           'Error Saving Changes',
           'An unexpected error occurred while saving your changes. Please try again.',
           true,
-          () => saveEdit(paragraphId)
+          async () => {
+            try {
+              await saveEdit(paragraphId);
+              // Close the error modal on successful retry
+              setShowErrorModal(false);
+            } catch (retryError) {
+              // If retry fails, the error will be handled by saveEdit's own error handling
+              logger.error('Retry failed:', retryError);
+            }
+          }
         );
       }
     } finally {
@@ -474,7 +483,16 @@ export default function BookDetailPage() {
           'Error Saving and Generating Audio',
           'An unexpected error occurred while saving your changes and generating audio. Please try again.',
           true,
-          () => saveAndGenerateAudio(paragraphId)
+          async () => {
+            try {
+              await saveAndGenerateAudio(paragraphId);
+              // Close the error modal on successful retry
+              setShowErrorModal(false);
+            } catch (retryError) {
+              // If retry fails, the error will be handled by saveAndGenerateAudio's own error handling
+              logger.error('Retry failed:', retryError);
+            }
+          }
         );
         
         // If there was an error, revert the status back
