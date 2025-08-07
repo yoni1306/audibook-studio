@@ -60,12 +60,17 @@ export default function ParagraphComponent({
     const audioGenerated = new Date(paragraph.audioGeneratedAt);
     const lastUpdated = new Date(paragraph.updatedAt);
     
-    // Add a 5-second tolerance window to account for timing issues
-    // when text update and audio generation happen as part of the same operation
-    const toleranceMs = 5 * 1000; // 5 seconds
-    const timeDifference = lastUpdated.getTime() - audioGenerated.getTime();
+    // Calculate time difference in seconds
+    const timeDifferenceSeconds = Math.abs(lastUpdated.getTime() - audioGenerated.getTime()) / 1000;
     
-    return timeDifference > toleranceMs;
+    // If timestamps are very close (within 15 seconds), they're likely part of the same operation
+    // This handles "Save & Generate Audio" and manual edit + immediate generation
+    if (timeDifferenceSeconds <= 15) {
+      return false; // Consider them in sync
+    }
+    
+    // Only show warning if text was modified significantly after audio generation
+    return lastUpdated > audioGenerated;
   };
 
   return (
