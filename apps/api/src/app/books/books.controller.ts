@@ -346,6 +346,49 @@ export class BooksController {
     }
   }
 
+  @Get('paragraphs/:paragraphId/diff')
+  @ApiOperation({ summary: 'Get paragraph diff', description: 'Get the differences between current paragraph content and original content' })
+  @ApiParam({ name: 'paragraphId', description: 'Paragraph ID' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Paragraph diff retrieved successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        changes: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              originalWord: { type: 'string' },
+              correctedWord: { type: 'string' },
+              position: { type: 'number' },
+              fixType: { type: 'string' }
+            }
+          }
+        },
+        originalContent: { type: 'string' },
+        currentContent: { type: 'string' }
+      }
+    }
+  })
+  async getParagraphDiff(
+    @Param('paragraphId') paragraphId: string
+  ) {
+    try {
+      const result = await this.booksService.getParagraphDiff(paragraphId);
+      return result;
+    } catch (error) {
+      if (error.message.includes('not found')) {
+        throw new NotFoundException(error.message);
+      }
+      if (error.message.includes('No original content')) {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
+    }
+  }
+
   // New endpoint for applying bulk fixes
   @Post('bulk-fixes')
   @ApiOperation({ summary: 'Apply bulk text fixes', description: 'Apply multiple text fixes to a book' })

@@ -7,6 +7,17 @@ import { UpdateParagraphResponseDto, BulkFixSuggestion as BulkFixSuggestionDto }
 import { S3Service } from '../s3/s3.service';
 import { BulkTextFixesService, BulkFixSuggestion as ServiceBulkFixSuggestion } from './bulk-text-fixes.service';
 
+// Token diff interfaces for precise frontend rendering
+interface TokenDiffItem {
+  type: 'added' | 'modified' | 'removed' | 'unchanged';
+  text: string;
+  startPos: number;
+  endPos: number;
+  originalText?: string;
+  fixType?: string;
+  changeId?: string;
+}
+
 @Injectable()
 export class BooksService {
   private readonly logger = new Logger(BooksService.name);
@@ -271,6 +282,174 @@ export class BooksService {
       textFixes: [], // Empty array since we just deleted all corrections
       bulkSuggestions: [], // No bulk suggestions for reverts
     } as UpdateParagraphResponseDto;
+  }
+
+  async getParagraphDiff(paragraphId: string) {
+    this.logger.log(`Getting diff for paragraph ${paragraphId}`);
+
+    // Fetch the paragraph with original content
+    const paragraph = await this.prisma.paragraph.findUnique({
+      where: { id: paragraphId },
+      include: {
+        originalParagraph: {
+          select: {
+            content: true,
+          },
+        },
+      },
+    });
+
+    if (!paragraph) {
+      throw new Error(`Paragraph not found with ID: ${paragraphId}`);
+    }
+
+    if (!paragraph.originalParagraph?.content) {
+      throw new Error(`No original content available for paragraph ${paragraphId}`);
+    }
+
+    const originalContent = paragraph.originalParagraph.content;
+    const currentContent = paragraph.content;
+
+    // Use the existing text analysis service to compute the diff
+    const changes = this.textFixesService.analyzeTextChanges(originalContent, currentContent);
+
+    // Generate token-level diff information for accurate frontend rendering
+    const tokenDiff = this.generateTokenDiff(originalContent, currentContent);
+
+    this.logger.log(`Found ${changes.length} changes between original and current content for paragraph ${paragraphId}`);
+
+    return {
+      changes,
+      originalContent,
+      currentContent,
+      tokenDiff, // New: precise token-level diff for frontend rendering
+    };
+  }
+
+  /**
+   * Generate token-level diff information for precise frontend rendering
+   * Uses Myers algorithm to properly handle duplicate words and complex changes
+   */
+  private generateTokenDiff(originalContent: string, currentContent: string): TokenDiffItem[] {
+    // Use the robust Myers algorithm from TextFixesService to get accurate word-level diff
+    const wordLevelChanges = this.textFixesService.analyzeTextChanges(originalContent, currentContent);
+    
+    // Split both contents into tokens (words + whitespace)
+    const originalTokens = originalContent.split(/(\s+)/);
+    const currentTokens = currentContent.split(/(\s+)/);
+    
+    // Create maps for quick lookup of changes
+    const changesByOriginal = new Map<string, WordChange>();
+    const changesByCorrected = new Map<string, WordChange>();
+    
+    wordLevelChanges.forEach(change => {
+      changesByOriginal.set(change.originalWord, change);
+      changesByCorrected.set(change.correctedWord, change);
+    });
+
+    // Use Myers diff algorithm on token arrays to get precise diff
+    const diff = require('diff');
+    const tokenDiffs = diff.diffArrays(originalTokens, currentTokens);
+    
+    const result: TokenDiffItem[] = [];
+    let charPosition = 0;
+    
+    // Process each diff part
+    for (const part of tokenDiffs) {
+      if (!part.added && !part.removed) {
+        // Unchanged tokens
+        for (const token of part.value || []) {
+          result.push({
+            type: 'unchanged',
+            text: token,
+            startPos: charPosition,
+            endPos: charPosition + token.length,
+          });
+          charPosition += token.length;
+        }
+      } else if (part.removed) {
+        // Removed tokens
+        for (const token of part.value || []) {
+          const isWhitespace = /^\s+$/.test(token);
+          if (!isWhitespace) {
+            // Check if this is part of a modification
+            const change = changesByOriginal.get(token);
+            if (change) {
+              result.push({
+                type: 'removed',
+                text: token,
+                startPos: charPosition,
+                endPos: charPosition + token.length,
+                fixType: 'deletion',
+                changeId: `removed-${token}`,
+              });
+            } else {
+              result.push({
+                type: 'removed',
+                text: token,
+                startPos: charPosition,
+                endPos: charPosition + token.length,
+                fixType: 'deletion',
+                changeId: `removed-${token}`,
+              });
+            }
+          } else {
+            // Removed whitespace
+            result.push({
+              type: 'removed',
+              text: token,
+              startPos: charPosition,
+              endPos: charPosition + token.length,
+              fixType: 'deletion',
+              changeId: `removed-whitespace`,
+            });
+          }
+          charPosition += token.length;
+        }
+      } else if (part.added) {
+        // Added tokens
+        for (const token of part.value || []) {
+          const isWhitespace = /^\s+$/.test(token);
+          if (!isWhitespace) {
+            // Check if this is part of a modification
+            const change = changesByCorrected.get(token);
+            if (change) {
+              result.push({
+                type: 'modified',
+                text: token,
+                startPos: charPosition,
+                endPos: charPosition + token.length,
+                originalText: change.originalWord,
+                fixType: change.fixType,
+                changeId: `${change.originalWord}->${token}`,
+              });
+            } else {
+              result.push({
+                type: 'added',
+                text: token,
+                startPos: charPosition,
+                endPos: charPosition + token.length,
+                fixType: 'addition',
+                changeId: `added-${token}`,
+              });
+            }
+          } else {
+            // Added whitespace
+            result.push({
+              type: 'added',
+              text: token,
+              startPos: charPosition,
+              endPos: charPosition + token.length,
+              fixType: 'addition',
+              changeId: `added-whitespace`,
+            });
+          }
+          charPosition += token.length;
+        }
+      }
+    }
+    
+    return result;
   }
 
   async getBook(id: string, completedFilter?: 'all' | 'completed' | 'incomplete') {
