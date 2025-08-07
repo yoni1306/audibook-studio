@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApiClient } from '../../../hooks/useApiClient';
 import { formatParagraphNumber } from '../../utils/paragraphUtils';
 import { BulkFixSuggestion } from '@audibook/api-client';
@@ -6,6 +6,95 @@ import { createLogger } from '../../utils/logger';
 import ErrorModal from '../ui/ErrorModal';
 
 const logger = createLogger('BulkFixModal');
+
+// Helper function to highlight words in text
+const highlightWordsInText = (text: string, originalWord: string, correctedWord: string, isAfterText: boolean) => {
+  const wordToHighlight = isAfterText ? correctedWord : originalWord;
+  const highlightColor = '#b45309'; // Yellow-600 equivalent
+  const backgroundColor = '#fef3c7'; // Yellow-100 equivalent
+  
+  console.log('Highlighting:', { 
+    textLength: text.length, 
+    text: text.substring(0, 200), 
+    wordToHighlight, 
+    originalWord, 
+    correctedWord, 
+    isAfterText,
+    textContainsWord: text.includes(wordToHighlight)
+  });
+  
+  // Create a case-insensitive regex to find the word
+  const regex = new RegExp(`\\b${wordToHighlight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+  
+  const parts = text.split(regex);
+  const matches = text.match(regex) || [];
+  
+  console.log('Regex matches:', { regex: regex.toString(), matches, parts });
+  
+  // If no matches with word boundaries, try without word boundaries for Hebrew text
+  if (matches.length === 0 && /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(wordToHighlight)) {
+    console.log('Trying Hebrew fallback without word boundaries');
+    const simpleRegex = new RegExp(wordToHighlight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    const simpleParts = text.split(simpleRegex);
+    const simpleMatches = text.match(simpleRegex) || [];
+    
+    console.log('Hebrew fallback matches:', { simpleMatches, simpleParts });
+    
+    if (simpleMatches.length > 0) {
+      const result: (string | React.ReactNode)[] = [];
+      for (let i = 0; i < simpleParts.length; i++) {
+        if (simpleParts[i]) {
+          result.push(simpleParts[i]);
+        }
+        if (i < simpleMatches.length) {
+          result.push(
+            <span
+              key={`highlight-${i}`}
+              style={{
+                backgroundColor,
+                color: highlightColor,
+                fontWeight: '600',
+                padding: '1px 3px',
+                borderRadius: '3px',
+                border: `1px solid ${highlightColor}30`
+              }}
+            >
+              {simpleMatches[i]}
+            </span>
+          );
+        }
+      }
+      return result;
+    }
+  }
+  
+  const result: (string | React.ReactNode)[] = [];
+  
+  for (let i = 0; i < parts.length; i++) {
+    if (parts[i]) {
+      result.push(parts[i]);
+    }
+    if (i < matches.length) {
+      result.push(
+        <span
+          key={`highlight-${i}`}
+          style={{
+            backgroundColor,
+            color: highlightColor,
+            fontWeight: '600',
+            padding: '1px 3px',
+            borderRadius: '3px',
+            border: `1px solid ${highlightColor}30`
+          }}
+        >
+          {matches[i]}
+        </span>
+      );
+    }
+  }
+  
+  return result;
+};
 
 interface BulkFixModalProps {
   onClose: () => void;
@@ -416,8 +505,8 @@ export default function BulkFixModal({
                                           fontWeight: '500'
                                         }}>After:</div>
                                         <div style={{
-                                          backgroundColor: 'var(--color-green-50)',
-                                          border: '1px solid var(--color-green-200)',
+                                          backgroundColor: 'white',
+                                          border: '2px solid rgba(34, 197, 94, 0.4)', // green-500 with 40% opacity
                                           borderRadius: 'var(--radius-md)',
                                           padding: 'var(--spacing-3)',
                                           color: 'var(--color-gray-700)',
@@ -427,15 +516,13 @@ export default function BulkFixModal({
                                           fontSize: 'var(--font-size-sm)',
                                           lineHeight: '1.5'
                                         }}>
-                                          {paragraph.previewAfter.split('.').map((sentence: string, idx: number) => (
-                                            <div key={idx} style={{
-                                              padding: '2px 0',
-                                              direction: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'rtl' : 'ltr',
-                                              textAlign: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'right' : 'left'
-                                            }}>
-                                              {sentence.trim() + (idx < paragraph.previewAfter.split('.').length - 1 ? '.' : '')}
-                                            </div>
-                                          ))}
+                                          <div style={{
+                                            padding: '2px 0',
+                                            direction: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(paragraph.previewAfter) ? 'rtl' : 'ltr',
+                                            textAlign: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(paragraph.previewAfter) ? 'right' : 'left'
+                                          }}>
+                                            {highlightWordsInText(paragraph.previewAfter, suggestion.originalWord, suggestion.correctedWord, true)}
+                                          </div>
                                         </div>
                                       </div>
                                       <div>
@@ -446,8 +533,8 @@ export default function BulkFixModal({
                                           fontWeight: '500'
                                         }}>Before:</div>
                                         <div style={{
-                                          backgroundColor: 'var(--color-red-50)',
-                                          border: '1px solid var(--color-red-200)',
+                                          backgroundColor: 'white',
+                                          border: '2px solid rgba(239, 68, 68, 0.4)', // red-500 with 40% opacity
                                           borderRadius: 'var(--radius-md)',
                                           padding: 'var(--spacing-3)',
                                           color: 'var(--color-gray-700)',
@@ -457,15 +544,13 @@ export default function BulkFixModal({
                                           fontSize: 'var(--font-size-sm)',
                                           lineHeight: '1.5'
                                         }}>
-                                          {paragraph.previewBefore.split('.').map((sentence: string, idx: number) => (
-                                            <div key={idx} style={{
-                                              padding: '2px 0',
-                                              direction: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'rtl' : 'ltr',
-                                              textAlign: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(sentence) ? 'right' : 'left'
-                                            }}>
-                                              {sentence.trim() + (idx < paragraph.previewBefore.split('.').length - 1 ? '.' : '')}
-                                            </div>
-                                          ))}
+                                          <div style={{
+                                            padding: '2px 0',
+                                            direction: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(paragraph.previewBefore) ? 'rtl' : 'ltr',
+                                            textAlign: /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(paragraph.previewBefore) ? 'right' : 'left'
+                                          }}>
+                                            {highlightWordsInText(paragraph.previewBefore, suggestion.originalWord, suggestion.correctedWord, false)}
+                                          </div>
                                         </div>
                                       </div>
                                     </div>
