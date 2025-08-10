@@ -42,6 +42,7 @@ export default function BookDetailPage() {
   const [errorMessage, setErrorMessage] = useState({ title: '', message: '', showRetry: false, onRetry: undefined as (() => void) | undefined });
   const [showRevertConfirmModal, setShowRevertConfirmModal] = useState(false);
   const [pendingRevert, setPendingRevert] = useState<{ paragraphId: string; generateAudio: boolean } | null>(null);
+  const [showCelebration, setShowCelebration] = useState(false);
 
   const isInitialLoad = useRef(true);
 
@@ -89,6 +90,26 @@ export default function BookDetailPage() {
     
     return paragraphs;
   }, [book, completedFilter, pageNumberFilter]);
+
+  // Handle celebration animation
+  useEffect(() => {
+    if (filteredParagraphs.length > 0) {
+      const completedCount = filteredParagraphs.filter(p => p.completed).length;
+      const allCompleted = completedCount === filteredParagraphs.length;
+      
+      if (allCompleted && !showCelebration) {
+        setShowCelebration(true);
+        // Hide celebration after 5 seconds
+        const timer = setTimeout(() => {
+          setShowCelebration(false);
+        }, 5000);
+        
+        return () => clearTimeout(timer);
+      } else if (!allCompleted && showCelebration) {
+        setShowCelebration(false);
+      }
+    }
+  }, [filteredParagraphs, showCelebration]);
 
   // Add correlation ID generator for frontend
   function generateCorrelationId() {
@@ -901,6 +922,111 @@ export default function BookDetailPage() {
 
   return (
     <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+      {/* CSS Animations for celebration */}
+      <style>
+        {`
+          @keyframes confetti-1 {
+            0% { transform: translateY(0px) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(-20px) rotate(180deg); opacity: 0; }
+          }
+          @keyframes confetti-2 {
+            0% { transform: translateY(0px) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(-25px) rotate(-180deg); opacity: 0; }
+          }
+          @keyframes confetti-3 {
+            0% { transform: translateY(0px) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(-18px) rotate(270deg); opacity: 0; }
+          }
+          @keyframes confetti-4 {
+            0% { transform: translateY(0px) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(-22px) rotate(-270deg); opacity: 0; }
+          }
+          @keyframes confetti-5 {
+            0% { transform: translateY(0px) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(-24px) rotate(360deg); opacity: 0; }
+          }
+          @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.05); }
+          }
+          @keyframes celebrate {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+          }
+          
+          /* REAL CONFETTI ANIMATIONS */
+          @keyframes real-confetti-1 {
+            0% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) translateX(200px) rotate(720deg); opacity: 0; }
+          }
+          @keyframes real-confetti-2 {
+            0% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) translateX(-150px) rotate(-540deg); opacity: 0; }
+          }
+          @keyframes real-confetti-3 {
+            0% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) translateX(100px) rotate(900deg); opacity: 0; }
+          }
+          @keyframes real-confetti-4 {
+            0% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) translateX(-200px) rotate(-720deg); opacity: 0; }
+          }
+          @keyframes real-confetti-5 {
+            0% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) translateX(50px) rotate(1080deg); opacity: 0; }
+          }
+          @keyframes real-confetti-6 {
+            0% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) translateX(-100px) rotate(-900deg); opacity: 0; }
+          }
+          
+          /* FIREWORK ANIMATIONS */
+          @keyframes firework-burst {
+            0% { transform: scale(0); opacity: 1; }
+            50% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(1.5); opacity: 0; }
+          }
+          
+          @keyframes firework-particle {
+            0% { opacity: 1; transform: scale(1); }
+            100% { opacity: 0; transform: scale(0); }
+          }
+          
+          @keyframes bounce-big {
+            0%, 20%, 50%, 80%, 100% { transform: translateY(0) scale(1); }
+            40% { transform: translateY(-30px) scale(1.1); }
+            60% { transform: translateY(-15px) scale(1.05); }
+          }
+          
+          @keyframes rainbow-text {
+            0% { color: #ff6b6b; }
+            16% { color: #ffa500; }
+            33% { color: #ffff00; }
+            50% { color: #00ff00; }
+            66% { color: #00bfff; }
+            83% { color: #8a2be2; }
+            100% { color: #ff6b6b; }
+          }
+          
+          @keyframes pulse-text {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.1); }
+          }
+          
+          @keyframes epic-celebration-text {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); }
+            25% { transform: translate(-50%, -50%) scale(1.05) rotate(1deg); }
+            50% { transform: translate(-50%, -50%) scale(1.1) rotate(-1deg); }
+            75% { transform: translate(-50%, -50%) scale(1.05) rotate(0.5deg); }
+          }
+          
+          @keyframes sparkle {
+            0%, 100% { opacity: 0; transform: scale(0) rotate(0deg); }
+            50% { opacity: 1; transform: scale(1) rotate(180deg); }
+          }
+        `}
+      </style>
       <BookHeader book={book} />
       
       <AudioStats paragraphs={book.paragraphs} book={book} />
@@ -1015,12 +1141,233 @@ export default function BookDetailPage() {
             )}
           </div>
           
-          <span style={{ 
-            fontSize: 'var(--font-size-xs)', 
-            color: 'var(--color-text-tertiary)'
-          }}>
-            Showing {filteredParagraphs.length} paragraph{filteredParagraphs.length !== 1 ? 's' : ''}
-          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-1)' }}>
+            <span style={{ 
+              fontSize: 'var(--font-size-xs)', 
+              color: 'var(--color-text-tertiary)'
+            }}>
+              Showing {filteredParagraphs.length} paragraph{filteredParagraphs.length !== 1 ? 's' : ''}
+            </span>
+            {filteredParagraphs.length > 0 && (() => {
+              const completedCount = filteredParagraphs.filter(p => p.completed).length;
+              const allCompleted = completedCount === filteredParagraphs.length;
+              
+              return (
+                <div style={{ position: 'relative' }}>
+                  <span style={{ 
+                    fontSize: 'var(--font-size-xs)', 
+                    color: allCompleted ? 'var(--color-success-600)' : 'var(--color-text-tertiary)',
+                    fontWeight: 'var(--font-weight-medium)',
+                    transition: 'color 0.3s ease'
+                  }}>
+                    ✅ {completedCount} of {filteredParagraphs.length} completed
+                  </span>
+                  
+                  {showCelebration && (
+                    <>
+                      {/* Small local celebration */}
+                      <div style={{
+                        position: 'absolute',
+                        top: '-10px',
+                        left: '-5px',
+                        right: '-5px',
+                        height: '30px',
+                        pointerEvents: 'none',
+                        overflow: 'hidden'
+                      }}>
+                        <div style={{
+                          position: 'absolute',
+                          width: '100%',
+                          height: '100%',
+                          animation: 'celebrate 2s ease-out infinite'
+                        }}>
+                          <span style={{
+                            position: 'absolute',
+                            left: '10%',
+                            animation: 'confetti-1 2s ease-out infinite',
+                            fontSize: '12px'
+                          }}>🎉</span>
+                          <span style={{
+                            position: 'absolute',
+                            left: '30%',
+                            animation: 'confetti-2 2s ease-out infinite 0.2s',
+                            fontSize: '10px'
+                          }}>✨</span>
+                          <span style={{
+                            position: 'absolute',
+                            left: '50%',
+                            animation: 'confetti-3 2s ease-out infinite 0.4s',
+                            fontSize: '11px'
+                          }}>🎊</span>
+                          <span style={{
+                            position: 'absolute',
+                            left: '70%',
+                            animation: 'confetti-4 2s ease-out infinite 0.6s',
+                            fontSize: '9px'
+                          }}>⭐</span>
+                          <span style={{
+                            position: 'absolute',
+                            left: '85%',
+                            animation: 'confetti-5 2s ease-out infinite 0.8s',
+                            fontSize: '10px'
+                          }}>🌟</span>
+                        </div>
+                      </div>
+                      
+                      {/* EPIC FULL SCREEN CELEBRATION! */}
+                      <div style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        pointerEvents: 'none',
+                        zIndex: 9999,
+                        overflow: 'hidden'
+                      }}>
+                        {/* Real confetti pieces */}
+                        {Array.from({ length: 80 }, (_, i) => {
+                          const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57', '#ff9ff3', '#54a0ff', '#5f27cd', '#00d2d3', '#ff9f43', '#10ac84', '#ee5a24', '#0abde3', '#3867d6'];
+                          const shapes = ['square', 'circle', 'triangle'];
+                          const shape = shapes[Math.floor(Math.random() * shapes.length)];
+                          const color = colors[Math.floor(Math.random() * colors.length)];
+                          const size = 4 + Math.random() * 8;
+                          
+                          return (
+                            <div
+                              key={`confetti-${i}`}
+                              className={`confetti-${shape}`}
+                              style={{
+                                position: 'absolute',
+                                left: `${Math.random() * 100}%`,
+                                top: `${Math.random() * 100}%`,
+                                width: `${size}px`,
+                                height: `${size}px`,
+                                backgroundColor: color,
+                                animation: `real-confetti-${(i % 6) + 1} ${2 + Math.random() * 3}s ease-out infinite`,
+                                animationDelay: `${Math.random() * 2}s`,
+                                ...(shape === 'circle' ? { borderRadius: '50%' } : {}),
+                                ...(shape === 'triangle' ? {
+                                  width: 0,
+                                  height: 0,
+                                  backgroundColor: 'transparent',
+                                  borderLeft: `${size/2}px solid transparent`,
+                                  borderRight: `${size/2}px solid transparent`,
+                                  borderBottom: `${size}px solid ${color}`
+                                } : {})
+                              }}
+                            />
+                          );
+                        })}
+                        
+                        {/* Firework bursts */}
+                        {Array.from({ length: 8 }, (_, i) => (
+                          <div
+                            key={`firework-${i}`}
+                            style={{
+                              position: 'absolute',
+                              left: `${20 + Math.random() * 60}%`,
+                              top: `${20 + Math.random() * 60}%`,
+                              width: '2px',
+                              height: '2px',
+                              animation: `firework-burst ${1.5 + Math.random()}s ease-out infinite`,
+                              animationDelay: `${Math.random() * 3}s`
+                            }}
+                          >
+                            {/* Firework particles */}
+                            {Array.from({ length: 12 }, (_, j) => {
+                              const angle = (j * 30) * Math.PI / 180;
+                              const distance = 30 + Math.random() * 20;
+                              return (
+                                <div
+                                  key={j}
+                                  style={{
+                                    position: 'absolute',
+                                    width: '3px',
+                                    height: '3px',
+                                    backgroundColor: ['#ff6b6b', '#4ecdc4', '#45b7d1', '#feca57', '#ff9ff3'][Math.floor(Math.random() * 5)],
+                                    borderRadius: '50%',
+                                    transform: `rotate(${angle}rad) translateX(${distance}px)`,
+                                    animation: `firework-particle ${1 + Math.random() * 0.5}s ease-out infinite`,
+                                    animationDelay: 'inherit'
+                                  }}
+                                />
+                              );
+                            })}
+                          </div>
+                        ))}
+                        
+                        {/* Big celebration message */}
+                        <div style={{
+                          position: 'absolute',
+                          top: '50%',
+                          left: '50%',
+                          transform: 'translate(-50%, -50%)',
+                          textAlign: 'center',
+                          animation: 'epic-celebration-text 4s ease-in-out infinite'
+                        }}>
+                          <div style={{
+                            fontSize: '4rem',
+                            marginBottom: '1rem',
+                            animation: 'bounce-big 2s ease-in-out infinite'
+                          }}>
+                            🎆🎉🎯🎉🎆
+                          </div>
+                          <div style={{
+                            fontSize: '2rem',
+                            fontWeight: 'bold',
+                            color: 'var(--color-success-600)',
+                            textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+                            animation: 'rainbow-text 3s ease-in-out infinite'
+                          }}>
+                            AMAZING WORK!
+                          </div>
+                          <div style={{
+                            fontSize: '1.2rem',
+                            marginTop: '0.5rem',
+                            color: 'var(--color-success-700)',
+                            animation: 'pulse-text 1.5s ease-in-out infinite'
+                          }}>
+                            All paragraphs completed! 🎆
+                          </div>
+                        </div>
+                        
+                        {/* Sparkle effects */}
+                        {Array.from({ length: 30 }, (_, i) => (
+                          <div
+                            key={`sparkle-${i}`}
+                            style={{
+                              position: 'absolute',
+                              left: `${Math.random() * 100}%`,
+                              top: `${Math.random() * 100}%`,
+                              width: '4px',
+                              height: '4px',
+                              background: 'linear-gradient(45deg, #ffd700, #ffed4e, #ffd700)',
+                              borderRadius: '50%',
+                              animation: `sparkle ${2 + Math.random() * 3}s ease-in-out infinite`,
+                              animationDelay: `${Math.random() * 3}s`
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  
+                  {showCelebration && (
+                    <div style={{
+                      marginTop: 'var(--spacing-1)',
+                      fontSize: 'var(--font-size-xs)',
+                      color: 'var(--color-success-600)',
+                      fontWeight: 'var(--font-weight-semibold)',
+                      animation: 'pulse 1.5s ease-in-out infinite'
+                    }}>
+                      🎯 All done! Great work!
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
         </div>
         
         <div className="card" style={{
