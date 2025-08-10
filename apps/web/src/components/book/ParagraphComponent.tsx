@@ -63,9 +63,9 @@ export default function ParagraphComponent({
     // Calculate time difference in seconds
     const timeDifferenceSeconds = Math.abs(lastUpdated.getTime() - audioGenerated.getTime()) / 1000;
     
-    // If timestamps are very close (within 15 seconds), they're likely part of the same operation
+    // If timestamps are very close (within 30 seconds), they're likely part of the same operation
     // This handles "Save & Generate Audio" and manual edit + immediate generation
-    if (timeDifferenceSeconds <= 15) {
+    if (timeDifferenceSeconds <= 30) {
       return false; // Consider them in sync
     }
     
