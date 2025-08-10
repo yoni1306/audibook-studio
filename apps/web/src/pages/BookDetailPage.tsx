@@ -43,6 +43,8 @@ export default function BookDetailPage() {
   const [showRevertConfirmModal, setShowRevertConfirmModal] = useState(false);
   const [pendingRevert, setPendingRevert] = useState<{ paragraphId: string; generateAudio: boolean } | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
+  const celebrationTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastCompletionStateRef = useRef<string>('');
 
   const isInitialLoad = useRef(true);
 
@@ -96,20 +98,46 @@ export default function BookDetailPage() {
     if (filteredParagraphs.length > 0) {
       const completedCount = filteredParagraphs.filter(p => p.completed).length;
       const allCompleted = completedCount === filteredParagraphs.length;
+      const completionState = `${allCompleted}-${completedCount}-${filteredParagraphs.length}`;
       
-      if (allCompleted && !showCelebration) {
-        setShowCelebration(true);
-        // Hide celebration after 5 seconds
-        const timer = setTimeout(() => {
-          setShowCelebration(false);
-        }, 5000);
+      if (allCompleted && !showCelebration && lastCompletionStateRef.current !== completionState) {
+        // Clear any existing timer
+        if (celebrationTimerRef.current) {
+          clearTimeout(celebrationTimerRef.current);
+        }
         
-        return () => clearTimeout(timer);
-      } else if (!allCompleted && showCelebration) {
-        setShowCelebration(false);
+        lastCompletionStateRef.current = completionState;
+        setShowCelebration(true);
+        
+        // Hide celebration after 5 seconds
+        celebrationTimerRef.current = setTimeout(() => {
+          setShowCelebration(false);
+          celebrationTimerRef.current = null;
+        }, 5000);
+      } else if (!allCompleted) {
+        // Reset completion state when not all completed
+        lastCompletionStateRef.current = '';
+        
+        if (showCelebration) {
+          // Clear timer if user uncompletes during animation
+          if (celebrationTimerRef.current) {
+            clearTimeout(celebrationTimerRef.current);
+            celebrationTimerRef.current = null;
+          }
+          setShowCelebration(false);
+        }
       }
     }
   }, [filteredParagraphs, showCelebration]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (celebrationTimerRef.current) {
+        clearTimeout(celebrationTimerRef.current);
+      }
+    };
+  }, []);
 
   // Add correlation ID generator for frontend
   function generateCorrelationId() {
@@ -1179,36 +1207,36 @@ export default function BookDetailPage() {
                           position: 'absolute',
                           width: '100%',
                           height: '100%',
-                          animation: 'celebrate 2s ease-out infinite'
+                          animation: 'celebrate 2s ease-out 3'
                         }}>
                           <span style={{
                             position: 'absolute',
                             left: '10%',
-                            animation: 'confetti-1 2s ease-out infinite',
+                            animation: 'confetti-1 2s ease-out 3',
                             fontSize: '12px'
                           }}>🎉</span>
                           <span style={{
                             position: 'absolute',
                             left: '30%',
-                            animation: 'confetti-2 2s ease-out infinite 0.2s',
+                            animation: 'confetti-2 2s ease-out 3 0.2s',
                             fontSize: '10px'
                           }}>✨</span>
                           <span style={{
                             position: 'absolute',
                             left: '50%',
-                            animation: 'confetti-3 2s ease-out infinite 0.4s',
+                            animation: 'confetti-3 2s ease-out 3 0.4s',
                             fontSize: '11px'
                           }}>🎊</span>
                           <span style={{
                             position: 'absolute',
                             left: '70%',
-                            animation: 'confetti-4 2s ease-out infinite 0.6s',
+                            animation: 'confetti-4 2s ease-out 3 0.6s',
                             fontSize: '9px'
                           }}>⭐</span>
                           <span style={{
                             position: 'absolute',
                             left: '85%',
-                            animation: 'confetti-5 2s ease-out infinite 0.8s',
+                            animation: 'confetti-5 2s ease-out 3 0.8s',
                             fontSize: '10px'
                           }}>🌟</span>
                         </div>
@@ -1244,7 +1272,7 @@ export default function BookDetailPage() {
                                 width: `${size}px`,
                                 height: `${size}px`,
                                 backgroundColor: color,
-                                animation: `real-confetti-${(i % 6) + 1} ${2 + Math.random() * 3}s ease-out infinite`,
+                                animation: `real-confetti-${(i % 6) + 1} ${2 + Math.random() * 3}s ease-out 1`,
                                 animationDelay: `${Math.random() * 2}s`,
                                 ...(shape === 'circle' ? { borderRadius: '50%' } : {}),
                                 ...(shape === 'triangle' ? {
@@ -1270,7 +1298,7 @@ export default function BookDetailPage() {
                               top: `${20 + Math.random() * 60}%`,
                               width: '2px',
                               height: '2px',
-                              animation: `firework-burst ${1.5 + Math.random()}s ease-out infinite`,
+                              animation: `firework-burst ${1.5 + Math.random()}s ease-out 1`,
                               animationDelay: `${Math.random() * 3}s`
                             }}
                           >
@@ -1288,7 +1316,7 @@ export default function BookDetailPage() {
                                     backgroundColor: ['#ff6b6b', '#4ecdc4', '#45b7d1', '#feca57', '#ff9ff3'][Math.floor(Math.random() * 5)],
                                     borderRadius: '50%',
                                     transform: `rotate(${angle}rad) translateX(${distance}px)`,
-                                    animation: `firework-particle ${1 + Math.random() * 0.5}s ease-out infinite`,
+                                    animation: `firework-particle ${1 + Math.random() * 0.5}s ease-out 1`,
                                     animationDelay: 'inherit'
                                   }}
                                 />
@@ -1304,12 +1332,12 @@ export default function BookDetailPage() {
                           left: '50%',
                           transform: 'translate(-50%, -50%)',
                           textAlign: 'center',
-                          animation: 'epic-celebration-text 4s ease-in-out infinite'
+                          animation: 'epic-celebration-text 4s ease-in-out 1'
                         }}>
                           <div style={{
                             fontSize: '4rem',
                             marginBottom: '1rem',
-                            animation: 'bounce-big 2s ease-in-out infinite'
+                            animation: 'bounce-big 2s ease-in-out 3'
                           }}>
                             🎆🎉🎯🎉🎆
                           </div>
@@ -1318,7 +1346,7 @@ export default function BookDetailPage() {
                             fontWeight: 'bold',
                             color: 'var(--color-success-600)',
                             textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
-                            animation: 'rainbow-text 3s ease-in-out infinite'
+                            animation: 'rainbow-text 3s ease-in-out 2'
                           }}>
                             AMAZING WORK!
                           </div>
@@ -1326,7 +1354,7 @@ export default function BookDetailPage() {
                             fontSize: '1.2rem',
                             marginTop: '0.5rem',
                             color: 'var(--color-success-700)',
-                            animation: 'pulse-text 1.5s ease-in-out infinite'
+                            animation: 'pulse-text 1.5s ease-in-out 4'
                           }}>
                             All paragraphs completed! 🎆
                           </div>
@@ -1344,7 +1372,7 @@ export default function BookDetailPage() {
                               height: '4px',
                               background: 'linear-gradient(45deg, #ffd700, #ffed4e, #ffd700)',
                               borderRadius: '50%',
-                              animation: `sparkle ${2 + Math.random() * 3}s ease-in-out infinite`,
+                              animation: `sparkle ${2 + Math.random() * 3}s ease-in-out 2`,
                               animationDelay: `${Math.random() * 3}s`
                             }}
                           />
@@ -1359,7 +1387,7 @@ export default function BookDetailPage() {
                       fontSize: 'var(--font-size-xs)',
                       color: 'var(--color-success-600)',
                       fontWeight: 'var(--font-weight-semibold)',
-                      animation: 'pulse 1.5s ease-in-out infinite'
+                      animation: 'pulse 1.5s ease-in-out 4'
                     }}>
                       🎯 All done! Great work!
                     </div>
