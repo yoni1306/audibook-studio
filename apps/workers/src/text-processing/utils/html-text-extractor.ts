@@ -104,6 +104,7 @@ export class HTMLTextExtractor {
   /**
    * Extract text content from a single HTML element
    * Uses tree walker for efficient text node traversal
+   * Excludes text nodes that are descendants of anchor elements containing only reference numbers
    */
   private extractTextFromElement(element: Element, document: Document): string {
     // Create a tree walker to collect all text nodes
@@ -119,10 +120,24 @@ export class HTMLTextExtractor {
       {
         acceptNode: (node: Node) => {
           const text = node.textContent?.trim();
-          if (text && text.length > 0) {
-            return NodeFilter.FILTER_ACCEPT;
+          if (!text || text.length === 0) {
+            return NodeFilter.FILTER_SKIP;
           }
-          return NodeFilter.FILTER_SKIP;
+          
+          // Check if this text node is inside an anchor element that contains only reference numbers
+          let parent = node.parentElement;
+          while (parent && parent !== element) {
+            if (parent.tagName.toLowerCase() === 'a') {
+              // Check if the anchor contains only reference numbers or superscript elements
+              if (this.isReferenceAnchor(parent)) {
+                return NodeFilter.FILTER_SKIP;
+              }
+              break; // Found an anchor, but it's not a reference anchor, so continue
+            }
+            parent = parent.parentElement;
+          }
+          
+          return NodeFilter.FILTER_ACCEPT;
         },
       }
     );
@@ -137,5 +152,39 @@ export class HTMLTextExtractor {
     }
 
     return currentText.trim();
+  }
+
+  /**
+   * Determines if an anchor element contains only reference numbers (like footnote markers)
+   * Returns true for anchors that should be excluded from text extraction
+   */
+  private isReferenceAnchor(anchor: Element): boolean {
+    const textContent = anchor.textContent?.trim();
+    if (!textContent) {
+      return true; // Empty anchors should be excluded
+    }
+    
+    // Check if the anchor contains only superscript elements
+    const supElements = anchor.querySelectorAll('sup');
+    if (supElements.length > 0) {
+      // If all text content comes from superscript elements, it's likely a reference
+      const supText = Array.from(supElements)
+        .map(sup => sup.textContent?.trim())
+        .filter(text => text)
+        .join('');
+      
+      if (supText === textContent) {
+        // Check if the superscript text is just a number
+        return /^\d+$/.test(textContent);
+      }
+    }
+    
+    // Check if the anchor text is just a number (even without superscript)
+    if (/^\d+$/.test(textContent)) {
+      return true;
+    }
+    
+    // Keep meaningful anchor text (like chapter titles)
+    return false;
   }
 }

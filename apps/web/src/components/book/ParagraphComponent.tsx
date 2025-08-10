@@ -324,8 +324,8 @@ export default function ParagraphComponent({
               ❌ Cancel
             </button>
             
-            {/* Show Diff Button - TEMPORARILY HIDDEN DUE TO BUGGY BEHAVIOR */}
-            {/* {(paragraph as any).originalContent && !isEditing && (
+            {/* Show Diff Button */}
+            {(paragraph as any).originalContent && !isEditing && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -355,10 +355,10 @@ export default function ParagraphComponent({
               >
                 📝 Show Diff
               </button>
-            )} */}
+            )}
             
-            {/* Revert to Original Button - TEMPORARILY HIDDEN DUE TO BUGGY BEHAVIOR */}
-            {/* {(paragraph as any).originalContent && (paragraph as any).originalContent !== editContent && (
+            {/* Revert to Original Button */}
+            {(paragraph as any).originalContent && (paragraph as any).originalContent !== editContent && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -388,7 +388,7 @@ export default function ParagraphComponent({
               >
                 ↩️ Revert to Original
               </button>
-            )} */}
+            )}
           </div>
         </div>
       ) : (

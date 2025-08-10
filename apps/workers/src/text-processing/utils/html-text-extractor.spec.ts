@@ -448,5 +448,151 @@ describe('HTMLTextExtractor', () => {
       expect(chunks).toContain('Chapter 2');
       expect(chunks).toContain('Chapter content here.');
     });
+
+    it('should exclude anchor elements containing only reference numbers but keep meaningful anchor text', () => {
+      document = createDocument(`
+        <div>
+          <p>This is some text with a footnote reference<a href="#footnote1"><sup>7</sup></a> and another one<a href="#footnote2"><sup>8</sup></a>.</p>
+          <p>Here is a paragraph with a <a href="#chapter1">Chapter 1</a> link that should be kept.</p>
+          <p>Another reference<a href="#ref3">9</a> without superscript but still just a number.</p>
+          <p>And a link to <a href="#section">Section A</a> which is meaningful text.</p>
+        </div>
+      `);
+
+      const chunks = extractor.extractTextChunks(document);
+      const fullText = chunks.join(' ');
+      
+      // Should exclude standalone footnote reference numbers (7, 8, 9)
+      // But should keep "Chapter 1" since it's meaningful text
+      expect(fullText).not.toMatch(/\b7\b/); // Standalone 7
+      expect(fullText).not.toMatch(/\b8\b/); // Standalone 8  
+      expect(fullText).not.toMatch(/\b9\b/); // Standalone 9
+      
+      // Should keep meaningful anchor text
+      expect(fullText).toContain('Chapter 1');
+      expect(fullText).toContain('Section A');
+      
+      // Should keep the main text content
+      expect(fullText).toContain('This is some text with a footnote reference');
+      expect(fullText).toContain('and another one');
+      expect(fullText).toContain('Here is a paragraph with a');
+      expect(fullText).toContain('link that should be kept');
+      expect(fullText).toContain('Another reference');
+      expect(fullText).toContain('without superscript but still just a number');
+      expect(fullText).toContain('And a link to');
+      expect(fullText).toContain('which is meaningful text');
+    });
+
+    it('should exclude Hebrew EPUB footnote references but keep chapter navigation links', () => {
+      document = createDocument(`
+        <div>
+          <p class="runningtext">טענה מרחיקת לכת זו נבחנה במחקרים שונים. באחד מהם התבקשו המשתתפים לכתוב מאמר קצר על אירוע משמעותי בחייהם, כמו הלימודים באוניברסיטה.<a href="HamapalaHachamishit-Y-29.xhtml#_idTextAnchor008"><sup class="superscript _idGenCharOverride-1">9</sup></a> לאחר מכן, מחצית המשתתפים התבקשו לתאר את כל הדרכים שבהן היתה יכולה חוויית הלימודים להשתבש לחלוטין.</p>
+          <p class="runningtext">חוקרים השוו בין קבוצות שהתבקשו לשחק בתסריטים אלטרנטיביים למאורעות שהובילו ללידתם, מצד אחד, ולבחירתו של ברק אובמה לנשיאות ארצות הברית, כאירוע קרוב בחייהם, מצד אחר.<a href="HamapalaHachamishit-Y-29.xhtml#_idTextAnchor009"><sup class="superscript _idGenCharOverride-1">10</sup></a> שתי הקבוצות ענו אחר כך על שאלון.</p>
+          <div class="navigation">
+            <ul>
+              <li><a href="#chapter1">פרק ראשון</a></li>
+              <li><a href="#chapter2">פרק שני</a></li>
+            </ul>
+          </div>
+          <p>חוקרים בחנו כיצד ניתן להשפיע על הזיכרון תוך שמהרהרים במצבי "אילו" אלטרנטיביים.<a href="HamapalaHachamishit-Y-29.xhtml#_idTextAnchor011"><sup class="superscript _idGenCharOverride-1">13</sup></a> התוצאות הראו שכאשר מעלים זיכרון מחדש.</p>
+          <p>השאלה שעלתה ממחקרים אלה היתה: מה גורם לסימולציה של עבר אלטרנטיבי להפוך למועילה או למזיקה? חוקרים בפסיכותרפיה מצאו כי הדמיון משפיע בשינוי זיכרונות מזיקים.<a href=""><sup class="superscript _idGenCharOverride-1">12</sup></a> הם זיהו דרכים שבהן יכול מטפל לעזור למטופל.</p>
+        </div>
+      `);
+
+      const chunks = extractor.extractTextChunks(document);
+      const fullText = chunks.join(' ');
+      
+      // Should exclude Hebrew EPUB footnote reference numbers (9, 10, 12, 13)
+      expect(fullText).not.toMatch(/\b9\b/);
+      expect(fullText).not.toMatch(/\b10\b/);
+      expect(fullText).not.toMatch(/\b12\b/);
+      expect(fullText).not.toMatch(/\b13\b/);
+      
+      // Should keep meaningful Hebrew navigation anchor text
+      expect(fullText).toContain('פרק ראשון');
+      expect(fullText).toContain('פרק שני');
+      
+      // Should keep the main Hebrew text content
+      expect(fullText).toContain('טענה מרחיקת לכת זו נבחנה במחקרים שונים');
+      expect(fullText).toContain('באחד מהם התבקשו המשתתפים לכתוב מאמר קצר');
+      expect(fullText).toContain('כמו הלימודים באוניברסיטה');
+      expect(fullText).toContain('לאחר מכן, מחצית המשתתפים התבקשו לתאר');
+      expect(fullText).toContain('חוקרים השוו בין קבוצות');
+      expect(fullText).toContain('שתי הקבוצות ענו אחר כך על שאלון');
+      expect(fullText).toContain('חוקרים בחנו כיצד ניתן להשפיע על הזיכרון');
+      expect(fullText).toContain('התוצאות הראו שכאשר מעלים זיכרון מחדש');
+      expect(fullText).toContain('השאלה שעלתה ממחקרים אלה היתה');
+      expect(fullText).toContain('הם זיהו דרכים שבהן יכול מטפל לעזור למטופל');
+      
+      // Verify that the footnote numbers are completely absent from the extracted text
+      expect(fullText).not.toContain('9 לאחר מכן'); // Should not have the number before the continuation
+      expect(fullText).not.toContain('10 שתי הקבוצות'); // Should not have the number before the continuation
+      expect(fullText).not.toContain('12 הם זיהו'); // Should not have the number before the continuation
+      expect(fullText).not.toContain('13 התוצאות'); // Should not have the number before the continuation
+    });
+
+    it('should handle empty anchors and fallback text extraction', () => {
+      document = createDocument(`
+        <div>
+          <p>Text with <a href="#empty"></a> empty anchor.</p>
+          <p>Text with <a href="#whitespace">   </a> whitespace-only anchor.</p>
+          <p>Text with <a href="#null"></a> truly empty anchor.</p>
+        </div>
+      `);
+
+      const chunks = extractor.extractTextChunks(document);
+      const fullText = chunks.join(' ');
+      
+      // Should exclude empty anchors completely
+      expect(fullText).toContain('Text with');
+      expect(fullText).toContain('empty anchor.');
+      expect(fullText).toContain('whitespace-only anchor.');
+      expect(fullText).toContain('truly empty anchor.');
+      
+      // Should not contain any empty or whitespace content from anchors
+      expect(fullText).not.toMatch(/\s{3,}/); // No excessive whitespace
+      
+      // Verify the text flows naturally without gaps from empty anchors
+      expect(fullText).toMatch(/Text with\s+empty anchor\./); 
+      expect(fullText).toMatch(/Text with\s+whitespace-only anchor\./); 
+      expect(fullText).toMatch(/Text with\s+truly empty anchor\./); 
+    });
+
+    it('should exclude anchors with null or undefined text content', () => {
+      // Create a document and manually modify anchor to have no text content
+      document = createDocument(`
+        <div>
+          <p>Before <a href="#test" id="testAnchor">original</a> after.</p>
+        </div>
+      `);
+
+      // Manually clear the text content to simulate null/undefined scenario
+      const anchor = document.getElementById('testAnchor');
+      if (anchor) {
+        anchor.textContent = '';
+      }
+
+      const chunks = extractor.extractTextChunks(document);
+      const fullText = chunks.join(' ');
+      
+      // Should exclude the empty anchor
+      expect(fullText).toContain('Before');
+      expect(fullText).toContain('after.');
+      expect(fullText).not.toContain('original');
+      expect(fullText).toMatch(/Before\s+after\./); 
+    });
+
+    it('should use fallback text extraction when no structured content found', () => {
+      // Create a document with only body text and no structured elements
+      document = createDocument(`
+        <body>Just some plain text in the body without any structured elements.</body>
+      `);
+
+      const chunks = extractor.extractTextChunks(document);
+      
+      // Should fall back to body text extraction
+      expect(chunks).toHaveLength(1);
+      expect(chunks[0]).toBe('Just some plain text in the body without any structured elements.');
+    });
   });
 });
