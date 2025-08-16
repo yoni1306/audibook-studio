@@ -31,11 +31,61 @@ export default function RevertParagraphConfirmDialog({
 
   if (!isOpen) return null;
 
-  // Truncate content for display
-  const truncateText = (text: string, maxLength = 100) => {
+  // Show more content for better comparison
+  const truncateText = (text: string, maxLength = 500) => {
     if (text.length <= maxLength) return text;
     return text.substring(0, maxLength) + '...';
   };
+
+  // Enhanced diff preview - show what's different
+  const getDiffPreview = () => {
+    const current = paragraphContent.trim();
+    const original = originalContent.trim();
+    
+    if (current === original) {
+      return { hasChanges: false, preview: 'No changes detected' };
+    }
+    
+    // Calculate differences
+    const lengthDiff = current.length - original.length;
+    const currentWords = current.split(/\s+/).length;
+    const originalWords = original.split(/\s+/).length;
+    const wordDiff = currentWords - originalWords;
+    
+    // Build informative preview
+    const parts = [];
+    
+    if (lengthDiff !== 0) {
+      const lengthInfo = lengthDiff > 0 
+        ? `+${lengthDiff} characters` 
+        : `${Math.abs(lengthDiff)} characters removed`;
+      parts.push(lengthInfo);
+    }
+    
+    if (wordDiff !== 0) {
+      const wordInfo = wordDiff > 0 
+        ? `+${wordDiff} words` 
+        : `${Math.abs(wordDiff)} words removed`;
+      parts.push(wordInfo);
+    }
+    
+    // Simple change detection
+    const changeTypes = [];
+    if (current.length > original.length) changeTypes.push('additions');
+    if (current.length < original.length) changeTypes.push('deletions');
+    if (current.length === original.length) changeTypes.push('modifications');
+    
+    const summary = parts.length > 0 
+      ? `Content modified: ${parts.join(', ')}` 
+      : `Content modified (${changeTypes.join(' and ')})`;
+    
+    return {
+      hasChanges: true,
+      preview: summary
+    };
+  };
+
+  const diffInfo = getDiffPreview();
 
   return (
     <div
@@ -94,6 +144,22 @@ export default function RevertParagraphConfirmDialog({
             Are you sure you want to revert this paragraph to its original content?
           </p>
           
+          {/* Diff Summary */}
+          {diffInfo.hasChanges && (
+            <div style={{
+              margin: '0 0 var(--spacing-4) 0',
+              padding: 'var(--spacing-3)',
+              backgroundColor: 'var(--color-blue-50)',
+              border: '1px solid var(--color-blue-200)',
+              borderRadius: 'var(--radius-md)',
+              fontSize: 'var(--font-size-sm)',
+              color: 'var(--color-blue-700)',
+              fontWeight: '500'
+            }}>
+              📊 {diffInfo.preview}
+            </div>
+          )}
+          
           <div style={{ marginBottom: 'var(--spacing-5)' }}>
             <div style={{ 
               marginBottom: 'var(--spacing-3)',
@@ -111,7 +177,10 @@ export default function RevertParagraphConfirmDialog({
               fontSize: 'var(--font-size-sm)',
               color: 'var(--color-gray-700)',
               fontStyle: 'italic',
-              lineHeight: '1.5'
+              lineHeight: '1.5',
+              maxHeight: '200px',
+              overflowY: 'auto',
+              whiteSpace: 'pre-wrap'
             }}>
               "{truncateText(paragraphContent)}"
             </div>
@@ -134,7 +203,10 @@ export default function RevertParagraphConfirmDialog({
               fontSize: 'var(--font-size-sm)',
               color: 'var(--color-gray-700)',
               fontStyle: 'italic',
-              lineHeight: '1.5'
+              lineHeight: '1.5',
+              maxHeight: '200px',
+              overflowY: 'auto',
+              whiteSpace: 'pre-wrap'
             }}>
               "{truncateText(originalContent)}"
             </div>

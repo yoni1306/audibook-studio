@@ -78,6 +78,7 @@ export interface Paragraph {
   pageId: string;
   orderIndex: number;
   content: string;
+  originalContent?: string;
   audioStatus: string;
   audioS3Key: string | null;
   audioDuration: number | null;
