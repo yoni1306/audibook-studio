@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import type { Paragraph } from '@audibook/api-client';
 import { getApiUrl } from '../../utils/api';
 import { countWords, countCharacters, getTextDirection, getTextAlign } from '../../utils/text';
@@ -325,7 +325,7 @@ export default function ParagraphComponent({
             </button>
             
             {/* Show Diff Button */}
-            {(paragraph as any).originalContent && !isEditing && (
+            {paragraph.originalContent && !isEditing && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -358,7 +358,7 @@ export default function ParagraphComponent({
             )}
             
             {/* Revert to Original Button */}
-            {(paragraph as any).originalContent && (paragraph as any).originalContent !== editContent && (
+            {paragraph.originalContent && paragraph.originalContent !== editContent && !paragraph.completed && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -418,58 +418,63 @@ export default function ParagraphComponent({
             )}
           </div>
           
-          {/* Diff and Revert Buttons - show for modified paragraphs */}
-          {(paragraph as any).originalContent && (paragraph as any).originalContent !== paragraph.content && (
+          {/* Show Diff Button - available for all modified paragraphs (including completed ones) */}
+          {paragraph.originalContent && paragraph.originalContent !== paragraph.content && !isEditing && (
             <div style={{ 
               marginTop: 'var(--spacing-3)',
               display: 'flex',
               justifyContent: 'flex-end',
               gap: 'var(--spacing-2)'
             }}>
-              {/* Show Diff Button - TEMPORARILY HIDDEN DUE TO BUGGY BEHAVIOR */}
-              {/* {!isEditing && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowDiff(true);
-                  }}
-                disabled={saving}
-                style={{
-                  cursor: saving ? 'not-allowed' : 'pointer',
-                  padding: 'var(--spacing-2) var(--spacing-3)',
-                  fontSize: 'var(--font-size-sm)',
-                  fontWeight: '600',
-                  color: 'var(--color-blue-700)',
-                  backgroundColor: 'var(--color-blue-50)',
-                  border: '1px solid var(--color-blue-300)',
-                  borderRadius: 'var(--radius-md)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 'var(--spacing-2)',
-                  transition: 'all 0.2s ease',
-                  opacity: saving ? 0.7 : 1,
-                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowDiff(true);
                 }}
-                onMouseEnter={(e) => {
-                  if (!saving) {
-                    e.currentTarget.style.backgroundColor = 'var(--color-blue-100)';
-                    e.currentTarget.style.borderColor = 'var(--color-blue-400)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!saving) {
-                    e.currentTarget.style.backgroundColor = 'var(--color-blue-50)';
-                    e.currentTarget.style.borderColor = 'var(--color-blue-300)';
-                  }
-                }}
-                title="Show differences between current and original content"
-                >
-                  📝 Show Diff
-                </button>
-              )} */}
-              
-              {/* Revert Button - TEMPORARILY HIDDEN DUE TO BUGGY BEHAVIOR */}
-              {/* <button
+              disabled={saving}
+              style={{
+                cursor: saving ? 'not-allowed' : 'pointer',
+                padding: 'var(--spacing-2) var(--spacing-3)',
+                fontSize: 'var(--font-size-sm)',
+                fontWeight: '600',
+                color: 'var(--color-blue-700)',
+                backgroundColor: 'var(--color-blue-50)',
+                border: '1px solid var(--color-blue-300)',
+                borderRadius: 'var(--radius-md)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--spacing-2)',
+                transition: 'all 0.2s ease',
+                opacity: saving ? 0.7 : 1,
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+              }}
+              onMouseEnter={(e) => {
+                if (!saving) {
+                  e.currentTarget.style.backgroundColor = 'var(--color-blue-100)';
+                  e.currentTarget.style.borderColor = 'var(--color-blue-400)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!saving) {
+                  e.currentTarget.style.backgroundColor = 'var(--color-blue-50)';
+                  e.currentTarget.style.borderColor = 'var(--color-blue-300)';
+                }
+              }}
+              title="Show differences between current and original content"
+              >
+                📝 Show Diff
+              </button>
+            </div>
+          )}
+          
+          {/* Revert Button - only for incomplete modified paragraphs */}
+          {paragraph.originalContent && paragraph.originalContent !== paragraph.content && !paragraph.completed && !isEditing && (
+            <div style={{ 
+              marginTop: 'var(--spacing-2)',
+              display: 'flex',
+              justifyContent: 'flex-end'
+            }}>
+              <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onRevertToOriginal(paragraph.id, false);
@@ -506,7 +511,7 @@ export default function ParagraphComponent({
                 title="Revert to original content from the source book"
               >
                 ↩️ Revert to Original
-              </button> */}
+              </button>
             </div>
           )}
           
@@ -719,7 +724,7 @@ export default function ParagraphComponent({
       )}
       
       {/* Diff Modal */}
-      {showDiff && (paragraph as any).originalContent && (
+      {showDiff && paragraph.originalContent && (
         <ParagraphDiffView
           paragraphId={paragraph.id}
           onClose={() => setShowDiff(false)}

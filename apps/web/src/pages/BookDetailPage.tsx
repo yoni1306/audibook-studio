@@ -627,11 +627,27 @@ export default function BookDetailPage() {
         if (book) {
           const updatedBook = {
             ...book,
-            paragraphs: book.paragraphs.map(p => 
-              p.id === paragraphId 
-                ? { ...p, content: data.content }
-                : p
-            )
+            paragraphs: book.paragraphs.map(p => {
+              if (p.id === paragraphId) {
+                // When reverting content, if there's existing audio and we're not generating new audio,
+                // the audio becomes out of sync
+                const hasExistingAudio = p.audioStatus === 'READY' && p.audioS3Key;
+                const willGenerateNewAudio = generateAudio;
+                
+                let newAudioStatus = p.audioStatus;
+                if (hasExistingAudio && !willGenerateNewAudio) {
+                  // Audio exists but content changed - mark as out of sync
+                  newAudioStatus = 'OUT_OF_SYNC';
+                }
+                
+                return { 
+                  ...p, 
+                  content: data.content,
+                  audioStatus: newAudioStatus
+                };
+              }
+              return p;
+            })
           };
           setBook(updatedBook);
         }
