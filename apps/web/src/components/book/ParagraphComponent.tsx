@@ -46,13 +46,21 @@ export default function ParagraphComponent({
         return '❌';
       case 'PENDING':
         return '⏸️';
+      case 'OUT_OF_SYNC':
+        return '⚠️';
       default:
         return '❓';
     }
   };
 
-  // Check if audio is out of sync based on timestamps
+  // Check if audio is out of sync based on explicit status or timestamps
   const isAudioOutOfSync = () => {
+    // First check for explicit OUT_OF_SYNC status (e.g., from revert operations)
+    if (paragraph.audioStatus === 'OUT_OF_SYNC') {
+      return true;
+    }
+    
+    // Then check timestamp-based sync detection
     if (!paragraph.audioS3Key || !paragraph.audioGeneratedAt) {
       return false; // No audio or no timestamp, can't be out of sync
     }
