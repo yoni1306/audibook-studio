@@ -25,7 +25,7 @@ import {
 } from './page-based-database.service';
 import { BookStatus, AudioStatus } from '@prisma/client';
 import * as fs from 'fs/promises';
-import { getTTSService } from './tts-service';
+import { createTTSService, TTSConfig } from './tts-service';
 import {
   withCorrelationId,
   generateCorrelationId,
@@ -260,11 +260,26 @@ const worker = new Worker(
                 paragraphId: paragraph.id,
                 contentLength: paragraph.content.length,
                 orderIndex: paragraph.orderIndex,
+                bookTtsModel: paragraph.page.book.ttsModel,
+                bookTtsVoice: paragraph.page.book.ttsVoice,
               });
 
-              // Generate audio
-              const ttsService = getTTSService();
+              // Create TTS service based on book configuration
+              const ttsConfig: TTSConfig = {
+                model: paragraph.page.book.ttsModel || 'azure',
+                voice: paragraph.page.book.ttsVoice || undefined,
+                settings: paragraph.page.book.ttsSettings ? 
+                  JSON.parse(JSON.stringify(paragraph.page.book.ttsSettings)) : undefined,
+              };
+              
+              const ttsService = createTTSService(ttsConfig);
               const outputPath = `/tmp/audio-${job.data.paragraphId}.mp3`;
+              
+              logger.info('Using TTS configuration', {
+                model: ttsConfig.model,
+                voice: ttsConfig.voice,
+                settings: ttsConfig.settings,
+              });
 
               logger.info('Calling TTS service', {
                 outputPath,

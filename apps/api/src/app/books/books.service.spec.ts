@@ -160,6 +160,9 @@ describe('BooksService', () => {
           author: bookData.author,
           s3Key: bookData.s3Key,
           status: BookStatus.UPLOADING,
+          ttsModel: 'azure',
+          ttsVoice: undefined,
+          ttsSettings: undefined,
         },
       });
       expect(result).toEqual(expectedBook);
@@ -188,9 +191,163 @@ describe('BooksService', () => {
           author: undefined,
           s3Key: bookData.s3Key,
           status: BookStatus.UPLOADING,
+          ttsModel: 'azure',
+          ttsVoice: undefined,
+          ttsSettings: undefined,
         },
       });
       expect(result).toEqual(expectedBook);
+    });
+
+    describe('TTS Configuration Support', () => {
+      it('should create a book with custom TTS model and voice', async () => {
+        const bookData = {
+          title: 'Hebrew Book',
+          author: 'Hebrew Author',
+          s3Key: 'hebrew-book.epub',
+          ttsModel: 'azure',
+          ttsVoice: 'he-IL-AvriNeural',
+          ttsSettings: { rate: 1.0, pitch: 1.0, volume: 1.0 },
+        };
+
+        const expectedBook = {
+          ...mockBook,
+          ...bookData,
+          status: BookStatus.UPLOADING,
+        };
+
+        (prismaService.book.create as jest.Mock).mockResolvedValue(expectedBook);
+
+        const result = await service.createBook(bookData);
+
+        expect(prismaService.book.create).toHaveBeenCalledWith({
+          data: {
+            title: bookData.title,
+            author: bookData.author,
+            s3Key: bookData.s3Key,
+            status: BookStatus.UPLOADING,
+            ttsModel: 'azure',
+            ttsVoice: 'he-IL-AvriNeural',
+            ttsSettings: { rate: 1.0, pitch: 1.0, volume: 1.0 },
+          },
+        });
+        expect(result).toEqual(expectedBook);
+      });
+
+      it('should create a book with different TTS providers', async () => {
+        const testCases = [
+          {
+            ttsModel: 'azure',
+            ttsVoice: 'en-US-AriaNeural',
+            ttsSettings: { rate: 0.9, pitch: 1.1 },
+          },
+          {
+            ttsModel: 'openai',
+            ttsVoice: 'alloy',
+            ttsSettings: { speed: 1.0 },
+          },
+          {
+            ttsModel: 'elevenlabs',
+            ttsVoice: 'rachel',
+            ttsSettings: { stability: 0.8, similarity_boost: 0.7 },
+          },
+        ];
+
+        for (const testCase of testCases) {
+          const bookData = {
+            title: `Test Book ${testCase.ttsModel}`,
+            s3Key: `test-book-${testCase.ttsModel}.epub`,
+            ...testCase,
+          };
+
+          const expectedBook = {
+            ...mockBook,
+            ...bookData,
+            status: BookStatus.UPLOADING,
+          };
+
+          (prismaService.book.create as jest.Mock).mockResolvedValue(expectedBook);
+
+          const result = await service.createBook(bookData);
+
+          expect(prismaService.book.create).toHaveBeenCalledWith({
+            data: {
+              title: bookData.title,
+              author: undefined,
+              s3Key: bookData.s3Key,
+              status: BookStatus.UPLOADING,
+              ttsModel: testCase.ttsModel,
+              ttsVoice: testCase.ttsVoice,
+              ttsSettings: testCase.ttsSettings,
+            },
+          });
+          expect(result).toEqual(expectedBook);
+        }
+      });
+
+      it('should default to azure TTS model when not specified', async () => {
+        const bookData = {
+          title: 'Default TTS Book',
+          s3Key: 'default-tts-book.epub',
+        };
+
+        const expectedBook = {
+          ...mockBook,
+          ...bookData,
+          status: BookStatus.UPLOADING,
+          ttsModel: 'azure',
+        };
+
+        (prismaService.book.create as jest.Mock).mockResolvedValue(expectedBook);
+
+        const result = await service.createBook(bookData);
+
+        expect(prismaService.book.create).toHaveBeenCalledWith({
+          data: {
+            title: bookData.title,
+            author: undefined,
+            s3Key: bookData.s3Key,
+            status: BookStatus.UPLOADING,
+            ttsModel: 'azure', // Should default to azure
+            ttsVoice: undefined,
+            ttsSettings: undefined,
+          },
+        });
+        expect(result).toEqual(expectedBook);
+      });
+
+      it('should handle null TTS settings correctly', async () => {
+        const bookData = {
+          title: 'Null Settings Book',
+          s3Key: 'null-settings-book.epub',
+          ttsModel: 'azure',
+          ttsVoice: 'en-US-AriaNeural',
+          ttsSettings: null,
+        };
+
+        const expectedBook = {
+          ...mockBook,
+          ...bookData,
+          status: BookStatus.UPLOADING,
+        };
+
+        (prismaService.book.create as jest.Mock).mockResolvedValue(expectedBook);
+
+        const result = await service.createBook(bookData);
+
+        expect(prismaService.book.create).toHaveBeenCalledWith({
+          data: {
+            title: bookData.title,
+            author: undefined,
+            s3Key: bookData.s3Key,
+            status: BookStatus.UPLOADING,
+            ttsModel: 'azure',
+            ttsVoice: 'en-US-AriaNeural',
+            ttsSettings: null,
+          },
+        });
+        expect(result).toEqual(expectedBook);
+      });
     });
   });
 

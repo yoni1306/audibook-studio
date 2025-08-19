@@ -8,6 +8,7 @@ describe('TextFixesService', () => {
   let service: TextFixesService;
   let mockTxTextCorrection: { createMany: jest.Mock };
   let mockTxParagraph: { findUnique: jest.Mock };
+  let mockTxBook: { findUnique: jest.Mock };
   let mockFixTypeRegistry: {
     classifyCorrection: jest.Mock;
   };
@@ -35,6 +36,13 @@ describe('TextFixesService', () => {
       findUnique: jest.fn().mockResolvedValue({ bookId: mockBookId }),
     };
 
+    mockTxBook = {
+      findUnique: jest.fn().mockResolvedValue({ 
+        ttsModel: 'azure', 
+        ttsVoice: 'he-IL-AvriNeural' 
+      }),
+    };
+
     mockFixTypeRegistry = {
       classifyCorrection: jest.fn().mockReturnValue({
         fixType: FixType.disambiguation,
@@ -56,10 +64,11 @@ describe('TextFixesService', () => {
     };
 
     // Mock the transaction to call the callback with a mock tx object
-    mockPrismaService.$transaction.mockImplementation(async (callback: (tx: { textCorrection: { createMany: jest.Mock }, paragraph: { findUnique: jest.Mock } }) => Promise<unknown>) => {
+    mockPrismaService.$transaction.mockImplementation(async (callback: (tx: { textCorrection: { createMany: jest.Mock }, paragraph: { findUnique: jest.Mock }, book: { findUnique: jest.Mock } }) => Promise<unknown>) => {
       const mockTx = {
         textCorrection: mockTxTextCorrection,
         paragraph: mockTxParagraph,
+        book: mockTxBook,
       };
       return await callback(mockTx);
     });
@@ -166,8 +175,8 @@ describe('TextFixesService', () => {
           aggregationKey: 'שגיאה|תיקון',
           sentenceContext: 'זה טקסט עם שגיאה בעברית',
           fixType: FixType.disambiguation,
-          ttsModel: null,
-          ttsVoice: null,
+          ttsModel: 'azure',
+          ttsVoice: 'he-IL-AvriNeural',
         },
       ];
 
@@ -205,8 +214,8 @@ describe('TextFixesService', () => {
             aggregationKey: 'שגיאה|תיקון',
             sentenceContext: 'זה טקסט עם שגיאה בעברית',
             fixType: FixType.disambiguation,
-            ttsModel: null,
-            ttsVoice: null,
+            ttsModel: 'azure',
+            ttsVoice: 'he-IL-AvriNeural',
           }),
           expect.objectContaining({
             paragraphId: mockParagraphId,
@@ -216,8 +225,8 @@ describe('TextFixesService', () => {
             aggregationKey: 'עם|עם',
             sentenceContext: 'זה טקסט עם שגיאה בעברית',
             fixType: FixType.disambiguation,
-            ttsModel: null,
-            ttsVoice: null,
+            ttsModel: 'azure',
+            ttsVoice: 'he-IL-AvriNeural',
           }),
         ]),
       });
@@ -242,8 +251,8 @@ describe('TextFixesService', () => {
             aggregationKey: 'שגיאה|תיקון',
             sentenceContext: 'זה טקסט עם שגיאה בעברית',
             fixType: FixType.disambiguation,
-            ttsModel: null,
-            ttsVoice: null,
+            ttsModel: 'azure',
+            ttsVoice: 'he-IL-AvriNeural',
           },
         ],
       });
@@ -290,8 +299,8 @@ describe('TextFixesService', () => {
             aggregationKey: 'לא_קיים|תיקון',
             sentenceContext: '',
             fixType: FixType.disambiguation,
-            ttsModel: null,
-            ttsVoice: null,
+            ttsModel: 'azure',
+            ttsVoice: 'he-IL-AvriNeural',
           },
         ],
       });

@@ -27,6 +27,24 @@ import { WordChange } from './text-fixes.service';
 import { FixType } from '@prisma/client';
 import { S3Service } from '../s3/s3.service';
 
+// TTS Settings interface for API
+interface TTSSettings {
+  rate?: number; // Speech rate (-50 to +50 percentage)
+  pitch?: number; // Speech pitch (-50 to +50 percentage)
+  volume?: number; // Speech volume (0 to 100)
+  [key: string]: unknown; // Allow additional provider-specific settings
+}
+
+// Create Book DTO
+interface CreateBookDto {
+  title: string;
+  author?: string;
+  s3Key: string;
+  ttsModel?: string;
+  ttsVoice?: string;
+  ttsSettings?: TTSSettings;
+}
+
 @ApiTags('books')
 @Controller('books')
 export class BooksController {
@@ -93,12 +111,15 @@ export class BooksController {
       properties: {
         title: { type: 'string', description: 'Book title' },
         author: { type: 'string', description: 'Book author (optional)' },
-        s3Key: { type: 'string', description: 'S3 key for the book file' }
+        s3Key: { type: 'string', description: 'S3 key for the book file' },
+        ttsModel: { type: 'string', description: 'TTS model provider (azure, openai, elevenlabs)', default: 'azure' },
+        ttsVoice: { type: 'string', description: 'Voice ID for the selected TTS model' },
+        ttsSettings: { type: 'object', description: 'Additional TTS settings (rate, pitch, volume)' }
       },
       required: ['title', 's3Key']
     }
   })
-  async createBook(@Body() body: { title: string; author?: string; s3Key: string }) {
+  async createBook(@Body() body: CreateBookDto) {
     return this.booksService.createBook(body);
   }
 

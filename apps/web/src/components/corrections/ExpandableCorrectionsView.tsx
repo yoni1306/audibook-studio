@@ -336,6 +336,7 @@ export default function ExpandableCorrectionsView({
                 </TableSortLabel>
               </TableCell>
               <TableCell align="center">Latest Fix Type</TableCell>
+              <TableCell align="center">TTS Model</TableCell>
               <TableCell>Book</TableCell>
               <TableCell>
                 <TableSortLabel
@@ -420,9 +421,23 @@ export default function ExpandableCorrectionsView({
                       ) : (
                         <Typography variant="body2" color="text.secondary">
                           N/A
-                      </Typography>
-                    )}
-                  </TableCell>
+                        </Typography>
+                      )}
+                    </TableCell>
+                    <TableCell align="center">
+                      {correction.corrections?.[0]?.ttsModel ? (
+                        <Chip
+                          label={correction.corrections[0].ttsModel.toUpperCase()}
+                          size="small"
+                          color="info"
+                          variant="outlined"
+                        />
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          N/A
+                        </Typography>
+                      )}
+                    </TableCell>
                   <TableCell>
                     <Link
                       href={`/books/${correction.corrections?.[0]?.id || '#'}`}

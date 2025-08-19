@@ -11,6 +11,14 @@ export default function UploadPage() {
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
   const [parsingMethod, setParsingMethod] = useState<'page-based' | 'xhtml-based'>('xhtml-based');
+  
+  // TTS Model Selection State
+  const [ttsVoice, setTtsVoice] = useState('he-IL-AvriNeural');
+  const [ttsSettings, setTtsSettings] = useState({
+    rate: 0,
+    pitch: 0,
+    volume: 100
+  });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -36,6 +44,9 @@ export default function UploadPage() {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('parsingMethod', parsingMethod);
+      formData.append('ttsModel', 'azure');
+      formData.append('ttsVoice', ttsVoice);
+      formData.append('ttsSettings', JSON.stringify(ttsSettings));
 
       // Upload file through API proxy (eliminates CORS issues)
       const { data, error } = await apiClient.s3.uploadFile(formData);
@@ -216,6 +227,118 @@ export default function UploadPage() {
                   </div>
                 </div>
               </label>
+            </div>
+          </div>
+        )}
+
+        {file && (
+          <div style={{ marginBottom: 'var(--spacing-6)' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: 'var(--spacing-4)',
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: '600',
+              color: 'var(--color-gray-900)'
+            }}>
+              🎙️ Choose Narration Model:
+            </label>
+            
+            {/* Voice Selection */}
+            <div style={{ marginBottom: 'var(--spacing-4)' }}>
+              <label style={{
+                display: 'block',
+                marginBottom: 'var(--spacing-2)',
+                fontSize: 'var(--font-size-sm)',
+                fontWeight: '500',
+                color: 'var(--color-gray-700)'
+              }}>
+                Voice (Azure TTS):
+              </label>
+              <select
+                value={ttsVoice}
+                onChange={(e) => setTtsVoice(e.target.value)}
+                disabled={uploading}
+                style={{
+                  width: '100%',
+                  padding: 'var(--spacing-3)',
+                  border: '1px solid var(--color-gray-300)',
+                  borderRadius: 'var(--radius-md)',
+                  fontSize: 'var(--font-size-base)',
+                  backgroundColor: uploading ? 'var(--color-gray-50)' : 'white'
+                }}
+              >
+                <option value="he-IL-AvriNeural">🇮🇱 Avri (Male, Hebrew)</option>
+                <option value="he-IL-HilaNeural">🇮🇱 Hila (Female, Hebrew)</option>
+              </select>
+            </div>
+
+            {/* TTS Settings */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr 1fr',
+              gap: 'var(--spacing-3)',
+              marginBottom: 'var(--spacing-2)'
+            }}>
+              <div>
+                <label style={{
+                  display: 'block',
+                  marginBottom: 'var(--spacing-1)',
+                  fontSize: 'var(--font-size-xs)',
+                  fontWeight: '500',
+                  color: 'var(--color-gray-700)'
+                }}>
+                  Rate: {ttsSettings.rate}%
+                </label>
+                <input
+                  type="range"
+                  min="-50"
+                  max="50"
+                  value={ttsSettings.rate}
+                  onChange={(e) => setTtsSettings(prev => ({ ...prev, rate: parseInt(e.target.value) }))}
+                  disabled={uploading}
+                  style={{ width: '100%' }}
+                />
+              </div>
+              <div>
+                <label style={{
+                  display: 'block',
+                  marginBottom: 'var(--spacing-1)',
+                  fontSize: 'var(--font-size-xs)',
+                  fontWeight: '500',
+                  color: 'var(--color-gray-700)'
+                }}>
+                  Pitch: {ttsSettings.pitch}%
+                </label>
+                <input
+                  type="range"
+                  min="-50"
+                  max="50"
+                  value={ttsSettings.pitch}
+                  onChange={(e) => setTtsSettings(prev => ({ ...prev, pitch: parseInt(e.target.value) }))}
+                  disabled={uploading}
+                  style={{ width: '100%' }}
+                />
+              </div>
+              <div>
+                <label style={{
+                  display: 'block',
+                  marginBottom: 'var(--spacing-1)',
+                  fontSize: 'var(--font-size-xs)',
+                  fontWeight: '500',
+                  color: 'var(--color-gray-700)'
+                }}>
+                  Volume: {ttsSettings.volume}%
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={ttsSettings.volume}
+                  onChange={(e) => setTtsSettings(prev => ({ ...prev, volume: parseInt(e.target.value) }))}
+                  disabled={uploading}
+                  style={{ width: '100%' }}
+                />
+              </div>
             </div>
           </div>
         )}

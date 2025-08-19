@@ -7,6 +7,24 @@ import { BooksService } from '../books/books.service';
 import { QueueService } from '../queue/queue.service';
 import { PresignedUploadResponseDto } from './dto/s3.dto';
 
+// TTS Settings interface
+interface TTSSettings {
+  rate?: number; // Speech rate (-50 to +50 percentage)
+  pitch?: number; // Speech pitch (-50 to +50 percentage)
+  volume?: number; // Speech volume (0 to 100)
+  [key: string]: unknown; // Allow additional provider-specific settings
+}
+
+// Presigned Upload Request DTO
+interface PresignedUploadRequestDto {
+  filename: string;
+  contentType: string;
+  parsingMethod?: 'page-based' | 'xhtml-based';
+  ttsModel?: string;
+  ttsVoice?: string;
+  ttsSettings?: TTSSettings;
+}
+
 @Controller('s3')
 export class S3Controller {
   private readonly logger = new Logger(S3Controller.name);
@@ -87,14 +105,29 @@ export class S3Controller {
   })
   async uploadFile(
     @UploadedFile() file: { buffer: Buffer; originalname: string; mimetype: string; size: number },
-    @Body() body: { parsingMethod?: 'page-based' | 'xhtml-based' }
+    @Body() body: { 
+      parsingMethod?: 'page-based' | 'xhtml-based';
+      ttsModel?: string;
+      ttsVoice?: string;
+      ttsSettings?: string; // JSON string from form data
+    }
   ) {
     try {
       if (!file) {
         throw new InternalServerErrorException('No file provided');
       }
 
-      const { parsingMethod = 'page-based' } = body;
+      const { parsingMethod = 'page-based', ttsModel, ttsVoice, ttsSettings } = body;
+      
+      // Parse TTS settings if provided (form data sends as JSON string)
+      let parsedTtsSettings;
+      if (ttsSettings) {
+        try {
+          parsedTtsSettings = JSON.parse(ttsSettings);
+        } catch (error) {
+          this.logger.warn(`⚠️ [S3] Failed to parse TTS settings: ${error.message}`);
+        }
+      }
       
       // Properly decode the filename to handle Hebrew and other non-ASCII characters
       const decodedFilename = this.decodeFilename(file.originalname);
@@ -105,10 +138,13 @@ export class S3Controller {
       // Upload file directly to S3
       await this.s3Service.uploadFile(key, file.buffer, file.mimetype);
 
-      // Create book record with properly decoded title
+      // Create book record with properly decoded title and TTS configuration
       const book = await this.booksService.createBook({
         title: decodedFilename.replace('.epub', ''),
         s3Key: key,
+        ttsModel,
+        ttsVoice,
+        ttsSettings: parsedTtsSettings,
       });
 
       this.logger.log(`📚 [API] Created book ${book.id} for file ${key}`);
@@ -155,10 +191,10 @@ export class S3Controller {
     }
   })
   async getPresignedUploadUrl(
-    @Body() body: { filename: string; contentType: string; parsingMethod?: 'page-based' | 'xhtml-based' }
+    @Body() body: PresignedUploadRequestDto
   ) {
     try {
-      const { filename, contentType, parsingMethod = 'page-based' } = body;
+      const { filename, contentType, parsingMethod = 'page-based', ttsModel, ttsVoice, ttsSettings } = body;
       
       // Properly decode the filename to handle Hebrew and other non-ASCII characters
       const decodedFilename = this.decodeFilename(filename);
@@ -169,10 +205,13 @@ export class S3Controller {
       // Get presigned URL
       const result = await this.s3Service.getPresignedUploadUrl(key, contentType);
 
-      // Create book record with properly decoded title
+      // Create book record with properly decoded title and TTS configuration
       const book = await this.booksService.createBook({
         title: decodedFilename.replace('.epub', ''),
         s3Key: key,
+        ttsModel,
+        ttsVoice,
+        ttsSettings,
       });
 
       this.logger.log(`📚 [API] Created book ${book.id} for file ${key}`);

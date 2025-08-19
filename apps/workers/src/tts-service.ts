@@ -10,7 +10,7 @@ export interface TTSOptions {
   pitch?: number; // -50 to +50 (percentage)
 }
 
-export class AzureTTSService {
+export class AzureTTSService implements TTSServiceInterface {
   private speechConfig: sdk.SpeechConfig;
   private defaultVoice: string;
 
@@ -218,12 +218,49 @@ export class AzureTTSService {
   }
 }
 
-// Singleton instance
-let ttsService: AzureTTSService | null = null;
+// Base TTS Service interface
+export interface TTSServiceInterface {
+  generateAudio(text: string, outputPath: string): Promise<{
+    duration: number;
+    filePath: string;
+  }>;
+}
 
-export function getTTSService(): AzureTTSService {
-  if (!ttsService) {
-    ttsService = new AzureTTSService({});
+// TTS Configuration interface
+export interface TTSConfig {
+  model: string;
+  voice?: string;
+  settings?: TTSSettings;
+}
+
+// TTS Settings interface - generic for all providers
+export interface TTSSettings {
+  rate?: number; // Speech rate (-50 to +50 percentage)
+  pitch?: number; // Speech pitch (-50 to +50 percentage)
+  volume?: number; // Speech volume (0 to 100)
+  [key: string]: unknown; // Allow additional provider-specific settings
+}
+
+// Factory function to create TTS service based on configuration
+export function createTTSService(config: TTSConfig): TTSServiceInterface {
+  switch (config.model) {
+    case 'azure':
+      return new AzureTTSService({
+        voice: config.voice || 'he-IL-AvriNeural',
+        rate: config.settings?.rate,
+        pitch: config.settings?.pitch,
+      });
+    default:
+      logger.warn(`TTS model '${config.model}' not implemented yet, falling back to Azure`);
+      return new AzureTTSService({
+        voice: config.voice || 'he-IL-AvriNeural',
+        rate: config.settings?.rate,
+        pitch: config.settings?.pitch,
+      });
   }
-  return ttsService;
+}
+
+// Legacy function for backward compatibility
+export function getTTSService(): AzureTTSService {
+  return new AzureTTSService({});
 }
