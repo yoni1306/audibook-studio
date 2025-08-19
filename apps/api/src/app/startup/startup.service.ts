@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { StartupLogicBase } from './startup-logic.base';
 import { AudioTimestampBackfillStartup } from './audio-timestamp-backfill.startup';
+import { TtsModelDefaultStartup } from './tts-model-default.startup';
 
 /**
  * Service that manages and executes startup logic when the API service starts
@@ -27,7 +28,8 @@ export class StartupService implements OnModuleInit {
    */
   private registerStartupLogic(): void {
     this.startupLogics.push(
-      new AudioTimestampBackfillStartup(this.prisma)
+      new AudioTimestampBackfillStartup(this.prisma),
+      new TtsModelDefaultStartup(this.prisma)
       // Add more startup logic classes here as needed
     );
   }

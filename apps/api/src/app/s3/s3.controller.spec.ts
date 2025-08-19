@@ -23,6 +23,9 @@ describe('S3Controller', () => {
     totalPages: 0,
     totalParagraphs: 0,
     processingMetadata: {},
+    ttsModel: 'azure',
+    ttsVoice: 'en-US-AriaNeural',
+    ttsSettings: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -349,6 +352,280 @@ describe('S3Controller', () => {
         filename: 'test.epub',
         contentType: 'application/epub+zip',
       })).rejects.toThrow(InternalServerErrorException);
+    });
+  });
+
+  describe('TTS Parameter Handling', () => {
+    const mockFile = {
+      buffer: Buffer.from('test epub content'),
+      originalname: 'test-book.epub',
+      mimetype: 'application/epub+zip',
+      size: 1024,
+    };
+
+    beforeEach(() => {
+      s3Service.uploadFile.mockResolvedValue(undefined);
+      booksService.createBook.mockResolvedValue(mockBook);
+      queueService.addEpubParsingJob.mockResolvedValue(undefined);
+    });
+
+    describe('uploadFile with TTS parameters', () => {
+      it('should handle Azure TTS configuration', async () => {
+        const body = {
+          parsingMethod: 'page-based' as const,
+          ttsModel: 'azure',
+          ttsVoice: 'he-IL-AvriNeural',
+          ttsSettings: JSON.stringify({ rate: 1.0, pitch: 1.0, volume: 0.8 }),
+        };
+
+        const result = await controller.uploadFile(mockFile, body);
+
+        expect(booksService.createBook).toHaveBeenCalledWith({
+          title: 'test-book',
+          s3Key: expect.any(String),
+          ttsModel: 'azure',
+          ttsVoice: 'he-IL-AvriNeural',
+          ttsSettings: { rate: 1.0, pitch: 1.0, volume: 0.8 },
+        });
+        expect(result.bookId).toBe(mockBook.id);
+      });
+
+      it('should handle OpenAI TTS configuration', async () => {
+        const body = {
+          parsingMethod: 'xhtml-based' as const,
+          ttsModel: 'openai',
+          ttsVoice: 'alloy',
+          ttsSettings: JSON.stringify({ speed: 1.25 }),
+        };
+
+        const result = await controller.uploadFile(mockFile, body);
+
+        expect(booksService.createBook).toHaveBeenCalledWith({
+          title: 'test-book',
+          s3Key: expect.any(String),
+          ttsModel: 'openai',
+          ttsVoice: 'alloy',
+          ttsSettings: { speed: 1.25 },
+        });
+        expect(result.bookId).toBe(mockBook.id);
+      });
+
+      it('should handle ElevenLabs TTS configuration', async () => {
+        const body = {
+          ttsModel: 'elevenlabs',
+          ttsVoice: 'rachel',
+          ttsSettings: JSON.stringify({ stability: 0.8, similarity_boost: 0.7 }),
+        };
+
+        const result = await controller.uploadFile(mockFile, body);
+
+        expect(booksService.createBook).toHaveBeenCalledWith({
+          title: 'test-book',
+          s3Key: expect.any(String),
+          ttsModel: 'elevenlabs',
+          ttsVoice: 'rachel',
+          ttsSettings: { stability: 0.8, similarity_boost: 0.7 },
+        });
+        expect(result.bookId).toBe(mockBook.id);
+      });
+
+      it('should handle upload without TTS parameters', async () => {
+        const body = {
+          parsingMethod: 'page-based' as const,
+        };
+
+        const result = await controller.uploadFile(mockFile, body);
+
+        expect(booksService.createBook).toHaveBeenCalledWith({
+          title: 'test-book',
+          s3Key: expect.any(String),
+          ttsModel: undefined,
+          ttsVoice: undefined,
+          ttsSettings: undefined,
+        });
+        expect(result.bookId).toBe(mockBook.id);
+      });
+
+      it('should handle partial TTS configuration', async () => {
+        const body = {
+          ttsModel: 'azure',
+          ttsVoice: 'en-US-AriaNeural',
+          // No ttsSettings provided
+        };
+
+        const result = await controller.uploadFile(mockFile, body);
+
+        expect(booksService.createBook).toHaveBeenCalledWith({
+          title: 'test-book',
+          s3Key: expect.any(String),
+          ttsModel: 'azure',
+          ttsVoice: 'en-US-AriaNeural',
+          ttsSettings: undefined,
+        });
+        expect(result.bookId).toBe(mockBook.id);
+      });
+
+      it('should handle invalid JSON in ttsSettings gracefully', async () => {
+        const body = {
+          ttsModel: 'azure',
+          ttsVoice: 'en-US-AriaNeural',
+          ttsSettings: 'invalid-json{',
+        };
+
+        // Should not throw, but log error and continue without settings
+        const result = await controller.uploadFile(mockFile, body);
+
+        expect(booksService.createBook).toHaveBeenCalledWith({
+          title: 'test-book',
+          s3Key: expect.any(String),
+          ttsModel: 'azure',
+          ttsVoice: 'en-US-AriaNeural',
+          ttsSettings: undefined,
+        });
+        expect(result.bookId).toBe(mockBook.id);
+      });
+
+      it('should handle Hebrew filename with TTS configuration', async () => {
+        const hebrewFile = {
+          ...mockFile,
+          originalname: 'ספר_עברי.epub',
+        };
+
+        const body = {
+          ttsModel: 'azure',
+          ttsVoice: 'he-IL-AvriNeural',
+          ttsSettings: JSON.stringify({ rate: 0.9, pitch: 1.1 }),
+        };
+
+        const result = await controller.uploadFile(hebrewFile, body);
+
+        expect(booksService.createBook).toHaveBeenCalledWith({
+          title: 'ספר_עברי',
+          s3Key: expect.any(String),
+          ttsModel: 'azure',
+          ttsVoice: 'he-IL-AvriNeural',
+          ttsSettings: { rate: 0.9, pitch: 1.1 },
+        });
+        expect(result.filename).toBe('ספר_עברי.epub');
+      });
+    });
+
+    describe('getPresignedUploadUrl with TTS parameters', () => {
+      it('should handle TTS parameters in presigned URL request', async () => {
+        const mockPresignedUrl = {
+          url: 'https://s3.amazonaws.com/presigned-url',
+          key: 'uploads/hebrew-book.epub',
+        };
+        s3Service.getPresignedUploadUrl.mockResolvedValue(mockPresignedUrl);
+
+        const requestBody = {
+          filename: 'hebrew-book.epub',
+          contentType: 'application/epub+zip',
+          ttsModel: 'azure',
+          ttsVoice: 'he-IL-AvriNeural',
+          ttsSettings: { rate: 1.0, pitch: 1.0 },
+        };
+
+        const result = await controller.getPresignedUploadUrl(requestBody);
+
+        expect(result.uploadUrl).toBe(mockPresignedUrl.url);
+        expect(result.bookId).toBe(mockBook.id);
+        expect(booksService.createBook).toHaveBeenCalledWith({
+          title: 'hebrew-book',
+          s3Key: expect.any(String),
+          ttsModel: 'azure',
+          ttsVoice: 'he-IL-AvriNeural',
+          ttsSettings: { rate: 1.0, pitch: 1.0 },
+        });
+      });
+
+      it('should handle presigned URL without TTS parameters', async () => {
+        const mockPresignedUrl = {
+          url: 'https://s3.amazonaws.com/presigned-url',
+          key: 'uploads/book.epub',
+        };
+        s3Service.getPresignedUploadUrl.mockResolvedValue(mockPresignedUrl);
+
+        const requestBody = {
+          filename: 'book.epub',
+          contentType: 'application/epub+zip',
+        };
+
+        const result = await controller.getPresignedUploadUrl(requestBody);
+
+        expect(result.uploadUrl).toBe(mockPresignedUrl.url);
+        expect(booksService.createBook).toHaveBeenCalledWith({
+          title: 'book',
+          s3Key: expect.any(String),
+          ttsModel: undefined,
+          ttsVoice: undefined,
+          ttsSettings: undefined,
+        });
+      });
+    });
+
+    describe('TTS Settings Validation', () => {
+      it('should handle complex Azure TTS settings', async () => {
+        const complexSettings = {
+          rate: 1.2,
+          pitch: 0.8,
+          volume: 0.9,
+          style: 'cheerful',
+          styleDegree: 1.5,
+        };
+
+        const body = {
+          ttsModel: 'azure',
+          ttsVoice: 'en-US-AriaNeural',
+          ttsSettings: JSON.stringify(complexSettings),
+        };
+
+        const result = await controller.uploadFile(mockFile, body);
+
+        expect(booksService.createBook).toHaveBeenCalledWith({
+          title: 'test-book',
+          s3Key: expect.any(String),
+          ttsModel: 'azure',
+          ttsVoice: 'en-US-AriaNeural',
+          ttsSettings: complexSettings,
+        });
+      });
+
+      it('should handle empty TTS settings object', async () => {
+        const body = {
+          ttsModel: 'azure',
+          ttsVoice: 'en-US-AriaNeural',
+          ttsSettings: JSON.stringify({}),
+        };
+
+        const result = await controller.uploadFile(mockFile, body);
+
+        expect(booksService.createBook).toHaveBeenCalledWith({
+          title: 'test-book',
+          s3Key: expect.any(String),
+          ttsModel: 'azure',
+          ttsVoice: 'en-US-AriaNeural',
+          ttsSettings: {},
+        });
+      });
+
+      it('should handle null TTS settings', async () => {
+        const body = {
+          ttsModel: 'azure',
+          ttsVoice: 'en-US-AriaNeural',
+          ttsSettings: 'null',
+        };
+
+        const result = await controller.uploadFile(mockFile, body);
+
+        expect(booksService.createBook).toHaveBeenCalledWith({
+          title: 'test-book',
+          s3Key: expect.any(String),
+          ttsModel: 'azure',
+          ttsVoice: 'en-US-AriaNeural',
+          ttsSettings: null,
+        });
+      });
     });
   });
 });

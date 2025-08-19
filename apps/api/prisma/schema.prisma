@@ -21,6 +21,10 @@ model Book {
   totalPages      Int?              // Total number of pages detected
   totalParagraphs Int?              // Total number of paragraphs
   processingMetadata Json?          // Additional processing metadata
+  // TTS Model Configuration
+  ttsModel        String            @default("azure") // TTS provider (azure, openai, elevenlabs)
+  ttsVoice        String?           // Voice ID for the selected TTS model
+  ttsSettings     Json?             // Additional TTS settings (rate, pitch, etc.)
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 

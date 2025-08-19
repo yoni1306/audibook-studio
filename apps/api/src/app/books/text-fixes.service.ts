@@ -245,6 +245,15 @@ export class TextFixesService {
           throw new Error(`Paragraph ${paragraphId} not found`);
         }
 
+        // Get the book's TTS model information
+        const book = await tx.book.findUnique({
+          where: { id: paragraph.bookId },
+          select: {
+            ttsModel: true,
+            ttsVoice: true
+          }
+        });
+
         const textFixes = changes.map(change => {
           // Always use automatic classification for fix type
           const classification = this.fixTypeRegistry.classifyCorrection(change.originalWord, change.correctedWord);
@@ -261,8 +270,8 @@ export class TextFixesService {
             aggregationKey,
             sentenceContext: this.extractSentenceContext(originalText, change.originalWord),
             fixType,
-            ttsModel: null, // Always create as null
-            ttsVoice: null, // Always create as null
+            ttsModel: book?.ttsModel || null,
+            ttsVoice: book?.ttsVoice || null,
           };
         });
 

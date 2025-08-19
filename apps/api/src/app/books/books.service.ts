@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { BookStatus } from '@prisma/client';
+import { BookStatus, Prisma } from '@prisma/client';
 import { QueueService } from '../queue/queue.service';
 import { TextFixesService, WordChange } from './text-fixes.service';
 import { UpdateParagraphResponseDto, BulkFixSuggestion as BulkFixSuggestionDto } from './dto/paragraph-update.dto';
@@ -16,6 +16,14 @@ interface TokenDiffItem {
   originalText?: string;
   fixType?: string;
   changeId?: string;
+}
+
+// TTS Settings interface
+interface TTSSettings {
+  rate?: number; // Speech rate (-50 to +50 percentage)
+  pitch?: number; // Speech pitch (-50 to +50 percentage)
+  volume?: number; // Speech volume (0 to 100)
+  [key: string]: unknown; // Allow additional provider-specific settings
 }
 
 @Injectable()
@@ -52,13 +60,23 @@ export class BooksService {
     private bulkTextFixesService: BulkTextFixesService
   ) {}
 
-  async createBook(data: { title: string; author?: string; s3Key: string }) {
+  async createBook(data: { 
+    title: string; 
+    author?: string; 
+    s3Key: string;
+    ttsModel?: string;
+    ttsVoice?: string;
+    ttsSettings?: TTSSettings;
+  }) {
     return this.prisma.book.create({
       data: {
         title: data.title,
         author: data.author,
         s3Key: data.s3Key,
         status: BookStatus.UPLOADING,
+        ttsModel: data.ttsModel || 'azure',
+        ttsVoice: data.ttsVoice,
+        ttsSettings: data.ttsSettings as Prisma.InputJsonValue,
       },
     });
   }
