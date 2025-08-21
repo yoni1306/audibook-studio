@@ -797,4 +797,87 @@ export class BooksService {
       throw error;
     }
   }
+
+  /**
+   * Add Hebrew diacritics to book paragraphs
+   */
+  async addDiacriticsToBook(bookId: string, paragraphIds?: string[]) {
+    this.logger.log(`🔤 Starting diacritics processing for book ${bookId}`, {
+      paragraphIds: paragraphIds?.length || 'all paragraphs',
+    });
+
+    try {
+      // Verify book exists
+      const book = await this.prisma.book.findUnique({
+        where: { id: bookId },
+        select: { id: true, title: true, status: true },
+      });
+
+      if (!book) {
+        throw new Error(`Book not found: ${bookId}`);
+      }
+
+      // Check if there are paragraphs to process
+      const whereClause = {
+        bookId,
+        ...(paragraphIds && { id: { in: paragraphIds } }),
+      };
+
+      const paragraphCount = await this.prisma.paragraph.count({
+        where: whereClause,
+      });
+
+      if (paragraphCount === 0) {
+        this.logger.log(`ℹ️ No paragraphs found to process for diacritics in book ${bookId}`);
+        return { message: 'No paragraphs found for diacritics processing', paragraphCount: 0 };
+      }
+
+      // Add diacritics processing job to queue
+      const jobResult = await this.queueService.addDiacriticsProcessingJob({
+        bookId,
+        paragraphIds,
+      });
+
+      this.logger.log(
+        `🔤 Diacritics processing job queued for book ${bookId}`,
+        {
+          jobId: jobResult.jobId,
+          paragraphCount,
+          bookTitle: book.title,
+        }
+      );
+
+      return {
+        message: 'Diacritics processing job queued successfully',
+        jobId: jobResult.jobId,
+        paragraphCount,
+        bookTitle: book.title,
+      };
+    } catch (error) {
+      this.logger.error(`❌ Failed to queue diacritics processing for book ${bookId}:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Get paragraph count for a book (simplified since we modify content directly)
+   */
+  async getDiacriticsStatus(bookId: string) {
+    this.logger.log(`📊 Getting paragraph count for book ${bookId}`);
+
+    try {
+      const totalParagraphs = await this.prisma.paragraph.count({
+        where: { bookId },
+      });
+
+      return {
+        bookId,
+        totalParagraphs,
+        message: 'Diacritics processing modifies content directly - no separate tracking needed',
+      };
+    } catch (error) {
+      this.logger.error(`❌ Failed to get paragraph count for book ${bookId}:`, error.message);
+      throw error;
+    }
+  }
 }

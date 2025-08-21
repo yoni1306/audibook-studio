@@ -354,4 +354,122 @@ describe('QueueService', () => {
       expect(result).toEqual({ cancelledJobs: 1 });
     });
   });
+
+  describe('addDiacriticsProcessingJob', () => {
+    it('should add diacritics processing job for entire book', async () => {
+      const jobData = {
+        bookId: 'book-123',
+      };
+
+      const expectedJob = {
+        id: 'diacritics-job-123',
+        data: {
+          ...jobData,
+          correlationId: expect.any(String),
+        },
+      };
+
+      mockQueue.add.mockResolvedValue(expectedJob as any);
+
+      const result = await service.addDiacriticsProcessingJob(jobData);
+
+      expect(mockQueue.add).toHaveBeenCalledWith('add-diacritics', {
+        ...jobData,
+        correlationId: expect.any(String),
+      });
+      expect(result).toEqual({ jobId: expectedJob.id });
+    });
+
+    it('should add diacritics processing job for specific paragraphs', async () => {
+      const jobData = {
+        bookId: 'book-123',
+        paragraphIds: ['para-1', 'para-2', 'para-3'],
+      };
+
+      const expectedJob = {
+        id: 'diacritics-job-456',
+        data: {
+          ...jobData,
+          correlationId: expect.any(String),
+        },
+      };
+
+      mockQueue.add.mockResolvedValue(expectedJob as any);
+
+      const result = await service.addDiacriticsProcessingJob(jobData);
+
+      expect(mockQueue.add).toHaveBeenCalledWith('add-diacritics', {
+        ...jobData,
+        correlationId: expect.any(String),
+      });
+      expect(result).toEqual({ jobId: expectedJob.id });
+    });
+
+    it('should handle Hebrew book diacritics processing', async () => {
+      const jobData = {
+        bookId: 'hebrew-book-789',
+        paragraphIds: ['hebrew-para-1', 'hebrew-para-2'],
+      };
+
+      const hebrewJob = {
+        id: 'hebrew-diacritics-job',
+        data: {
+          ...jobData,
+          correlationId: 'hebrew-correlation',
+        },
+      };
+
+      mockQueue.add.mockResolvedValue(hebrewJob as any);
+
+      const result = await service.addDiacriticsProcessingJob(jobData);
+
+      expect(mockQueue.add).toHaveBeenCalledWith('add-diacritics', {
+        ...jobData,
+        correlationId: expect.any(String),
+      });
+      expect(result).toEqual({ jobId: hebrewJob.id });
+    });
+
+    it('should handle large batch diacritics processing', async () => {
+      const largeParagraphIds = Array.from({ length: 100 }, (_, i) => `para-${i + 1}`);
+      const jobData = {
+        bookId: 'large-book-999',
+        paragraphIds: largeParagraphIds,
+      };
+
+      const largeJob = {
+        id: 'large-diacritics-job',
+        data: {
+          ...jobData,
+          correlationId: 'large-correlation',
+        },
+      };
+
+      mockQueue.add.mockResolvedValue(largeJob as any);
+
+      const result = await service.addDiacriticsProcessingJob(jobData);
+
+      expect(mockQueue.add).toHaveBeenCalledWith('add-diacritics', {
+        ...jobData,
+        correlationId: expect.any(String),
+      });
+      expect(result).toEqual({ jobId: largeJob.id });
+    });
+
+    it('should handle diacritics processing queue errors', async () => {
+      const jobData = {
+        bookId: 'error-book',
+      };
+
+      const queueError = new Error('Diacritics queue connection failed');
+      mockQueue.add.mockRejectedValue(queueError);
+
+      await expect(service.addDiacriticsProcessingJob(jobData)).rejects.toThrow('Diacritics queue connection failed');
+      
+      expect(mockQueue.add).toHaveBeenCalledWith('add-diacritics', {
+        ...jobData,
+        correlationId: expect.any(String),
+      });
+    });
+  });
 });

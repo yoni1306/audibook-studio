@@ -42,6 +42,22 @@ services:
       - "9001:9001"
     volumes:
       - minio_data:/data
+
+  python-worker:
+    build:
+      context: .
+      dockerfile: apps/python-worker/Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/audibook
+      - REDIS_URL=redis://redis:6379
+      - PHONIKUD_MODEL_PATH=/app/models/phonikud-1.0.int8.onnx
+      - LOG_LEVEL=info
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./apps/python-worker:/app:cached
+    restart: unless-stopped
     
 volumes:
   postgres_data:

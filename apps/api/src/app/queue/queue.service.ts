@@ -45,6 +45,26 @@ export class QueueService {
     return { jobId: job.id };
   }
 
+  async addDiacriticsProcessingJob(data: {
+    bookId: string;
+    paragraphIds?: string[]; // Optional: process specific paragraphs only
+  }) {
+    const correlationId = getCurrentCorrelationId();
+    const job = await this.audioQueue.add('add-diacritics', {
+      ...data,
+      correlationId,
+    });
+    this.logger.log(
+      `Added diacritics processing job ${job.id} for book ${data.bookId}`,
+      {
+        jobId: job.id,
+        correlationId,
+        paragraphCount: data.paragraphIds?.length || 'all',
+      }
+    );
+    return { jobId: job.id };
+  }
+
   async addPageAudioCombinationJob(data: {
     pageId: string;
     bookId: string;

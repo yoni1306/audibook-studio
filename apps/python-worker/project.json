@@ -1,0 +1,88 @@
+{
+  "name": "python-worker",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/python-worker",
+  "projectType": "application",
+  "tags": ["worker", "python", "diacritics"],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "docker build -t audibook-studio/python-worker .",
+        "cwd": "apps/python-worker"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "python worker.py",
+        "cwd": "apps/python-worker"
+      },
+      "dependsOn": ["install"]
+    },
+    "install": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pip install -r requirements.txt",
+        "cwd": "apps/python-worker"
+      }
+    },
+    "health-check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "python health_check.py",
+        "cwd": "apps/python-worker"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "python -m py_compile worker.py services/*.py",
+        "cwd": "apps/python-worker"
+      }
+    },
+    "docker-run": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "docker run --env-file .env --network host audibook-studio/python-worker",
+        "cwd": "apps/python-worker"
+      }
+    },
+    "dev-setup": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "./setup-dev.sh",
+        "cwd": "apps/python-worker"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "python -m pytest tests/ -v --cov=. --cov-report=term-missing",
+        "cwd": "apps/python-worker"
+      }
+    },
+    "format": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "black . && isort .",
+        "cwd": "apps/python-worker"
+      }
+    },
+    "format-check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "black --check . && isort --check-only .",
+        "cwd": "apps/python-worker"
+      }
+    },
+    "type-check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "mypy .",
+        "cwd": "apps/python-worker"
+      }
+    }
+  }
+}

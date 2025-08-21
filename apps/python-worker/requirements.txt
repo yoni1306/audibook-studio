@@ -1,0 +1,7 @@
+phonikud-onnx==1.0.0
+rq>=1.15.0
+redis>=4.5.0
+psycopg2-binary==2.9.10
+python-dotenv>=1.0.0
+structlog==24.4.0
+aioredis==2.0.1
