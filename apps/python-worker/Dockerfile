@@ -22,8 +22,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application code
 COPY apps/python-worker/ ./
 
-# Create directory for model files
+# Create directory for model files and copy model
 RUN mkdir -p /app/models
+COPY apps/python-worker/models/phonikud-1.0.onnx /app/models/
 
 # Production stage
 FROM python:3.11-slim AS production
@@ -34,8 +35,8 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user for security
-RUN groupadd -r worker && useradd -r -g worker worker
+# Create non-root user for security with home directory
+RUN groupadd -r worker && useradd -r -g worker -d /home/worker -m worker
 
 # Set working directory
 WORKDIR /app
@@ -48,7 +49,7 @@ COPY --from=base /usr/local/bin /usr/local/bin
 COPY --from=base /app ./
 
 # Set proper ownership
-RUN chown -R worker:worker /app
+RUN chown -R worker:worker /app && chown -R worker:worker /home/worker
 
 # Switch to non-root user
 USER worker
@@ -56,7 +57,7 @@ USER worker
 # Set environment variables
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
-ENV PHONIKUD_MODEL_PATH=/app/models/phonikud-1.0.int8.onnx
+ENV PHONIKUD_MODEL_PATH=/app/models/phonikud-1.0.onnx
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

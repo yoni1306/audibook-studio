@@ -9,7 +9,7 @@ description = "Hebrew diacritics processing worker for Audibook Studio"
 authors = [{name = "Audibook Studio Team"}]
 requires-python = ">=3.11"
 dependencies = [
-    "aioredis==2.0.1",
+    "redis>=4.5.0",
     "psycopg2-binary==2.9.10",
     "structlog==24.4.0",
     "phonikud-onnx==1.0.0",

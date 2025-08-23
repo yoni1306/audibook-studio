@@ -13,7 +13,7 @@ import asyncio
 import traceback
 from typing import Dict, Any
 
-import aioredis
+import redis.asyncio as redis
 from dotenv import load_dotenv
 
 from logging_config import get_logger
@@ -22,11 +22,7 @@ from services import DatabaseService, DiacriticsService, JobProcessor
 # Load environment variables
 load_dotenv()
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Configure structured logging
 logger = get_logger("python-diacritics-worker")
 
 class BullMQWorker:
@@ -46,7 +42,7 @@ class BullMQWorker:
         logger.info("Initializing Python diacritics worker...")
         
         # Initialize Redis
-        self.redis = aioredis.from_url(self.redis_url, decode_responses=True)
+        self.redis = redis.from_url(self.redis_url, decode_responses=True)
         await self.redis.ping()
         logger.info(f"Connected to Redis: {self.redis_url}")
         
@@ -54,12 +50,16 @@ class BullMQWorker:
         if not self.database_url:
             raise ValueError("DATABASE_URL environment variable is required")
         
+        logger.info("Initializing database service...")
         db_service = DatabaseService(self.database_url)
         db_service.connect()
+        logger.info("Database service connected successfully")
         
         # Initialize Diacritics Service
+        logger.info("Initializing diacritics service...")
         diacritics_service = DiacriticsService()
         diacritics_service.initialize()
+        logger.info("Diacritics service initialized successfully")
         
         # Initialize Job Processor
         self.job_processor = JobProcessor(db_service, diacritics_service)

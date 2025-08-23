@@ -11,7 +11,7 @@ from pathlib import Path
 def check_dependencies():
     """Check if all required dependencies are available"""
     required_modules = [
-        'aioredis',
+        'redis',
         'psycopg2',
         'structlog',
     ]

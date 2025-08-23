@@ -3,10 +3,11 @@ Diacritics service for Hebrew text processing using phonikud.
 """
 
 import os
-import logging
 from typing import List
 
-logger = logging.getLogger(__name__)
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class DiacriticsService:
@@ -23,15 +24,35 @@ class DiacriticsService:
             return
             
         try:
-            if not os.path.exists(self.model_path):
-                logger.warning(f"Model file not found at {self.model_path}, using mock implementation")
-                self.phonikud = MockPhonikud()
-            else:
+            # Try to initialize phonikud-onnx with model path
+            if os.path.exists(self.model_path):
                 from phonikud_onnx import Phonikud
                 self.phonikud = Phonikud(self.model_path)
                 logger.info(f"Phonikud model initialized successfully: {self.model_path}")
+            else:
+                # Model file doesn't exist, try to use phonikud-onnx with a default/bundled model
+                logger.info(f"Model file not found at {self.model_path}, trying default phonikud model...")
+                from phonikud_onnx import Phonikud
+                # Try common model locations or let package handle it
+                possible_paths = [
+                    "/app/models/phonikud-1.0.onnx",
+                    "./models/phonikud-1.0.onnx",
+                    "phonikud-1.0.onnx"
+                ]
+                model_loaded = False
+                for path in possible_paths:
+                    if os.path.exists(path):
+                        self.phonikud = Phonikud(path)
+                        logger.info(f"Phonikud model loaded from: {path}")
+                        model_loaded = True
+                        break
+                
+                if not model_loaded:
+                    logger.warning("No phonikud model found, using mock implementation")
+                    self.phonikud = MockPhonikud()
         except Exception as e:
             logger.warning(f"Failed to initialize phonikud model, using mock: {e}")
+            # Fallback to mock implementation
             self.phonikud = MockPhonikud()
         
         self._is_initialized = True

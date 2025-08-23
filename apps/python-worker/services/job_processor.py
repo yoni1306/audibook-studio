@@ -2,13 +2,13 @@
 Job processor for handling diacritics processing jobs.
 """
 
-import logging
 from typing import Dict, Any, List, Optional
 
 from .database import DatabaseService
 from .diacritics import DiacriticsService
+from logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class JobProcessor:

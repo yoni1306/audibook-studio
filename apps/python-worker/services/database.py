@@ -2,14 +2,15 @@
 Database service for PostgreSQL operations in the diacritics worker.
 """
 
-import logging
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-logger = logging.getLogger(__name__)
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class DatabaseService:
@@ -22,12 +23,14 @@ class DatabaseService:
     def connect(self):
         """Connect to PostgreSQL database"""
         try:
+            logger.info("Attempting to connect to PostgreSQL database...")
             self.connection = psycopg2.connect(
                 self.connection_string,
-                cursor_factory=RealDictCursor
+                cursor_factory=RealDictCursor,
+                connect_timeout=10  # 10 second timeout
             )
             self.connection.autocommit = True
-            logger.info("Connected to PostgreSQL database")
+            logger.info("Connected to PostgreSQL database successfully")
         except Exception as e:
             logger.error(f"Failed to connect to database: {e}")
             raise
