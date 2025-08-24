@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { StartupService } from './startup.service';
-import { StartupLogicBase } from './startup-logic.base';
+import { StartupLogicBase } from './base/startup-logic.base';
 
 // Mock startup logic for testing
 class MockStartupLogic extends StartupLogicBase {

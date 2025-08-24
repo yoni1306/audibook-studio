@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { StartupLogicBase } from './startup-logic.base';
+import { PrismaService } from '../../prisma/prisma.service';
+import { StartupLogicBase } from '../base/startup-logic.base';
 
 /**
  * Startup logic to backfill TTS model information for existing text corrections

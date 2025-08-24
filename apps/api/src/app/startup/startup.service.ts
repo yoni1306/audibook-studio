@@ -1,8 +1,8 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { StartupLogicBase } from './startup-logic.base';
-import { AudioTimestampBackfillStartup } from './audio-timestamp-backfill.startup';
-import { TtsModelDefaultStartup } from './tts-model-default.startup';
+import { StartupLogicBase } from './base/startup-logic.base';
+import { AudioTimestampBackfillStartup } from './logic/audio-timestamp-backfill.startup';
+import { TtsModelDefaultStartup } from './logic/tts-model-default.startup';
 
 /**
  * Service that manages and executes startup logic when the API service starts
