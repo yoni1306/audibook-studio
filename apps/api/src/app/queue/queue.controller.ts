@@ -50,6 +50,42 @@ export class QueueController {
     }
   }
 
+  @Post('add-diacritics')
+  @ApiOperation({ summary: 'Add diacritics processing job', description: 'Add Hebrew diacritics processing job to the queue' })
+  @ApiResponse({ status: 200, description: 'Diacritics processing job added successfully' })
+  @ApiBody({
+    description: 'Diacritics processing job data',
+    schema: {
+      type: 'object',
+      properties: {
+        bookId: { type: 'string', description: 'Book ID' },
+        paragraphIds: { type: 'array', items: { type: 'string' }, description: 'Optional: specific paragraph IDs to process' }
+      },
+      required: ['bookId']
+    }
+  })
+  async addDiacriticsProcessingJob(@Body() body: { bookId: string; paragraphIds?: string[] }) {
+    try {
+      this.logger.log(`🔤 [API] Adding diacritics processing job for book: ${body.bookId}`);
+      
+      const result = await this.queueService.addDiacriticsProcessingJob(body);
+      
+      this.logger.log(`🔤 [API] Successfully added diacritics processing job`);
+      return {
+        ...result,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      this.logger.error(`💥 [API] Error adding diacritics processing job: ${error.message}`, error.stack);
+      throw new InternalServerErrorException({
+        error: 'Internal Server Error',
+        message: 'Failed to add diacritics processing job',
+        statusCode: 500,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
   @Get('status')
   @ApiOperation({ summary: 'Get queue status', description: 'Get current status of the job queue' })
   @ApiResponse({ status: 200, description: 'Successfully retrieved queue status' })

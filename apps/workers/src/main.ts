@@ -6,7 +6,7 @@ const envFile =
   process.env['NODE_ENV'] === 'production' ? '.env.production' : '.env.local';
 dotenv.config({ path: path.resolve(process.cwd(), envFile) });
 
-import { Worker, Job } from 'bullmq';
+import { Worker, Job, Queue } from 'bullmq';
 import { createLogger } from '@audibook/logger';
 import { downloadFromS3, uploadToS3, deleteOldAudioFiles } from './s3-client';
 import { PageBasedEPUBParser } from './text-processing/page-based-epub-parser';
@@ -206,6 +206,25 @@ const worker = new Worker(
                 totalDuration: Date.now() - startTime,
                 paragraphCount: result.metadata.totalParagraphs,
               });
+
+              // Trigger Hebrew diacritics processing for the completed book
+              try {
+                const diacriticsJob = await audioQueue.add('add-diacritics', {
+                  bookId: job.data.bookId,
+                  correlationId: job.data.correlationId,
+                });
+                logger.info('Added Hebrew diacritics processing job', {
+                  bookId: job.data.bookId,
+                  diacriticsJobId: diacriticsJob.id,
+                  correlationId: job.data.correlationId,
+                });
+              } catch (error) {
+                logger.error('Failed to add diacritics processing job', {
+                  bookId: job.data.bookId,
+                  error: error instanceof Error ? error.message : String(error),
+                });
+                // Don't throw - diacritics processing failure shouldn't fail the main job
+              }
 
               // Clean up temp file
               await fs.unlink(localPath).catch((error) => {
@@ -591,6 +610,11 @@ const worker = new Worker(
   }
 );
 
+// Create queue instance for adding jobs (using same connection config as worker)
+const audioQueue = new Queue('audio-processing', {
+  connection: worker.opts.connection
+});
+
 // Worker event handlers with structured logging
 worker.on('completed', (job) => {
   withCorrelationId(job.data.correlationId || generateCorrelationId(), () => {
@@ -737,10 +761,11 @@ const gracefulShutdown = async (signal: string) => {
       logger.debug('Health check interval cleared');
     }
     
-    // Close the worker and cleanup database connections
+    // Close the worker, queue, and cleanup database connections
     await Promise.race([
       Promise.all([
         worker.close(),
+        audioQueue.close(),
         cleanupDatabase()
       ]),
       new Promise((_, reject) => 
