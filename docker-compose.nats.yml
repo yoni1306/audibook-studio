@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  nats:
+    image: nats:2.11-alpine
+    container_name: audibook-nats
+    command: [
+      "--jetstream",
+      "--store_dir=/data",
+      "--debug"
+    ]
+    ports:
+      - "4222:4222"  # NATS client port
+      - "8222:8222"  # HTTP monitoring port
+      - "6222:6222"  # Cluster port
+    volumes:
+      - nats_data:/data
+    environment:
+      - NATS_SERVER_NAME=audibook-nats
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "4222"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - audibook-network
+
+volumes:
+  nats_data:
+    driver: local
+
+networks:
+  audibook-network:
+    driver: bridge

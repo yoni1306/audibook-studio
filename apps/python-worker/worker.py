@@ -31,7 +31,7 @@ class BullMQWorker:
     def __init__(self):
         self.redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
         self.database_url = os.getenv('DATABASE_URL')
-        self.queue_name = 'audio-processing'
+        self.queue_name = "audio-processing-python"
         
         self.redis = None
         self.job_processor = None
@@ -80,7 +80,7 @@ class BullMQWorker:
     
     async def listen_for_jobs(self):
         """Listen for BullMQ jobs"""
-        logger.info(f"Starting to listen for 'add-diacritics' jobs on queue '{self.queue_name}'")
+        logger.info(f"🚀 Python Worker ready! Listening for 'add-diacritics' jobs on queue '{self.queue_name}'")
         self.running = True
         
         while self.running:
@@ -90,7 +90,7 @@ class BullMQWorker:
                 waiting_key = f"bull:{self.queue_name}:waiting"
                 active_key = f"bull:{self.queue_name}:active"
                 
-                # Use BRPOPLPUSH to atomically move job from waiting to active
+                # Use BRPOPLPUSH to atomically move job from waiting to active (blocking)
                 job_id = await self.redis.brpoplpush(waiting_key, active_key, timeout=5)
                 
                 if job_id:
@@ -168,7 +168,7 @@ class BullMQWorker:
 
 async def main():
     """Main entry point"""
-    logger.info("Starting Python Diacritics Worker for Audiobook Studio")
+    logger.info("🎯 Starting Python Diacritics Worker for Audiobook Studio")
     
     worker = BullMQWorker()
     await worker.start()

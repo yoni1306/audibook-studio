@@ -18,7 +18,7 @@ class DiacriticsService:
         self.phonikud = None
         self._is_initialized = False
     
-    def initialize(self):
+    async def initialize(self):
         """Initialize the phonikud model"""
         if self._is_initialized:
             return

@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { StartupModule } from './startup.module';
 import { StartupService } from './startup.service';
-import { AudioTimestampBackfillStartup } from './audio-timestamp-backfill.startup';
+import { AudioTimestampBackfillStartup } from './logic/audio-timestamp-backfill.startup';
 import { PrismaService } from '../prisma/prisma.service';
 
 describe('Startup System Integration', () => {

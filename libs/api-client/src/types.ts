@@ -682,7 +682,67 @@ export interface paths {
      * Parse EPUB file
      * @description Add EPUB parsing job to the queue
      */
-    post: operations['QueueController_addEpubParsingJob'];
+    post: operations['NatsQueueController_parseEpub'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/queue/generate-audio': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Generate audio
+     * @description Add audio generation job to the queue
+     */
+    post: operations['NatsQueueController_generateAudio'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/queue/combine-page-audio': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Combine page audio
+     * @description Add page audio combination job to the queue
+     */
+    post: operations['NatsQueueController_combinePageAudio'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/queue/add-diacritics': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Add Hebrew diacritics
+     * @description Add diacritics processing job to the queue
+     */
+    post: operations['NatsQueueController_addDiacritics'];
     delete?: never;
     options?: never;
     head?: never;
@@ -698,9 +758,9 @@ export interface paths {
     };
     /**
      * Get queue status
-     * @description Get current status of the job queue
+     * @description Get current queue status and statistics
      */
-    get: operations['QueueController_getQueueStatus'];
+    get: operations['NatsQueueController_getQueueStatus'];
     put?: never;
     post?: never;
     delete?: never;
@@ -718,29 +778,9 @@ export interface paths {
     };
     /**
      * Get jobs by status
-     * @description Get jobs filtered by their status
+     * @description Get jobs filtered by status
      */
-    get: operations['QueueController_getJobsByStatus'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/queue/job/{id}': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Get job by ID
-     * @description Get detailed information about a specific job
-     */
-    get: operations['QueueController_getJob'];
+    get: operations['NatsQueueController_getJobsByStatus'];
     put?: never;
     post?: never;
     delete?: never;
@@ -758,31 +798,11 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    post?: never;
     /**
-     * Clean jobs by status
-     * @description Clean/remove jobs with specified status from the queue
+     * Clean jobs
+     * @description Clean completed or failed jobs
      */
-    delete: operations['QueueController_cleanJobs'];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/queue/retry/{id}': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Retry job
-     * @description Retry a failed job by its ID
-     */
-    post: operations['QueueController_retryJob'];
+    post: operations['NatsQueueController_cleanJobs'];
     delete?: never;
     options?: never;
     head?: never;
@@ -1278,48 +1298,6 @@ export interface components {
        */
       timestamp: string;
     };
-    JobDto: {
-      /** @description Job ID */
-      id: string;
-      /** @description Job name */
-      name: string;
-      /** @description Job data */
-      data: {
-        [key: string]: unknown;
-      };
-      /** @description Job options */
-      opts: {
-        [key: string]: unknown;
-      } | null;
-      /** @description Job progress */
-      progress: number | null;
-      /** @description Job delay */
-      delay: number | null;
-      /** @description Job timestamp */
-      timestamp: string;
-      /** @description Job attempts made */
-      attemptsMade: number;
-      /** @description Job processed on */
-      processedOn: string | null;
-      /** @description Job finished on */
-      finishedOn: string | null;
-      /** @description Job failed reason */
-      failedReason: string | null;
-      /** @description Job stacktrace */
-      stacktrace: string[] | null;
-      /** @description Job return value */
-      returnvalue: Record<string, never> | null;
-    };
-    GetJobsByStatusResponseDto: {
-      /** @description List of jobs */
-      jobs: components['schemas']['JobDto'][];
-      /** @description Job status filter */
-      status: string;
-      /** @description Total number of jobs */
-      total: number;
-      /** @description Response timestamp */
-      timestamp: string;
-    };
   };
   responses: never;
   parameters: never;
@@ -1455,6 +1433,15 @@ export interface operations {
           author?: string;
           /** @description S3 key for the book file */
           s3Key: string;
+          /**
+           * @description TTS model provider (azure, openai, elevenlabs)
+           * @default azure
+           */
+          ttsModel?: string;
+          /** @description Voice ID for the selected TTS model */
+          ttsVoice?: string;
+          /** @description Additional TTS settings (rate, pitch, volume) */
+          ttsSettings?: Record<string, never>;
         };
       };
     };
@@ -2239,7 +2226,7 @@ export interface operations {
       };
     };
   };
-  QueueController_addEpubParsingJob: {
+  NatsQueueController_parseEpub: {
     parameters: {
       query?: never;
       header?: never;
@@ -2267,7 +2254,95 @@ export interface operations {
       };
     };
   };
-  QueueController_getQueueStatus: {
+  NatsQueueController_generateAudio: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Audio generation job data */
+    requestBody: {
+      content: {
+        'application/json': {
+          /** @description Paragraph ID */
+          paragraphId: string;
+          /** @description Book ID */
+          bookId: string;
+          /** @description Text content to convert to audio */
+          content: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Audio generation job added successfully */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  NatsQueueController_combinePageAudio: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Page audio combination job data */
+    requestBody: {
+      content: {
+        'application/json': {
+          /** @description Page ID */
+          pageId: string;
+          /** @description Book ID */
+          bookId: string;
+          /** @description Array of audio file S3 keys */
+          audioFileKeys: string[];
+        };
+      };
+    };
+    responses: {
+      /** @description Page audio combination job added successfully */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  NatsQueueController_addDiacritics: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Diacritics processing job data */
+    requestBody: {
+      content: {
+        'application/json': {
+          /** @description Book ID */
+          bookId: string;
+          /** @description Optional array of paragraph IDs to process */
+          paragraphIds?: string[];
+        };
+      };
+    };
+    responses: {
+      /** @description Diacritics processing job added successfully */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  NatsQueueController_getQueueStatus: {
     parameters: {
       query?: never;
       header?: never;
@@ -2276,7 +2351,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Successfully retrieved queue status */
+      /** @description Queue status retrieved successfully */
       200: {
         headers: {
           [name: string]: unknown;
@@ -2285,42 +2360,19 @@ export interface operations {
       };
     };
   };
-  QueueController_getJobsByStatus: {
+  NatsQueueController_getJobsByStatus: {
     parameters: {
       query?: never;
       header?: never;
       path: {
-        /** @description Job status (waiting, active, completed, failed, delayed) */
+        /** @description Job status to filter by */
         status: string;
       };
       cookie?: never;
     };
     requestBody?: never;
     responses: {
-      /** @description Successfully retrieved jobs by status */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['GetJobsByStatusResponseDto'];
-        };
-      };
-    };
-  };
-  QueueController_getJob: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description Job ID */
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successfully retrieved job details */
+      /** @description Jobs retrieved successfully */
       200: {
         headers: {
           [name: string]: unknown;
@@ -2329,40 +2381,19 @@ export interface operations {
       };
     };
   };
-  QueueController_cleanJobs: {
+  NatsQueueController_cleanJobs: {
     parameters: {
       query?: never;
       header?: never;
       path: {
-        /** @description Job status to clean (completed, failed) */
+        /** @description Status of jobs to clean (completed or failed) */
         status: string;
       };
       cookie?: never;
     };
     requestBody?: never;
     responses: {
-      /** @description Successfully cleaned jobs */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  QueueController_retryJob: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description Job ID to retry */
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successfully retried job */
+      /** @description Jobs cleaned successfully */
       200: {
         headers: {
           [name: string]: unknown;

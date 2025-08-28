@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "books" ALTER COLUMN "ttsModel" DROP NOT NULL,
+ALTER COLUMN "ttsModel" DROP DEFAULT;

@@ -13,18 +13,18 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy requirements first for better caching
-COPY apps/python-worker/requirements.txt ./
+COPY requirements.txt ./
 
 # Install Python dependencies (cached layer)
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY apps/python-worker/ ./
+COPY . ./
 
 # Create directory for model files and copy model
 RUN mkdir -p /app/models
-COPY apps/python-worker/models/phonikud-1.0.onnx /app/models/
+COPY models/phonikud-1.0.onnx /app/models/
 
 # Production stage
 FROM python:3.11-slim AS production
@@ -64,4 +64,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python health_check.py || exit 1
 
 # Run the worker
-CMD ["python", "worker.py"]
+CMD ["python", "main.py"]

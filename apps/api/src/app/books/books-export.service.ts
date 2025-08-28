@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { QueueService } from '../queue/queue.service';
+import { NatsQueueService } from '../queue/nats-queue.service';
 import { S3Service } from '../s3/s3.service';
 import { BookExportStatusDto, StartBookExportResponseDto, PageExportStatusDto } from './dto/book-export.dto';
 import { AudioStatus } from '@prisma/client';
@@ -11,7 +11,7 @@ export class BooksExportService {
 
   constructor(
     private prisma: PrismaService,
-    private queueService: QueueService,
+    private queueService: NatsQueueService,
     private s3Service: S3Service
   ) {}
 
@@ -155,9 +155,11 @@ export class BooksExportService {
       }
 
       // Queue the page audio combination job
+      const audioFileKeys = paragraphsWithAudio.map(p => p.audioS3Key).filter(Boolean);
       const result = await this.queueService.addPageAudioCombinationJob({
         pageId: page.id,
         bookId: book.id,
+        audioFileKeys,
       });
 
       jobIds.push(result.jobId);
@@ -242,9 +244,11 @@ export class BooksExportService {
     }
 
     // Queue the page audio combination job
+    const audioFileKeys = paragraphsWithAudio.map(p => p.audioS3Key).filter(Boolean);
     const result = await this.queueService.addPageAudioCombinationJob({
       pageId: page.id,
       bookId,
+      audioFileKeys,
     });
 
     // Update page status to GENERATING

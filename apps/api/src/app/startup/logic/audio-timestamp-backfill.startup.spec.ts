@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import { AudioTimestampBackfillStartup } from './audio-timestamp-backfill.startup';
 
 describe('AudioTimestampBackfillStartup', () => {

@@ -17,10 +17,14 @@ class DatabaseService:
     """Database service for PostgreSQL operations"""
     
     def __init__(self, connection_string: str):
-        self.connection_string = connection_string
+        # Strip quotes from connection string if present
+        self.connection_string = connection_string.strip('"\'')
+        # Remove schema parameter as psycopg2 doesn't support it in the connection string
+        if '?schema=' in self.connection_string:
+            self.connection_string = self.connection_string.split('?schema=')[0]
         self.connection = None
     
-    def connect(self):
+    async def connect(self):
         """Connect to PostgreSQL database"""
         try:
             logger.info("Attempting to connect to PostgreSQL database...")
@@ -49,7 +53,7 @@ class DatabaseService:
         cursor = self.connection.cursor()
         
         try:
-            where_conditions = ["book_id = %s"]
+            where_conditions = ['"bookId" = %s']
             params = [book_id]
             
             if paragraph_ids:
@@ -60,10 +64,10 @@ class DatabaseService:
             # Get all paragraphs - we'll process them regardless of current state
             # This allows reprocessing if needed
             query = f"""
-                SELECT id, content, order_index, page_id
+                SELECT id, content, "orderIndex", "pageId"
                 FROM paragraphs
                 WHERE {' AND '.join(where_conditions)}
-                ORDER BY page_id ASC, order_index ASC
+                ORDER BY "pageId" ASC, "orderIndex" ASC
             """
             
             cursor.execute(query, params)
@@ -103,7 +107,7 @@ class DatabaseService:
         
         try:
             cursor.execute("""
-                SELECT id, content, order_index, page_id, book_id
+                SELECT id, content, "orderIndex", "pageId", "bookId"
                 FROM paragraphs
                 WHERE id = %s
             """, (paragraph_id,))
@@ -125,7 +129,7 @@ class DatabaseService:
             cursor.execute("""
                 SELECT COUNT(*) as count
                 FROM paragraphs
-                WHERE book_id = %s
+                WHERE "bookId" = %s
             """, (book_id,))
             
             result = cursor.fetchone()

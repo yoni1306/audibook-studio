@@ -4,7 +4,7 @@ import { ApiOperation, ApiResponse, ApiBody, ApiConsumes } from '@nestjs/swagger
 import { BookStatus } from '@prisma/client';
 import { S3Service } from './s3.service';
 import { BooksService } from '../books/books.service';
-import { QueueService } from '../queue/queue.service';
+import { NatsQueueService } from '../queue/nats-queue.service';
 import { PresignedUploadResponseDto } from './dto/s3.dto';
 
 // TTS Settings interface
@@ -32,7 +32,7 @@ export class S3Controller {
   constructor(
     private s3Service: S3Service,
     private booksService: BooksService,
-    private queueService: QueueService
+    private queueService: NatsQueueService
   ) {}
 
   /**
@@ -153,7 +153,6 @@ export class S3Controller {
       await this.queueService.addEpubParsingJob({
         bookId: book.id,
         s3Key: key,
-        parsingMethod,
       });
 
       this.logger.log(`✅ [API] Successfully queued parsing job for book ${book.id}`);
@@ -254,7 +253,6 @@ export class S3Controller {
         await this.queueService.addEpubParsingJob({
           bookId,
           s3Key,
-          parsingMethod,
         });
         this.logger.log(`✅ [API] Successfully queued parsing job for book ${bookId}`);
       } else {

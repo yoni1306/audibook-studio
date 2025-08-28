@@ -3,14 +3,14 @@ import { InternalServerErrorException } from '@nestjs/common';
 import { S3Controller } from './s3.controller';
 import { S3Service } from './s3.service';
 import { BooksService } from '../books/books.service';
-import { QueueService } from '../queue/queue.service';
+import { NatsQueueService } from '../queue/nats-queue.service';
 import { BookStatus } from '@prisma/client';
 
 describe('S3Controller', () => {
   let controller: S3Controller;
   let s3Service: jest.Mocked<S3Service>;
   let booksService: jest.Mocked<BooksService>;
-  let queueService: jest.Mocked<QueueService>;
+  let queueService: jest.Mocked<NatsQueueService>;
 
   const mockBook = {
     id: 'book-123',
@@ -51,14 +51,14 @@ describe('S3Controller', () => {
       providers: [
         { provide: S3Service, useValue: mockS3Service },
         { provide: BooksService, useValue: mockBooksService },
-        { provide: QueueService, useValue: mockQueueService },
+        { provide: NatsQueueService, useValue: mockQueueService },
       ],
     }).compile();
 
     controller = module.get<S3Controller>(S3Controller);
     s3Service = module.get(S3Service);
     booksService = module.get(BooksService);
-    queueService = module.get(QueueService);
+    queueService = module.get(NatsQueueService);
   });
 
   describe('Hebrew Filename Encoding', () => {
@@ -223,7 +223,6 @@ describe('S3Controller', () => {
       expect(queueService.addEpubParsingJob).toHaveBeenCalledWith({
         bookId: mockBook.id,
         s3Key: expect.any(String),
-        parsingMethod: 'page-based',
       });
     });
   });
@@ -310,7 +309,6 @@ describe('S3Controller', () => {
       expect(queueService.addEpubParsingJob).toHaveBeenCalledWith({
         bookId: mockBook.id,
         s3Key: expect.any(String),
-        parsingMethod: 'page-based',
       });
     });
   });

@@ -2,6 +2,12 @@ phonikud-onnx==1.0.0
 rq>=1.15.0
 redis>=4.5.0
 psycopg2-binary==2.9.10
+sqlalchemy>=2.0.0
 python-dotenv>=1.0.0
 structlog==24.4.0
-redis>=4.5.0
+python-logging-loki>=0.3.1
+requests>=2.31.0
+nats-py>=2.8.0
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-timeout>=2.1.0

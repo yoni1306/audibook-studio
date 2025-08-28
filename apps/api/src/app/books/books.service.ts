@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BookStatus, Prisma } from '@prisma/client';
-import { QueueService } from '../queue/queue.service';
+import { NatsQueueService } from '../queue/nats-queue.service';
 import { TextFixesService, WordChange } from './text-fixes.service';
 import { UpdateParagraphResponseDto, BulkFixSuggestion as BulkFixSuggestionDto } from './dto/paragraph-update.dto';
 import { S3Service } from '../s3/s3.service';
@@ -54,7 +54,7 @@ export class BooksService {
 
   constructor(
     private prisma: PrismaService,
-    private queueService: QueueService,
+    private queueService: NatsQueueService,
     private textFixesService: TextFixesService,
     private s3Service: S3Service,
     private bulkTextFixesService: BulkTextFixesService

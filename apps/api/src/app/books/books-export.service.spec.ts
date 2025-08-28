@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BooksExportService } from './books-export.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { QueueService } from '../queue/queue.service';
+import { NatsQueueService } from '../queue/nats-queue.service';
 import { S3Service } from '../s3/s3.service';
 import { AudioStatus } from '@prisma/client';
 import { Readable } from 'stream';
@@ -79,7 +79,7 @@ describe('BooksExportService', () => {
       providers: [
         BooksExportService,
         { provide: PrismaService, useValue: mockPrismaService },
-        { provide: QueueService, useValue: mockQueueService },
+        { provide: NatsQueueService, useValue: mockQueueService },
         { provide: S3Service, useValue: mockS3Service },
       ],
     })
@@ -88,7 +88,7 @@ describe('BooksExportService', () => {
 
     service = module.get<BooksExportService>(BooksExportService);
     prismaService = module.get(PrismaService);
-    queueService = module.get(QueueService);
+    queueService = module.get(NatsQueueService);
     s3Service = module.get(S3Service);
   });
 
@@ -266,10 +266,12 @@ describe('BooksExportService', () => {
       expect(queueService.addPageAudioCombinationJob).toHaveBeenCalledWith({
         pageId: 'page-1',
         bookId: 'book-1',
+        audioFileKeys: ['para-1.mp3', 'para-2.mp3'],
       });
       expect(queueService.addPageAudioCombinationJob).toHaveBeenCalledWith({
         pageId: 'page-2',
         bookId: 'book-1',
+        audioFileKeys: ['para-3.mp3'],
       });
       
       // Verify page status updates
@@ -389,6 +391,7 @@ describe('BooksExportService', () => {
       expect(queueService.addPageAudioCombinationJob).toHaveBeenCalledWith({
         bookId: 'book-1',
         pageId: 'page-1',
+        audioFileKeys: ['para-1.mp3', 'para-2.mp3'],
       });
       expect(result.success).toBe(true);
       expect(result.pagesQueued).toBe(1);

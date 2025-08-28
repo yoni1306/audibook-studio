@@ -9,11 +9,13 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/audibook
       - REDIS_URL=redis://redis:6379
+      - NATS_URL=nats://nats:4222
       - NODE_ENV=development
       - LOG_LEVEL=debug  # For basic logging
     depends_on:
       - db
       - redis
+      - nats
 
   db:
     image: postgres:16-alpine
@@ -30,6 +32,15 @@ services:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+
+  nats:
+    image: nats:latest
+    command: ["-js", "-m", "8222"]
+    ports:
+      - "4222:4222"  # NATS client port
+      - "8222:8222"  # NATS monitoring port
+    volumes:
+      - nats_data:/data
 
   minio:
     image: minio/minio
@@ -50,11 +61,17 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/audibook
       - REDIS_URL=redis://redis:6379
+      - NATS_URL=nats://nats:4222
       - PHONIKUD_MODEL_PATH=/app/models/phonikud-1.0.onnx
       - LOG_LEVEL=info
+      - LOKI_URL=http://loki:3100/loki/api/v1/push
+      - SERVICE_NAME=python-worker
+      - ENVIRONMENT=development
     depends_on:
       - db
       - redis
+      - nats
+      - loki
     volumes:
       - ./apps/python-worker:/app:cached
     restart: unless-stopped
@@ -62,3 +79,4 @@ services:
 volumes:
   postgres_data:
   minio_data:
+  nats_data:

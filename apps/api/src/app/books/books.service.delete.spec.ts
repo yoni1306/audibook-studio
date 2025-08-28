@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BooksService } from './books.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { QueueService } from '../queue/queue.service';
+import { NatsQueueService } from '../queue/nats-queue.service';
 import { TextFixesService } from './text-fixes.service';
 import { BulkTextFixesService } from './bulk-text-fixes.service';
 import { S3Service } from '../s3/s3.service';
@@ -74,7 +74,7 @@ describe('BooksService - Delete Book', () => {
           useValue: mockS3Service,
         },
         {
-          provide: QueueService,
+          provide: NatsQueueService,
           useValue: mockQueueService,
         },
         {

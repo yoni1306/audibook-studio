@@ -6,7 +6,7 @@ const envFile =
   process.env['NODE_ENV'] === 'production' ? '.env.production' : '.env.local';
 dotenv.config({ path: path.resolve(process.cwd(), envFile) });
 
-import { Worker, Job, Queue } from 'bullmq';
+import { Worker, Job } from 'bullmq';
 import { createLogger } from '@audibook/logger';
 import { downloadFromS3, uploadToS3, deleteOldAudioFiles } from './s3-client';
 import { PageBasedEPUBParser } from './text-processing/page-based-epub-parser';
@@ -38,7 +38,7 @@ const logger = createLogger('Worker');
 
 // Create worker
 const worker = new Worker(
-  'audio-processing',
+  'audio-processing-js',
   async (job: Job) => {
     // Extract correlation ID from job data or generate new one
     const correlationId = job.data.correlationId || generateCorrelationId();
@@ -207,15 +207,11 @@ const worker = new Worker(
                 paragraphCount: result.metadata.totalParagraphs,
               });
 
-              // Trigger Hebrew diacritics processing for the completed book
+              // TODO: Trigger Hebrew diacritics processing for the completed book
+              // This should be implemented with NATS JetStream instead of BullMQ
               try {
-                const diacriticsJob = await audioQueue.add('add-diacritics', {
+                logger.info('Book processing completed - Hebrew diacritics processing not yet implemented with NATS', {
                   bookId: job.data.bookId,
-                  correlationId: job.data.correlationId,
-                });
-                logger.info('Added Hebrew diacritics processing job', {
-                  bookId: job.data.bookId,
-                  diacriticsJobId: diacriticsJob.id,
                   correlationId: job.data.correlationId,
                 });
               } catch (error) {
@@ -559,12 +555,14 @@ const worker = new Worker(
               throw error;
             }
 
+          // Note: 'add-diacritics' jobs are handled by the Python worker
+          // and should not be processed by this JavaScript worker
+
           default:
             logger.warn('Unknown job type received', {
               jobType: job.name,
-              jobId: job.id,
             });
-            throw new Error(`Unknown job type: ${job.name}`);
+            break;
         }
       } catch (error) {
         logger.error('Job processing failed', {
@@ -572,48 +570,20 @@ const worker = new Worker(
           jobType: job.name,
           error: error.message,
           stack: error.stack,
-          duration: Date.now() - startTime,
-          willRetry: job.attemptsMade < (job.opts.attempts || 1) - 1,
         });
         throw error;
       }
     });
   },
   {
-    connection: process.env['REDIS_URL'] ? {
-      // Parse Redis URL to extract connection details
-      host: new URL(process.env['REDIS_URL']).hostname,
-      port: parseInt(new URL(process.env['REDIS_URL']).port) || 6379,
-      password: new URL(process.env['REDIS_URL']).password || undefined,
-      family: 0, // Enable dual-stack lookup for Railway IPv6 support
-      retryDelayOnFailover: 100,
-      enableReadyCheck: false,
-      maxRetriesPerRequest: null, // BullMQ requirement
-      lazyConnect: true,
-      connectTimeout: 60000,
-      commandTimeout: 30000, // Increased timeout for long-running operations
-      disconnectTimeout: 5000, // Add disconnect timeout
-    } : {
-      // Fallback for local development
+    connection: {
       host: process.env['REDIS_HOST'] || 'localhost',
-      port: parseInt(process.env['REDIS_PORT'], 10) || 6379,
-      family: 0, // Enable dual-stack lookup for Railway IPv6 support
-      retryDelayOnFailover: 100,
-      enableReadyCheck: false,
-      maxRetriesPerRequest: null, // BullMQ requirement
-      lazyConnect: true,
-      connectTimeout: 60000,
-      commandTimeout: 30000, // Increased timeout for long-running operations
-      disconnectTimeout: 5000, // Add disconnect timeout
+      port: parseInt(process.env['REDIS_PORT'] || '6379'),
     },
-    concurrency: parseInt(process.env['WORKER_CONCURRENCY'], 10) || 1,
   }
 );
 
-// Create queue instance for adding jobs (using same connection config as worker)
-const audioQueue = new Queue('audio-processing', {
-  connection: worker.opts.connection
-});
+// Worker is already started above
 
 // Worker event handlers with structured logging
 worker.on('completed', (job) => {
@@ -765,7 +735,6 @@ const gracefulShutdown = async (signal: string) => {
     await Promise.race([
       Promise.all([
         worker.close(),
-        audioQueue.close(),
         cleanupDatabase()
       ]),
       new Promise((_, reject) => 

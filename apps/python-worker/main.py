@@ -21,11 +21,12 @@ from contextlib import asynccontextmanager
 import redis
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from dotenv import load_dotenv
+from nats_worker import NatsPythonWorker
+import dotenv
 import structlog
 
 # Load environment variables
-load_dotenv()
+dotenv.load_dotenv()
 
 # Configure structured logging
 structlog.configure(
@@ -84,7 +85,7 @@ class DatabaseService:
         cursor = self.connection.cursor()
         
         try:
-            where_conditions = ["book_id = %s", "content_with_diacritics IS NULL"]
+            where_conditions = ['"bookId" = %s', "content_with_diacritics IS NULL"]
             params = [book_id]
             
             if paragraph_ids:
@@ -93,10 +94,10 @@ class DatabaseService:
                 params.extend(paragraph_ids)
             
             query = f"""
-                SELECT id, content, order_index, page_id
+                SELECT id, content, "orderIndex", "pageId"
                 FROM paragraphs
                 WHERE {' AND '.join(where_conditions)}
-                ORDER BY page_id ASC, order_index ASC
+                ORDER BY "pageId" ASC, "orderIndex" ASC
             """
             
             cursor.execute(query, params)
@@ -356,21 +357,25 @@ class PythonWorker:
         """Start the worker"""
         try:
             await self.initialize()
-            await self.listen_for_jobs()
-        except KeyboardInterrupt:
-            logger.info("Received interrupt signal, shutting down...")
         except Exception as e:
-            logger.error("Worker error", error=str(e), traceback=traceback.format_exc())
-        finally:
-            self.running = False
-            await self.cleanup()
+            logger.error("Failed to start worker", error=str(e))
+            raise
 
 async def main():
     """Main entry point"""
     logger.info("Starting Python Worker for Audiobook Studio")
     
-    worker = PythonWorker()
-    await worker.start()
+    worker = NatsPythonWorker()
+    
+    try:
+        await worker.start()
+    except KeyboardInterrupt:
+        logger.info("🛑 Received shutdown signal")
+    except Exception as error:
+        logger.error("❌ Worker failed", error=str(error))
+        raise
+    finally:
+        await worker.stop()
 
 if __name__ == "__main__":
     asyncio.run(main())

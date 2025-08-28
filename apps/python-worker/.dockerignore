@@ -30,9 +30,9 @@ logs/
 .env.local
 .env.*.local
 
-# Models (will be mounted or downloaded)
-models/
-*.onnx
+# Models are now included in the Docker image
+# models/
+# *.onnx
 
 # Documentation
 README.md

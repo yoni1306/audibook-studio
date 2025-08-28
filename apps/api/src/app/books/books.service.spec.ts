@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BooksService } from './books.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { QueueService } from '../queue/queue.service';
+import { NatsQueueService } from '../queue/nats-queue.service';
 import { TextFixesService } from './text-fixes.service';
 import { BulkTextFixesService } from './bulk-text-fixes.service';
 import { S3Service } from '../s3/s3.service';
@@ -10,7 +10,7 @@ import { BookStatus, FixType } from '@prisma/client';
 describe('BooksService', () => {
   let service: BooksService;
   let prismaService: jest.Mocked<PrismaService>;
-  let queueService: jest.Mocked<QueueService>;
+  let queueService: jest.Mocked<NatsQueueService>;
   let textFixesService: jest.Mocked<TextFixesService>;
   let bulkTextFixesService: jest.Mocked<BulkTextFixesService>;
 
@@ -107,7 +107,7 @@ describe('BooksService', () => {
           useValue: mockPrismaService,
         },
         {
-          provide: QueueService,
+          provide: NatsQueueService,
           useValue: mockQueueService,
         },
         {
@@ -127,7 +127,7 @@ describe('BooksService', () => {
 
     service = module.get<BooksService>(BooksService);
     prismaService = module.get(PrismaService);
-    queueService = module.get(QueueService);
+    queueService = module.get(NatsQueueService);
     textFixesService = module.get(TextFixesService);
     bulkTextFixesService = module.get(BulkTextFixesService);
   });
