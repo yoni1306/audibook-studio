@@ -105,7 +105,7 @@ class DatabaseORMService:
                     session.commit()
                     logger.debug(f"Updated paragraph {paragraph_id} with diacritics content")
                 else:
-                    logger.warning(f"Paragraph {paragraph_id} not found for update")
+                    logger.debug(f"Paragraph {paragraph_id} not found for update (may have been deleted)")
                     
             except SQLAlchemyError as e:
                 logger.error(f"Database error in update_paragraph_content: {e}")

@@ -205,8 +205,8 @@ class JobProcessor:
         }
     
     def get_supported_job_types(self) -> List[str]:
-        """Get list of supported job types"""
-        return ['add-diacritics']
+        """Return list of supported job types"""
+        return ['add-advanced-diacritics', 'add-simple-diacritics']
     
     def is_job_supported(self, job_name: str) -> bool:
         """Check if a job type is supported"""

@@ -83,7 +83,7 @@ async def lifespan(app: FastAPI):
 class MockPhonikud:
     """Mock phonikud implementation for development/testing"""
     
-    def add_diacritics(self, text: str, mark_matres_lectionis: str = None) -> str:
+    def add_diacritics(self, text: str) -> str:
         """Mock implementation that just returns the original text with a marker"""
         logger.warning("Using mock phonikud implementation")
         return f"[MOCK_DIACRITICS]{text}[/MOCK_DIACRITICS]"
@@ -119,10 +119,7 @@ async def add_diacritics(request: DiacriticsRequest):
         start_time = time.time()
         
         # Process the text
-        text_with_diacritics = phonikud_instance.add_diacritics(
-            request.text,
-            mark_matres_lectionis=request.mark_matres_lectionis
-        )
+        text_with_diacritics = phonikud_instance.add_diacritics(request.text)
         
         processing_time = (time.time() - start_time) * 1000  # Convert to milliseconds
         
@@ -157,10 +154,7 @@ async def add_diacritics_batch(request: BatchDiacriticsRequest):
                 continue
                 
             text_start = time.time()
-            text_with_diacritics = phonikud_instance.add_diacritics(
-                text,
-                mark_matres_lectionis=request.mark_matres_lectionis
-            )
+            text_with_diacritics = phonikud_instance.add_diacritics(text)
             text_processing_time = (time.time() - text_start) * 1000
             
             results.append(DiacriticsResponse(

@@ -8,6 +8,7 @@ for reliable job processing with native NATS support.
 import os
 import json
 import asyncio
+import signal
 from typing import Dict, Any, Optional
 import structlog
 from nats.aio.client import Client as NATS
@@ -49,6 +50,7 @@ class NatsPythonWorker:
         self.jetstream: Optional[JetStreamContext] = None
         self.job_processor: Optional[JobProcessor] = None
         self.running = False
+        self.shutdown_requested = False
         
         # Stream and consumer configuration
         self.STREAM_NAME = 'AUDIOBOOK_JOBS'
@@ -198,10 +200,25 @@ class NatsPythonWorker:
             logger.error("❌ Failed to setup consumer", error=str(error))
             raise
     
+    def _setup_signal_handlers(self):
+        """Setup asyncio-compatible signal handlers for graceful shutdown"""
+        loop = asyncio.get_event_loop()
+        
+        def signal_handler():
+            logger.info("🛑 Received shutdown signal, initiating graceful shutdown...")
+            self.shutdown_requested = True
+            self.running = False
+            if self.job_processor:
+                self.job_processor.request_shutdown()
+        
+        loop.add_signal_handler(signal.SIGTERM, signal_handler)
+        loop.add_signal_handler(signal.SIGINT, signal_handler)
+    
     async def start(self):
         """Start the worker and begin processing jobs"""
         await self.initialize()
         self.running = True
+        self._setup_signal_handlers()
         
         logger.info("🚀 Python Worker started, listening for diacritics jobs...")
         
@@ -210,10 +227,18 @@ class NatsPythonWorker:
     
     async def stop(self):
         """Stop the worker gracefully"""
+        logger.info("🛑 Stopping worker gracefully...")
         self.running = False
+        self.shutdown_requested = True
+        
+        # Give current job processing a moment to complete
+        await asyncio.sleep(2)
+        
         if self.nats_client:
             await self.nats_client.close()
             logger.info("🔌 NATS connection closed")
+        
+        logger.info("✅ Worker stopped gracefully")
     
     async def consume_jobs(self):
         """Main job consumption loop"""
@@ -228,12 +253,17 @@ class NatsPythonWorker:
                 stream=self.STREAM_NAME
             )
             
-            while self.running:
+            while self.running and not self.shutdown_requested:
                 try:
                     # Fetch messages (blocking with timeout)
                     messages = await subscription.fetch(batch=1, timeout=5.0)
                     
                     for msg in messages:
+                        # Check for shutdown before processing each message
+                        if self.shutdown_requested:
+                            logger.info("🛑 Shutdown requested, stopping message processing")
+                            await msg.nak()  # Negative acknowledge so message can be reprocessed
+                            return  # Exit the entire consume_jobs method
                         await self.process_message(msg)
                         
                 except TimeoutError:
