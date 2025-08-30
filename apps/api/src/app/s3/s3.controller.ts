@@ -20,6 +20,7 @@ interface PresignedUploadRequestDto {
   filename: string;
   contentType: string;
   parsingMethod?: 'page-based' | 'xhtml-based';
+  diacriticsType?: 'advanced' | 'simple';
   ttsModel?: string;
   ttsVoice?: string;
   ttsSettings?: TTSSettings;
@@ -107,6 +108,7 @@ export class S3Controller {
     @UploadedFile() file: { buffer: Buffer; originalname: string; mimetype: string; size: number },
     @Body() body: { 
       parsingMethod?: 'page-based' | 'xhtml-based';
+      diacriticsType?: 'advanced' | 'simple';
       ttsModel?: string;
       ttsVoice?: string;
       ttsSettings?: string; // JSON string from form data
@@ -117,7 +119,9 @@ export class S3Controller {
         throw new InternalServerErrorException('No file provided');
       }
 
-      const { parsingMethod = 'page-based', ttsModel, ttsVoice, ttsSettings } = body;
+      const { parsingMethod = 'xhtml-based', diacriticsType = 'advanced', ttsModel, ttsVoice, ttsSettings } = body;
+      
+      this.logger.log(`🔍 [DEBUG] Direct upload request with diacriticsType: ${diacriticsType}, parsingMethod: ${parsingMethod}`);
       
       // Parse TTS settings if provided (form data sends as JSON string)
       let parsedTtsSettings;
@@ -145,6 +149,8 @@ export class S3Controller {
         ttsModel,
         ttsVoice,
         ttsSettings: parsedTtsSettings,
+        diacriticsType,
+        parsingMethod,
       });
 
       this.logger.log(`📚 [API] Created book ${book.id} for file ${key}`);
@@ -193,7 +199,9 @@ export class S3Controller {
     @Body() body: PresignedUploadRequestDto
   ) {
     try {
-      const { filename, contentType, parsingMethod = 'page-based', ttsModel, ttsVoice, ttsSettings } = body;
+      const { filename, contentType, parsingMethod = 'xhtml-based', diacriticsType = 'advanced', ttsModel, ttsVoice, ttsSettings } = body;
+      
+      this.logger.log(`🔍 [DEBUG] Received upload request with diacriticsType: ${diacriticsType}, parsingMethod: ${parsingMethod}`);
       
       // Properly decode the filename to handle Hebrew and other non-ASCII characters
       const decodedFilename = this.decodeFilename(filename);
@@ -211,6 +219,8 @@ export class S3Controller {
         ttsModel,
         ttsVoice,
         ttsSettings,
+        parsingMethod,
+        diacriticsType,
       });
 
       this.logger.log(`📚 [API] Created book ${book.id} for file ${key}`);

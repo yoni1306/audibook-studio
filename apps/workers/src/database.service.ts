@@ -231,9 +231,26 @@ export async function checkDatabaseHealth(): Promise<boolean> {
 }
 
 /**
- * Cleanup database connections
+ * Get book metadata
  */
-export async function cleanupDatabase(): Promise<void> {
+export async function getBookMetadata(bookId: string) {
+  try {
+    const book = await prisma.book.findUnique({
+      where: { id: bookId },
+      select: { processingMetadata: true }
+    });
+    return book;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Error fetching book metadata for ${bookId}: ${errorMessage}`);
+    throw error;
+  }
+}
+
+/**
+ * Disconnect database
+ */
+export async function disconnectDatabase() {
   try {
     logger.info('Closing database connection...');
     await prisma.$disconnect();

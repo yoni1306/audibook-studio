@@ -1,4 +1,5 @@
 phonikud-onnx==1.0.5
+dicta-onnx
 rq>=1.15.0
 redis>=4.5.0
 psycopg2-binary==2.9.10

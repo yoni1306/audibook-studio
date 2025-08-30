@@ -110,12 +110,31 @@ export async function saveBookMetadata(
   try {
     logger.info(`Saving metadata for book ${bookId}`, metadata);
 
+    // First fetch existing book to preserve original metadata
+    const existingBook = await prisma.book.findUnique({
+      where: { id: bookId },
+      select: { processingMetadata: true }
+    });
+
+    // Parse existing metadata if it exists
+    let existingMetadata = {};
+    if (existingBook?.processingMetadata) {
+      try {
+        existingMetadata = typeof existingBook.processingMetadata === 'string' 
+          ? JSON.parse(existingBook.processingMetadata)
+          : existingBook.processingMetadata;
+      } catch (error) {
+        logger.warn(`Failed to parse existing metadata for book ${bookId}:`, error);
+      }
+    }
+
     await prisma.book.update({
       where: { id: bookId },
       data: {
         totalPages: metadata.totalPages,
         totalParagraphs: metadata.totalParagraphs,
         processingMetadata: JSON.stringify({
+          ...existingMetadata,
           averageParagraphsPerPage: metadata.averageParagraphsPerPage,
           processingInfo: metadata.processingInfo,
           processedAt: new Date().toISOString(),

@@ -7,6 +7,7 @@ import {
   updateBookStatus,
   updateBookMetadata,
   getParagraph,
+  getBookMetadata,
 } from './database.service';
 import { 
   saveEPUBParseResult, 
@@ -167,7 +168,7 @@ export class JobProcessor implements JobProcessorInterface {
 
       // Automatically trigger diacritics processing for Hebrew books
       try {
-        await this.triggerDiacriticsProcessing(bookId);
+        await this.triggerDiacriticsProcessingFromMetadata(bookId);
         this.logger.log('Diacritics processing job queued automatically', { bookId });
       } catch (error) {
         this.logger.warn('Failed to automatically queue diacritics processing', {
@@ -505,37 +506,106 @@ export class JobProcessor implements JobProcessorInterface {
   }
 
   /**
+   * Trigger diacritics processing based on book's stored metadata
+   */
+  private async triggerDiacriticsProcessingFromMetadata(bookId: string): Promise<void> {
+    try {
+      // Fetch book to get processing metadata
+      const book = await getBookMetadata(bookId);
+
+      if (!book) {
+        throw new Error(`Book not found: ${bookId}`);
+      }
+
+      // Determine diacritics type from metadata, default to 'advanced'
+      let metadata: any = {};
+      if (book.processingMetadata) {
+        try {
+          metadata = typeof book.processingMetadata === 'string' 
+            ? JSON.parse(book.processingMetadata)
+            : book.processingMetadata;
+        } catch (error) {
+          this.logger.warn(`Failed to parse processingMetadata for book ${bookId}:`, error);
+        }
+      }
+      
+      this.logger.log(`🔍 [DEBUG] Raw book.processingMetadata:`, {
+        bookId,
+        rawMetadata: book.processingMetadata,
+        metadataType: typeof book.processingMetadata,
+        parsedMetadata: metadata
+      });
+      
+      const diacriticsType = metadata?.diacriticsType || 'advanced';
+      const jobType: 'advanced' | 'simple' = diacriticsType === 'simple' ? 'simple' : 'advanced';
+
+      this.logger.log(`📋 Using diacritics type from book metadata: ${diacriticsType}`, {
+        bookId,
+        jobType,
+        metadata,
+        extractedDiacriticsType: diacriticsType
+      });
+
+      await this.triggerDiacriticsProcessing(bookId, jobType);
+    } catch (error) {
+      this.logger.error('Failed to trigger diacritics processing from metadata', {
+        bookId,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Automatically trigger diacritics processing job after EPUB parsing completes
    */
-  private async triggerDiacriticsProcessing(bookId: string): Promise<void> {
+  private async triggerDiacriticsProcessing(bookId: string, jobType: 'advanced' | 'simple' = 'advanced'): Promise<void> {
     try {
       const natsUrl = process.env.NATS_URL || 'nats://localhost:4222';
       const nc = await connect({ servers: natsUrl });
       const js = nc.jetstream();
       const sc = StringCodec();
 
+      const jobName = jobType === 'simple' ? 'add-simple-diacritics' : 'add-advanced-diacritics';
+      const subject = jobType === 'simple' ? 'jobs.python.add-simple-diacritics' : 'jobs.python.add-advanced-diacritics';
+      
       const jobId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       const jobData = {
         jobId,
-        jobName: 'add-diacritics',
+        jobName,
         data: { 
           bookId,
-          correlationId: `auto-diacritics-${bookId}` 
+          correlationId: `auto-${jobType}-diacritics-${bookId}` 
         },
-        correlationId: `auto-diacritics-${bookId}`,
+        correlationId: `auto-${jobType}-diacritics-${bookId}`,
         timestamp: Date.now(),
       };
 
-      await js.publish('jobs.python.add-diacritics', sc.encode(JSON.stringify(jobData)));
-      this.logger.log(`📤 Auto-published diacritics job for book ${bookId} with ID ${jobId}`);
+      await js.publish(subject, sc.encode(JSON.stringify(jobData)));
+      this.logger.log(`📤 Auto-published ${jobType} diacritics job for book ${bookId} with ID ${jobId}`);
       
       await nc.close();
     } catch (error) {
       this.logger.error('Failed to trigger diacritics processing', {
         bookId,
+        jobType,
         error: error.message,
       });
       throw error;
     }
+  }
+
+  /**
+   * Trigger simple diacritics processing job
+   */
+  async triggerSimpleDiacriticsProcessing(bookId: string): Promise<void> {
+    return this.triggerDiacriticsProcessing(bookId, 'simple');
+  }
+
+  /**
+   * Trigger advanced diacritics processing job
+   */
+  async triggerAdvancedDiacriticsProcessing(bookId: string): Promise<void> {
+    return this.triggerDiacriticsProcessing(bookId, 'advanced');
   }
 }

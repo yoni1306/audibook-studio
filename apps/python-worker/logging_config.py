@@ -65,7 +65,7 @@ def configure_logging() -> None:
     
     # Add appropriate renderer based on environment
     if _is_development():
-        processors.append(structlog.dev.ConsoleRenderer())
+        processors.append(_custom_console_renderer)
     else:
         processors.append(structlog.processors.JSONRenderer())
     
@@ -81,7 +81,7 @@ def configure_logging() -> None:
 
 def _is_development() -> bool:
     """Check if we're in development mode."""
-    return os.getenv('NODE_ENV', '').lower() == 'development' or os.getenv('LOG_LEVEL', '').lower() == 'debug'
+    return os.getenv('NODE_ENV', '').lower() == 'development' or os.getenv('LOG_LEVEL', '').lower() == 'debug' or os.getenv('ENVIRONMENT', '').lower() == 'development'
 
 
 def _add_correlation_id(logger: Any, method_name: str, event_dict: Dict[str, Any]) -> Dict[str, Any]:
@@ -89,6 +89,63 @@ def _add_correlation_id(logger: Any, method_name: str, event_dict: Dict[str, Any
     # This could be enhanced to get correlation ID from context
     # For now, we'll add it if it's in the event dict
     return event_dict
+
+
+def _custom_console_renderer(logger: Any, method_name: str, event_dict: Dict[str, Any]) -> str:
+    """Custom console renderer for better readability."""
+    timestamp = event_dict.get('timestamp', '').split('T')[1].split('.')[0] if 'T' in event_dict.get('timestamp', '') else ''
+    level = event_dict.get('level', '').upper()
+    logger_name = event_dict.get('logger', '').split('.')[-1]  # Just the last part
+    event = event_dict.get('event', '')
+    
+    # Extract key context for tracking from both top level and extra
+    extra = event_dict.get('extra', {})
+    correlation_id = event_dict.get('correlation_id', '') or extra.get('correlation_id', '')
+    book_id = event_dict.get('book_id', '') or extra.get('book_id', '')
+    batch_num = event_dict.get('batch_num', '') or extra.get('batch_num', '')
+    job_type = event_dict.get('job_type', '') or extra.get('job_type', '')
+    
+    # Build context string with shortened IDs
+    context_parts = []
+    if correlation_id:
+        short_corr = correlation_id.split('-')[-1][:8] if '-' in correlation_id else correlation_id[-8:]
+        context_parts.append(f"corr:{short_corr}")
+    if book_id:
+        short_book = book_id.split('-')[-1][:8] if '-' in book_id else book_id[-8:]
+        context_parts.append(f"book:{short_book}")
+    if batch_num:
+        context_parts.append(f"batch:{batch_num}")
+    if job_type:
+        context_parts.append(f"type:{job_type.replace('add-', '').replace('-diacritics', '')}")
+    
+    context = f"[{' | '.join(context_parts)}]" if context_parts else ""
+    
+    # Color coding for different log levels
+    level_colors = {
+        'INFO': '\033[32m',   # Green
+        'WARN': '\033[33m',   # Yellow  
+        'ERROR': '\033[31m',  # Red
+        'DEBUG': '\033[36m'   # Cyan
+    }
+    reset_color = '\033[0m'
+    level_color = level_colors.get(level, '')
+    
+    # Format the main log line with better spacing
+    main_line = f"{level_color}{timestamp} {level:5}{reset_color} {logger_name:15} {context:25} {event}"
+    
+    # Add key metrics on same line for batch completion
+    if 'batch completed' in event.lower() and extra:
+        metrics = []
+        if 'progress_percentage' in extra:
+            metrics.append(f"{extra['progress_percentage']}%")
+        if 'batch_processed' in extra:
+            metrics.append(f"{extra['batch_processed']} processed")
+        if 'diacritics_duration_seconds' in extra:
+            metrics.append(f"{extra['diacritics_duration_seconds']}s")
+        if metrics:
+            main_line += f" ({', '.join(metrics)})"
+    
+    return main_line
 
 
 def _add_service_context(logger: Any, method_name: str, event_dict: Dict[str, Any]) -> Dict[str, Any]:

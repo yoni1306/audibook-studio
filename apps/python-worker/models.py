@@ -3,7 +3,7 @@ SQLAlchemy models for the Python worker.
 Matches the Prisma schema from the main application.
 """
 
-from sqlalchemy import Column, String, Integer, Text, DateTime, Boolean, ForeignKey
+from sqlalchemy import Column, String, Integer, Text, DateTime, Boolean, ForeignKey, JSON
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -18,6 +18,7 @@ class Book(Base):
     title = Column(String, nullable=False)
     author = Column(String)
     status = Column(String, nullable=False)
+    processingMetadata = Column(JSON)
     createdAt = Column(DateTime, default=datetime.utcnow)
     updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

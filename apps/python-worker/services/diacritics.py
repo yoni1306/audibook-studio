@@ -1,5 +1,5 @@
 """
-Diacritics service for Hebrew text processing using phonikud.
+Diacritics service for Hebrew text processing using phonikud-onnx and dicta-onnx.
 """
 
 import os
@@ -12,55 +12,51 @@ logger = get_logger(__name__)
 
 
 class DiacriticsService:
-    """Service for Hebrew diacritics processing using phonikud"""
+    """Service for Hebrew diacritics processing using phonikud and dicta"""
     
-    def __init__(self, model_path: str = None):
-        self.model_path = model_path or os.getenv('PHONIKUD_MODEL_PATH', './phonikud-1.0.int8.onnx')
-        self.phonikud = None
+    def __init__(self, phonikud_model_path: str = None, dicta_model_path: str = None):
+        self.phonikud_model_path = phonikud_model_path or os.getenv('PHONIKUD_MODEL_PATH', '/app/models/phonikud-1.0.onnx')
+        self.dicta_model_path = dicta_model_path or os.getenv('DICTA_MODEL_PATH', '/app/models/dicta-1.0.int8.onnx')
+        self.phonikud_instance = None
+        self.dicta_instance = None
         self._is_initialized = False
     
     async def initialize(self):
-        """Initialize the phonikud model"""
+        """Initialize both phonikud and dicta models"""
         if self._is_initialized:
             return
             
+        # Initialize phonikud model
         try:
-            # Try to initialize phonikud-onnx with model path
-            if os.path.exists(self.model_path):
+            if os.path.exists(self.phonikud_model_path):
                 from phonikud_onnx import Phonikud
-                self.phonikud = Phonikud(self.model_path)
-                logger.info(f"Phonikud model initialized successfully: {self.model_path}")
+                self.phonikud_instance = Phonikud(self.phonikud_model_path)
+                logger.info(f"Phonikud model initialized successfully: {self.phonikud_model_path}")
             else:
-                # Model file doesn't exist, try to use phonikud-onnx with a default/bundled model
-                logger.info(f"Model file not found at {self.model_path}, trying default phonikud model...")
-                from phonikud_onnx import Phonikud
-                # Try common model locations or let package handle it
-                possible_paths = [
-                    "/app/models/phonikud-1.0.onnx",
-                    "./models/phonikud-1.0.onnx",
-                    "phonikud-1.0.onnx"
-                ]
-                model_loaded = False
-                for path in possible_paths:
-                    if os.path.exists(path):
-                        self.phonikud = Phonikud(path)
-                        logger.info(f"Phonikud model loaded from: {path}")
-                        model_loaded = True
-                        break
-                
-                if not model_loaded:
-                    logger.warning("No phonikud model found, using mock implementation")
-                    self.phonikud = MockPhonikud()
+                logger.warning(f"Phonikud model not found at {self.phonikud_model_path}")
+                self.phonikud_instance = MockPhonikud()
         except Exception as e:
             logger.warning(f"Failed to initialize phonikud model, using mock: {e}")
-            # Fallback to mock implementation
-            self.phonikud = MockPhonikud()
+            self.phonikud_instance = MockPhonikud()
+        
+        # Initialize dicta model
+        try:
+            if os.path.exists(self.dicta_model_path):
+                from dicta_onnx import Dicta
+                self.dicta_instance = Dicta(self.dicta_model_path)
+                logger.info(f"Dicta model initialized successfully: {self.dicta_model_path}")
+            else:
+                logger.warning(f"Dicta model not found at {self.dicta_model_path}")
+                self.dicta_instance = MockDicta()
+        except Exception as e:
+            logger.warning(f"Failed to initialize dicta model, using mock: {e}")
+            self.dicta_instance = MockDicta()
         
         self._is_initialized = True
     
     def is_initialized(self) -> bool:
         """Check if the service is initialized"""
-        return self._is_initialized and self.phonikud is not None
+        return self._is_initialized and self.phonikud_instance is not None
     
     def _split_text_into_chunks(self, text: str, max_chars: int = 2046) -> List[str]:
         """
@@ -146,6 +142,7 @@ class DiacriticsService:
         
         return final_chunks if final_chunks else [text]
     
+    
     def add_diacritics(self, text: str, mark_matres_lectionis=None) -> str:
         """Add diacritics to a single text with chunking support"""
         if not self.is_initialized():
@@ -157,13 +154,13 @@ class DiacriticsService:
             
             if len(chunks) == 1:
                 # Single chunk, process directly
-                return self.phonikud.add_diacritics(text)
+                return self.phonikud_instance.add_diacritics(text, mark_matres_lectionis=mark_matres_lectionis)
             else:
                 # Multiple chunks, process each and rejoin
                 processed_chunks = []
                 for i, chunk in enumerate(chunks):
                     logger.debug(f"Processing chunk {i+1}/{len(chunks)} (length: {len(chunk)})")
-                    processed_chunk = self.phonikud.add_diacritics(chunk)
+                    processed_chunk = self.phonikud_instance.add_diacritics(chunk, mark_matres_lectionis=mark_matres_lectionis)
                     processed_chunks.append(processed_chunk)
                 
                 # Rejoin chunks with space
@@ -173,31 +170,98 @@ class DiacriticsService:
             logger.error(f"Error processing text for diacritics: {e}")
             return text  # Return original text on error
     
-    def add_diacritics_batch(self, texts: List[str], mark_matres_lectionis=None) -> List[str]:
-        """Add diacritics to a batch of texts with chunking support"""
+    def add_advanced_diacritics_batch(self, texts: List[str], mark_matres_lectionis=None) -> List[str]:
+        """Add advanced diacritics to a batch of texts using phonikud model with chunking support"""
+        logger.info(f"🔧 Starting advanced diacritics processing", extra={
+            "batch_size": len(texts),
+            "mark_matres_lectionis": mark_matres_lectionis,
+            "model": "phonikud"
+        })
+        
         if not self.is_initialized():
             raise RuntimeError("Diacritics service not initialized")
         
         results = []
-        for i, text in enumerate(texts):
+        for text in texts:
             try:
-                # Use the chunking-enabled add_diacritics method
-                result = self.add_diacritics(text, None)
+                result = self.add_diacritics(text, mark_matres_lectionis=mark_matres_lectionis)
                 results.append(result)
-                logger.debug(f"Processed text {i+1}/{len(texts)} (length: {len(text)})")
             except Exception as e:
-                logger.error(f"Error processing text {i+1} for diacritics: {e}")
+                logger.error(f"Error processing text in batch: {e}")
                 results.append(text)  # Return original text on error
+        
+        logger.info(f"🔧 Completed advanced diacritics processing", extra={
+            "batch_size": len(texts),
+            "results_count": len(results),
+            "model": "phonikud"
+        })
         
         return results
     
+    def add_simple_diacritics(self, text: str) -> str:
+        """Add simple diacritics using dicta model"""
+        if not self.is_initialized():
+            raise RuntimeError("Diacritics service not initialized")
+        
+        try:
+            # Split text into chunks if it's too long
+            chunks = self._split_text_into_chunks(text)
+            
+            if len(chunks) == 1:
+                # Single chunk, process directly
+                return self.dicta_instance.add_diacritics(text)
+            else:
+                # Multiple chunks, process each and rejoin
+                processed_chunks = []
+                for i, chunk in enumerate(chunks):
+                    logger.debug(f"Processing chunk {i+1}/{len(chunks)} (length: {len(chunk)})")
+                    processed_chunk = self.dicta_instance.add_diacritics(chunk)
+                    processed_chunks.append(processed_chunk)
+                
+                # Rejoin chunks with space
+                return " ".join(processed_chunks)
+                
+        except Exception as e:
+            logger.error(f"Error processing text for simple diacritics: {e}")
+            return text  # Return original text on error
+    
+    def add_simple_diacritics_batch(self, texts: List[str]) -> List[str]:
+        """Add simple diacritics to a batch of texts using dicta model"""
+        logger.info(f"🔧 Starting simple diacritics processing", extra={
+            "batch_size": len(texts),
+            "model": "dicta"
+        })
+        
+        if not self.is_initialized():
+            raise RuntimeError("Diacritics service not initialized")
+        
+        results = []
+        for text in texts:
+            try:
+                result = self.add_simple_diacritics(text)
+                results.append(result)
+            except Exception as e:
+                logger.error(f"Error processing text in batch: {e}")
+                results.append(text)  # Return original text on error
+        
+        logger.info(f"🔧 Completed simple diacritics processing", extra={
+            "batch_size": len(texts),
+            "results_count": len(results),
+            "model": "dicta"
+        })
+        
+        return results
+
     def get_model_info(self) -> dict:
-        """Get information about the loaded model"""
+        """Get information about the loaded models"""
         return {
-            'model_path': self.model_path,
+            'phonikud_model_path': self.phonikud_model_path,
+            'dicta_model_path': self.dicta_model_path,
             'is_initialized': self._is_initialized,
-            'is_mock': isinstance(self.phonikud, MockPhonikud),
-            'model_exists': os.path.exists(self.model_path) if self.model_path else False
+            'phonikud_is_mock': isinstance(self.phonikud_instance, MockPhonikud),
+            'dicta_is_mock': isinstance(self.dicta_instance, MockDicta),
+            'phonikud_model_exists': os.path.exists(self.phonikud_model_path) if self.phonikud_model_path else False,
+            'dicta_model_exists': os.path.exists(self.dicta_model_path) if self.dicta_model_path else False
         }
 
 
@@ -208,6 +272,15 @@ class MockPhonikud:
         """Mock implementation that adds a marker to the text"""
         logger.debug("Using mock phonikud implementation")
         return f"[MOCK_DIACRITICS]{text}[/MOCK_DIACRITICS]"
+
+
+class MockDicta:
+    """Mock dicta implementation for development/testing"""
+    
+    def add_diacritics(self, text: str) -> str:
+        """Mock implementation that adds a marker to the text"""
+        logger.debug("Using mock dicta implementation")
+        return f"[MOCK_SIMPLE_DIACRITICS]{text}[/MOCK_SIMPLE_DIACRITICS]"
     
     def get_metadata(self) -> dict:
         """Mock metadata method"""

@@ -166,6 +166,11 @@ describe('S3Controller', () => {
       expect(booksService.createBook).toHaveBeenCalledWith({
         title: 'ספר_עברי',
         s3Key: expect.stringMatching(/^raw\/\d+-ספר_עברי\.epub$/),
+        diacriticsType: 'advanced',
+        parsingMethod: 'page-based',
+        ttsModel: undefined,
+        ttsVoice: undefined,
+        ttsSettings: undefined,
       });
 
       expect(result.filename).toBe('ספר_עברי.epub');
@@ -191,6 +196,11 @@ describe('S3Controller', () => {
       expect(booksService.createBook).toHaveBeenCalledWith({
         title: 'ספר_עברי',
         s3Key: expect.stringMatching(/^raw\/\d+-ספר_עברי\.epub$/),
+        diacriticsType: 'advanced',
+        parsingMethod: 'page-based',
+        ttsModel: undefined,
+        ttsVoice: undefined,
+        ttsSettings: undefined,
       });
 
       expect(result.filename).toBe('ספר_עברי.epub');
@@ -207,6 +217,11 @@ describe('S3Controller', () => {
       expect(booksService.createBook).toHaveBeenCalledWith({
         title: 'My Book - ספר שלי',
         s3Key: expect.stringMatching(/^raw\/\d+-My Book - ספר שלי\.epub$/),
+        diacriticsType: 'advanced',
+        parsingMethod: 'page-based',
+        ttsModel: undefined,
+        ttsVoice: undefined,
+        ttsSettings: undefined,
       });
 
       expect(result.filename).toBe('My Book - ספר שלי.epub');
@@ -381,6 +396,8 @@ describe('S3Controller', () => {
         expect(booksService.createBook).toHaveBeenCalledWith({
           title: 'test-book',
           s3Key: expect.any(String),
+          diacriticsType: 'advanced',
+          parsingMethod: 'page-based',
           ttsModel: 'azure',
           ttsVoice: 'he-IL-AvriNeural',
           ttsSettings: { rate: 1.0, pitch: 1.0, volume: 0.8 },
@@ -401,6 +418,8 @@ describe('S3Controller', () => {
         expect(booksService.createBook).toHaveBeenCalledWith({
           title: 'test-book',
           s3Key: expect.any(String),
+          diacriticsType: 'advanced',
+          parsingMethod: 'xhtml-based',
           ttsModel: 'openai',
           ttsVoice: 'alloy',
           ttsSettings: { speed: 1.25 },
@@ -410,6 +429,7 @@ describe('S3Controller', () => {
 
       it('should handle ElevenLabs TTS configuration', async () => {
         const body = {
+          parsingMethod: 'page-based' as const,
           ttsModel: 'elevenlabs',
           ttsVoice: 'rachel',
           ttsSettings: JSON.stringify({ stability: 0.8, similarity_boost: 0.7 }),
@@ -420,6 +440,8 @@ describe('S3Controller', () => {
         expect(booksService.createBook).toHaveBeenCalledWith({
           title: 'test-book',
           s3Key: expect.any(String),
+          diacriticsType: 'advanced',
+          parsingMethod: 'page-based',
           ttsModel: 'elevenlabs',
           ttsVoice: 'rachel',
           ttsSettings: { stability: 0.8, similarity_boost: 0.7 },
@@ -437,6 +459,8 @@ describe('S3Controller', () => {
         expect(booksService.createBook).toHaveBeenCalledWith({
           title: 'test-book',
           s3Key: expect.any(String),
+          diacriticsType: 'advanced',
+          parsingMethod: 'page-based',
           ttsModel: undefined,
           ttsVoice: undefined,
           ttsSettings: undefined,
@@ -456,6 +480,8 @@ describe('S3Controller', () => {
         expect(booksService.createBook).toHaveBeenCalledWith({
           title: 'test-book',
           s3Key: expect.any(String),
+          diacriticsType: 'advanced',
+          parsingMethod: 'xhtml-based',
           ttsModel: 'azure',
           ttsVoice: 'en-US-AriaNeural',
           ttsSettings: undefined,
@@ -476,6 +502,8 @@ describe('S3Controller', () => {
         expect(booksService.createBook).toHaveBeenCalledWith({
           title: 'test-book',
           s3Key: expect.any(String),
+          diacriticsType: 'advanced',
+          parsingMethod: 'xhtml-based',
           ttsModel: 'azure',
           ttsVoice: 'en-US-AriaNeural',
           ttsSettings: undefined,
@@ -500,6 +528,8 @@ describe('S3Controller', () => {
         expect(booksService.createBook).toHaveBeenCalledWith({
           title: 'ספר_עברי',
           s3Key: expect.any(String),
+          diacriticsType: 'advanced',
+          parsingMethod: 'xhtml-based',
           ttsModel: 'azure',
           ttsVoice: 'he-IL-AvriNeural',
           ttsSettings: { rate: 0.9, pitch: 1.1 },
@@ -583,6 +613,8 @@ describe('S3Controller', () => {
         expect(booksService.createBook).toHaveBeenCalledWith({
           title: 'test-book',
           s3Key: expect.any(String),
+          diacriticsType: 'advanced',
+          parsingMethod: 'xhtml-based',
           ttsModel: 'azure',
           ttsVoice: 'en-US-AriaNeural',
           ttsSettings: complexSettings,
@@ -601,6 +633,8 @@ describe('S3Controller', () => {
         expect(booksService.createBook).toHaveBeenCalledWith({
           title: 'test-book',
           s3Key: expect.any(String),
+          diacriticsType: 'advanced',
+          parsingMethod: 'xhtml-based',
           ttsModel: 'azure',
           ttsVoice: 'en-US-AriaNeural',
           ttsSettings: {},
@@ -619,6 +653,8 @@ describe('S3Controller', () => {
         expect(booksService.createBook).toHaveBeenCalledWith({
           title: 'test-book',
           s3Key: expect.any(String),
+          diacriticsType: 'advanced',
+          parsingMethod: 'xhtml-based',
           ttsModel: 'azure',
           ttsVoice: 'en-US-AriaNeural',
           ttsSettings: null,

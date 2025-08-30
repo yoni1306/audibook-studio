@@ -11,6 +11,7 @@ export default function UploadPage() {
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
   const [parsingMethod, setParsingMethod] = useState<'page-based' | 'xhtml-based'>('xhtml-based');
+  const [diacriticsType, setDiacriticsType] = useState<'advanced' | 'simple'>('advanced');
   
   // TTS Model Selection State
   const [ttsVoice, setTtsVoice] = useState('he-IL-AvriNeural');
@@ -44,6 +45,7 @@ export default function UploadPage() {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('parsingMethod', parsingMethod);
+      formData.append('diacriticsType', diacriticsType);
       formData.append('ttsModel', 'azure');
       formData.append('ttsVoice', ttsVoice);
       formData.append('ttsSettings', JSON.stringify(ttsSettings));
@@ -224,6 +226,97 @@ export default function UploadPage() {
                     lineHeight: '1.5'
                   }}>
                     Preserves original document structure and formatting. Maintains author's intended paragraph breaks and page divisions.
+                  </div>
+                </div>
+              </label>
+            </div>
+          </div>
+        )}
+
+        {file && (
+          <div style={{ marginBottom: 'var(--spacing-6)' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: 'var(--spacing-4)',
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: '600',
+              color: 'var(--color-gray-900)'
+            }}>
+              ✨ Choose Diacritics Processing:
+            </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-3)' }}>
+              <label style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 'var(--spacing-3)',
+                padding: 'var(--spacing-4)',
+                border: `2px solid ${diacriticsType === 'advanced' ? 'var(--color-primary-500)' : 'var(--color-gray-200)'}`,
+                borderRadius: 'var(--radius-lg)',
+                backgroundColor: diacriticsType === 'advanced' ? 'var(--color-primary-50)' : 'white',
+                cursor: uploading ? 'not-allowed' : 'pointer',
+                transition: 'var(--transition-normal)'
+              }}>
+                <input
+                  type="radio"
+                  value="advanced"
+                  checked={diacriticsType === 'advanced'}
+                  onChange={(e) => setDiacriticsType(e.target.value as 'advanced' | 'simple')}
+                  disabled={uploading}
+                  style={{ marginTop: '2px' }}
+                />
+                <div style={{ flex: 1 }}>
+                  <div style={{
+                    fontWeight: '600',
+                    fontSize: 'var(--font-size-base)',
+                    color: 'var(--color-gray-900)',
+                    marginBottom: 'var(--spacing-1)'
+                  }}>
+                    🎯 Advanced Diacritics (Phonikud)
+                  </div>
+                  <div style={{
+                    fontSize: 'var(--font-size-sm)',
+                    color: 'var(--color-gray-600)',
+                    lineHeight: '1.5'
+                  }}>
+                    High-accuracy diacritics with advanced linguistic analysis. Best for precise pronunciation and professional audiobooks.
+                  </div>
+                </div>
+              </label>
+              
+              <label style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 'var(--spacing-3)',
+                padding: 'var(--spacing-4)',
+                border: `2px solid ${diacriticsType === 'simple' ? 'var(--color-primary-500)' : 'var(--color-gray-200)'}`,
+                borderRadius: 'var(--radius-lg)',
+                backgroundColor: diacriticsType === 'simple' ? 'var(--color-primary-50)' : 'white',
+                cursor: uploading ? 'not-allowed' : 'pointer',
+                transition: 'var(--transition-normal)'
+              }}>
+                <input
+                  type="radio"
+                  value="simple"
+                  checked={diacriticsType === 'simple'}
+                  onChange={(e) => setDiacriticsType(e.target.value as 'advanced' | 'simple')}
+                  disabled={uploading}
+                  style={{ marginTop: '2px' }}
+                />
+                <div style={{ flex: 1 }}>
+                  <div style={{
+                    fontWeight: '600',
+                    fontSize: 'var(--font-size-base)',
+                    color: 'var(--color-gray-900)',
+                    marginBottom: 'var(--spacing-1)'
+                  }}>
+                    ⚡ Simple Diacritics (Dicta)
+                  </div>
+                  <div style={{
+                    fontSize: 'var(--font-size-sm)',
+                    color: 'var(--color-gray-600)',
+                    lineHeight: '1.5'
+                  }}>
+                    Fast and efficient diacritics processing. Good for quick processing and general use cases.
                   </div>
                 </div>
               </label>

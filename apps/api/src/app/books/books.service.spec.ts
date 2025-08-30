@@ -160,6 +160,10 @@ describe('BooksService', () => {
           author: bookData.author,
           s3Key: bookData.s3Key,
           status: BookStatus.UPLOADING,
+          processingMetadata: {
+            diacriticsType: 'advanced',
+            parsingMethod: 'page-based',
+          },
           ttsModel: 'azure',
           ttsVoice: undefined,
           ttsSettings: undefined,
@@ -191,6 +195,10 @@ describe('BooksService', () => {
           author: undefined,
           s3Key: bookData.s3Key,
           status: BookStatus.UPLOADING,
+          processingMetadata: {
+            diacriticsType: 'advanced',
+            parsingMethod: 'page-based',
+          },
           ttsModel: 'azure',
           ttsVoice: undefined,
           ttsSettings: undefined,
@@ -226,6 +234,10 @@ describe('BooksService', () => {
             author: bookData.author,
             s3Key: bookData.s3Key,
             status: BookStatus.UPLOADING,
+            processingMetadata: {
+              diacriticsType: 'advanced',
+              parsingMethod: 'page-based',
+            },
             ttsModel: 'azure',
             ttsVoice: 'he-IL-AvriNeural',
             ttsSettings: { rate: 1.0, pitch: 1.0, volume: 1.0 },
@@ -276,6 +288,10 @@ describe('BooksService', () => {
               author: undefined,
               s3Key: bookData.s3Key,
               status: BookStatus.UPLOADING,
+              processingMetadata: {
+                diacriticsType: 'advanced',
+                parsingMethod: 'page-based',
+              },
               ttsModel: testCase.ttsModel,
               ttsVoice: testCase.ttsVoice,
               ttsSettings: testCase.ttsSettings,
@@ -308,6 +324,10 @@ describe('BooksService', () => {
             author: undefined,
             s3Key: bookData.s3Key,
             status: BookStatus.UPLOADING,
+            processingMetadata: {
+              diacriticsType: 'advanced',
+              parsingMethod: 'page-based',
+            },
             ttsModel: 'azure', // Should default to azure
             ttsVoice: undefined,
             ttsSettings: undefined,
@@ -341,6 +361,10 @@ describe('BooksService', () => {
             author: undefined,
             s3Key: bookData.s3Key,
             status: BookStatus.UPLOADING,
+            processingMetadata: {
+              diacriticsType: 'advanced',
+              parsingMethod: 'page-based',
+            },
             ttsModel: 'azure',
             ttsVoice: 'en-US-AriaNeural',
             ttsSettings: null,

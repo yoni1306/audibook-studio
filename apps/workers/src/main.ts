@@ -16,7 +16,7 @@ import {
   updateBookStatus,
   updateBookMetadata,
   getParagraph,
-  cleanupDatabase,
+  disconnectDatabase,
   checkDatabaseHealth,
 } from './database.service';
 import { 
@@ -735,7 +735,7 @@ const gracefulShutdown = async (signal: string) => {
     await Promise.race([
       Promise.all([
         worker.close(),
-        cleanupDatabase()
+        disconnectDatabase()
       ]),
       new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Worker close timeout')), 10000)

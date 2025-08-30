@@ -10,6 +10,7 @@ jest.mock('./database.service', () => ({
   updateBookStatus: jest.fn(),
   updateBookMetadata: jest.fn(),
   getParagraph: jest.fn(),
+  getBookMetadata: jest.fn(),
   prisma: {
     $disconnect: jest.fn(),
   },
@@ -26,6 +27,7 @@ import {
   updateBookStatus,
   updateBookMetadata,
   getParagraph,
+  getBookMetadata,
 } from './database.service';
 import {
   saveEPUBParseResult,
@@ -44,6 +46,7 @@ describe('JobProcessor', () => {
   const mockUpdateBookStatus = updateBookStatus as jest.MockedFunction<typeof updateBookStatus>;
   const mockUpdateBookMetadata = updateBookMetadata as jest.MockedFunction<typeof updateBookMetadata>;
   const mockGetParagraph = getParagraph as jest.MockedFunction<typeof getParagraph>;
+  const mockGetBookMetadata = getBookMetadata as jest.MockedFunction<typeof getBookMetadata>;
   const mockSaveEPUBParseResult = saveEPUBParseResult as jest.MockedFunction<typeof saveEPUBParseResult>;
   const mockUpdateParagraphAudioStatus = updateParagraphAudioStatus as jest.MockedFunction<typeof updateParagraphAudioStatus>;
   const mockCreateTTSService = createTTSService as jest.MockedFunction<typeof createTTSService>;
@@ -61,6 +64,9 @@ describe('JobProcessor', () => {
     mockDeleteOldAudioFiles.mockResolvedValue(undefined);
     mockUpdateBookStatus.mockResolvedValue(undefined);
     mockUpdateBookMetadata.mockResolvedValue(undefined);
+    mockGetBookMetadata.mockResolvedValue({
+      processingMetadata: { diacriticsType: 'advanced', parsingMethod: 'xhtml-based' }
+    });
     mockSaveEPUBParseResult.mockResolvedValue(undefined);
     mockUpdateParagraphAudioStatus.mockResolvedValue(undefined);
     mockFsUnlink.mockResolvedValue(undefined);
@@ -206,13 +212,13 @@ describe('JobProcessor', () => {
       const mockJetstream = mockNatsConnection.jetstream();
       
       expect(mockJetstream.publish).toHaveBeenCalledWith(
-        'jobs.python.add-diacritics',
+        'jobs.python.add-advanced-diacritics',
         expect.any(Uint8Array)
       );
 
       // Verify the job data structure
       const publishCall = mockJetstream.publish.mock.calls[0];
-      expect(publishCall[0]).toBe('jobs.python.add-diacritics');
+      expect(publishCall[0]).toBe('jobs.python.add-advanced-diacritics');
       
       // Verify NATS connection was closed
       expect(mockNatsConnection.close).toHaveBeenCalled();

@@ -18,14 +18,16 @@ COPY requirements.txt ./
 # Install Python dependencies (cached layer)
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir -U phonikud-onnx
+    pip install --no-cache-dir -U phonikud-onnx && \
+    pip install --no-cache-dir -U dicta-onnx
 
 # Copy application code
 COPY . ./
 
-# Create directory for model files and copy model
+# Create directory for model files and copy models
 RUN mkdir -p /app/models
 COPY models/phonikud-1.0.onnx /app/models/
+COPY models/dicta-1.0.int8.onnx /app/models/
 
 # Production stage
 FROM python:3.11-slim AS production

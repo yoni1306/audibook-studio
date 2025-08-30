@@ -2,9 +2,9 @@
 SQLAlchemy-based database service for PostgreSQL operations in the diacritics worker.
 Replaces raw SQL queries with ORM to eliminate column name issues.
 """
-
+import os
 from typing import List, Dict, Any, Optional
-from sqlalchemy import create_engine, and_, text
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -62,36 +62,34 @@ class DatabaseORMService:
             raise RuntimeError("Database not connected")
         return self.SessionLocal()
     
-    def get_paragraphs_for_diacritics(self, book_id: str, paragraph_ids: Optional[List[str]] = None) -> List[Dict]:
-        """Get paragraphs that need diacritics processing using SQLAlchemy ORM"""
-        with self.get_session() as session:
-            try:
-                # Build query using SQLAlchemy ORM
-                query = session.query(Paragraph).filter(Paragraph.bookId == book_id)
-                
-                if paragraph_ids:
-                    query = query.filter(Paragraph.id.in_(paragraph_ids))
-                
-                # Order by pageId and orderIndex
-                query = query.order_by(Paragraph.pageId.asc(), Paragraph.orderIndex.asc())
-                
-                # Execute query and convert to dict format
-                paragraphs = query.all()
-                result = []
-                for p in paragraphs:
-                    result.append({
-                        'id': p.id,
-                        'content': p.content,
-                        'orderIndex': p.orderIndex,
-                        'pageId': p.pageId
-                    })
-                
-                logger.debug(f"Retrieved {len(result)} paragraphs for book {book_id}")
-                return result
-                
-            except SQLAlchemyError as e:
-                logger.error(f"Database error in get_paragraphs_for_diacritics: {e}")
-                raise
+    def get_paragraphs_for_diacritics(self, book_id: str) -> List[Dict]:
+        """Get all paragraphs for a book that need diacritics processing, ordered by page then paragraph"""
+        try:
+            query = text("""
+                SELECT p.id, p.content, p."orderIndex", p."pageId", pg."orderIndex" as page_order
+                FROM "Paragraph" p
+                JOIN "Page" pg ON p."pageId" = pg.id
+                WHERE pg."bookId" = :book_id
+                AND p.content IS NOT NULL
+                AND p.content != ''
+                ORDER BY pg."orderIndex" ASC, p."orderIndex" ASC
+            """)
+            
+            result = self.engine.execute(query, {"book_id": book_id})
+            paragraphs = []
+            for row in result:
+                paragraphs.append({
+                    'id': row.id,
+                    'content': row.content,
+                    'orderIndex': row.orderIndex,
+                    'pageId': row.pageId,
+                    'page_order': row.page_order
+                })
+            
+            return paragraphs
+        except Exception as e:
+            logger.error(f"Error fetching paragraphs for diacritics: {e}")
+            return []
     
     def update_paragraph_content(self, paragraph_id: str, new_content: str):
         """Update paragraph content with diacritics version using SQLAlchemy ORM"""
@@ -141,4 +139,15 @@ class DatabaseORMService:
                 
             except SQLAlchemyError as e:
                 logger.error(f"Database error in get_book_paragraph_count: {e}")
+                raise
+    
+    def get_book_by_id(self, book_id: str) -> Optional[Book]:
+        """Get book by ID including processing metadata"""
+        with self.get_session() as session:
+            try:
+                book = session.query(Book).filter(Book.id == book_id).first()
+                return book
+                
+            except SQLAlchemyError as e:
+                logger.error(f"Database error in get_book_by_id: {e}")
                 raise

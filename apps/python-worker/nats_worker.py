@@ -55,7 +55,10 @@ class NatsPythonWorker:
         # Stream and consumer configuration
         self.STREAM_NAME = 'AUDIOBOOK_JOBS'
         self.CONSUMER_NAME = 'python-worker'
-        self.PYTHON_JOBS_SUBJECT = 'jobs.python.*'
+        self.PYTHON_JOBS_SUBJECTS = [
+            "jobs.python.add-advanced-diacritics",
+            "jobs.python.add-simple-diacritics"
+        ]
     
     async def initialize(self):
         """Initialize NATS connection and job processor"""
@@ -174,16 +177,16 @@ class NatsPythonWorker:
                 consumer_info = await self.jetstream.consumer_info(self.STREAM_NAME, self.CONSUMER_NAME)
                 logger.info("📋 Consumer already exists", 
                            consumer=self.CONSUMER_NAME, 
-                           subject=self.PYTHON_JOBS_SUBJECT)
+                           subjects=self.PYTHON_JOBS_SUBJECTS)
                 return
             except Exception:
                 # Consumer doesn't exist, create it
                 pass
             
-            # Create consumer configuration
+            # Create consumer configuration for both job types
             consumer_config = ConsumerConfig(
                 durable_name=self.CONSUMER_NAME,
-                filter_subject=self.PYTHON_JOBS_SUBJECT,
+                filter_subjects=self.PYTHON_JOBS_SUBJECTS,
                 ack_policy=AckPolicy.EXPLICIT,  # Manual acknowledgment
                 max_deliver=3,  # Retry up to 3 times
                 ack_wait=30,  # 30 seconds wait for ack
@@ -194,7 +197,7 @@ class NatsPythonWorker:
             await self.jetstream.add_consumer(self.STREAM_NAME, consumer_config)
             logger.info("📋 Consumer created", 
                        consumer=self.CONSUMER_NAME, 
-                       subject=self.PYTHON_JOBS_SUBJECT)
+                       subjects=self.PYTHON_JOBS_SUBJECTS)
             
         except Exception as error:
             logger.error("❌ Failed to setup consumer", error=str(error))
@@ -208,8 +211,6 @@ class NatsPythonWorker:
             logger.info("🛑 Received shutdown signal, initiating graceful shutdown...")
             self.shutdown_requested = True
             self.running = False
-            if self.job_processor:
-                self.job_processor.request_shutdown()
         
         loop.add_signal_handler(signal.SIGTERM, signal_handler)
         loop.add_signal_handler(signal.SIGINT, signal_handler)
@@ -246,9 +247,9 @@ class NatsPythonWorker:
             # Get consumer
             consumer = await self.jetstream.consumer_info(self.STREAM_NAME, self.CONSUMER_NAME)
             
-            # Subscribe to messages
+            # Subscribe to messages using the durable consumer with wildcard to handle all configured subjects
             subscription = await self.jetstream.pull_subscribe(
-                subject=self.PYTHON_JOBS_SUBJECT,
+                subject="jobs.python.*",
                 durable=self.CONSUMER_NAME,
                 stream=self.STREAM_NAME
             )
@@ -287,30 +288,43 @@ class NatsPythonWorker:
         try:
             # Parse job data from NATS message
             message_data = msg.data.decode('utf-8')
+            logger.info(f"🔍 Raw message data: {message_data}")
             job_message = json.loads(message_data)
+            logger.info(f"🔍 Parsed job message: {job_message}")
             
             # Extract nested job data (API sends nested structure with 'data' property)
             # Handle both nested and flat structures for backward compatibility
             if isinstance(job_message, dict) and 'data' in job_message:
                 job_data = job_message['data']
-                logger.debug("📦 Extracted nested job data", 
+                logger.info("📦 Extracted nested job data", 
                            job_id=job_message.get('jobId'),
                            job_name=job_message.get('jobName'))
             else:
                 job_data = job_message
-                logger.debug("📦 Using flat job data structure")
+                logger.info("📦 Using flat job data structure")
+            
+            logger.info(f"🔍 Final job_data type: {type(job_data)}, content: {job_data}")
             
             # Extract job type from NATS subject
             job_type = msg.subject.split('.')[-1]  # e.g., 'jobs.python.add-diacritics' -> 'add-diacritics'
             
+            correlation_id = job_data.get('correlationId')
+            book_id = job_data.get('bookId')
+            
             logger.info("📥 Processing job", 
                        job_type=job_type,
-                       subject=msg.subject,
-                       correlation_id=job_data.get('correlationId'),
-                       book_id=job_data.get('bookId'))
+                       subject=str(msg.subject),
+                       correlation_id=correlation_id,
+                       book_id=book_id)
+            
+            # Debug job_data before processing
+            logger.info(f"🔍 [FINAL DEBUG] About to process job_data:")
+            logger.info(f"🔍 [FINAL DEBUG] Type: {type(job_data)}")
+            logger.info(f"🔍 [FINAL DEBUG] Content: {repr(job_data)}")
+            logger.info(f"🔍 [FINAL DEBUG] Has .get method: {hasattr(job_data, 'get')}")
             
             # Process the job using job processor
-            result = await self.job_processor.process_job(job_type, job_data)
+            result = await self.job_processor.process_add_diacritics_job(job_data)
             
             # Acknowledge successful processing with retry logic
             ack_success = False

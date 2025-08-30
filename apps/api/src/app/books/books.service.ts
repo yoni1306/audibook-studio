@@ -67,7 +67,16 @@ export class BooksService {
     ttsModel?: string;
     ttsVoice?: string;
     ttsSettings?: TTSSettings;
+    diacriticsType?: 'advanced' | 'simple';
+    parsingMethod?: 'page-based' | 'xhtml-based';
   }) {
+    const processingMetadata = {
+      diacriticsType: data.diacriticsType || 'advanced',
+      parsingMethod: data.parsingMethod || 'page-based'
+    };
+
+    console.log(`🔍 [DEBUG] Creating book with processingMetadata:`, processingMetadata);
+
     return this.prisma.book.create({
       data: {
         title: data.title,
@@ -77,6 +86,7 @@ export class BooksService {
         ttsModel: data.ttsModel || 'azure',
         ttsVoice: data.ttsVoice,
         ttsSettings: data.ttsSettings as Prisma.InputJsonValue,
+        processingMetadata: processingMetadata as Prisma.InputJsonValue,
       },
     });
   }
